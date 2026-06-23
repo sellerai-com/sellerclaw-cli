@@ -1,0 +1,113 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sellerclaw-cli"
+version = "0.1.0"
+description = "Command-line client and MCP server for the SellerClaw Agent API — run your stores, orders, listings, ads and suppliers from a terminal, scripts, or Claude. LLM-friendly JSON, browser sign-in."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "SellerClaw" }]
+keywords = [
+    "sellerclaw",
+    "cli",
+    "ecommerce",
+    "agent",
+    "llm",
+    "mcp",
+    "claude",
+    "model-context-protocol",
+    "shopify",
+    "ebay",
+    "amazon",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "click>=8.2.1",
+    "httpx>=0.28.0",
+    "typer>=0.15.0",
+    "pydantic>=2.11.0",
+    "pyyaml>=6.0",
+    "attrs>=24.2.0",
+    "python-dateutil>=2.9.0",
+    "tomli-w>=1.0.0",
+]
+
+[project.optional-dependencies]
+# Optional MCP (Model Context Protocol) server — `pip install 'sellerclaw-cli[mcp]'` to expose the
+# CLI to MCP clients like Claude. Imported lazily so the base CLI never pulls these in.
+mcp = ["mcp>=1.9.0"]
+
+[project.scripts]
+sellerclaw = "sellerclaw_cli.cli:main"
+sellerclaw-mcp = "sellerclaw_cli.mcp_server:main"
+
+[project.urls]
+Homepage = "https://sellerclaw.com"
+Documentation = "https://github.com/sellerclaw/sellerclaw/tree/main/packages/sellerclaw-cli#readme"
+Repository = "https://github.com/sellerclaw/sellerclaw"
+Issues = "https://github.com/sellerclaw/sellerclaw/issues"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-xdist>=3.5.0",
+    "pytest-timeout>=2.3.0",
+    "respx>=0.22.0",
+    "ruff>=0.9.0",
+    "pyright>=1.1.390",
+    # Installed in dev so pyright resolves the optional MCP SDK and the wiring test can build the
+    # server; it stays an *optional* runtime extra for end users (see [project.optional-dependencies]).
+    "mcp>=1.9.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["sellerclaw_cli"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "sellerclaw_cli",
+    "README.md",
+    "pyproject.toml",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = ["--import-mode=importlib"]
+markers = [
+    "unit: unit tests",
+    "integration: integration tests (require live API)",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = ["sellerclaw_cli/_generated", "sellerclaw_cli/commands"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# Typer's canonical pattern is `= typer.Option(...)` / `= typer.Argument(...)` in defaults.
+# Flagging it globally would clutter every command; scoped ignore keeps noise out.
+"sellerclaw_cli/cli.py" = ["B008"]
+"sellerclaw_cli/commands/*.py" = ["B008"]
+
+# Pyright config lives in packages/sellerclaw-cli/pyrightconfig.json so it takes
+# precedence over the repo-root pyrightconfig.json (pyright walks upward from CWD
+# and would otherwise pick up the backend's config, which `include`s src/ and
+# pulls in backend deps that aren't installed in the CLI subpackage env).

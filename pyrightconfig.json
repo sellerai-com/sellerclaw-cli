@@ -1,0 +1,10 @@
+{
+  "include": ["sellerclaw_cli", "tests"],
+  "exclude": ["**/__pycache__", ".venv", "dist", "build"],
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "basic",
+  "reportMissingImports": "error",
+  "reportMissingTypeStubs": "none",
+  "venvPath": ".",
+  "venv": ".venv"
+}

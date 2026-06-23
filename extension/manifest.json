@@ -1,0 +1,66 @@
+{
+  "manifest_version": "0.3",
+  "name": "sellerclaw",
+  "display_name": "SellerClaw",
+  "version": "0.1.0",
+  "description": "Control your SellerClaw stores, orders, listings, ads, suppliers, email and research from Claude.",
+  "long_description": "Exposes the SellerClaw Agent API to Claude through three discovery tools (browse command groups, read a command's schema, run it). Sign in once with `sellerclaw auth login` — no API key to copy. Some actions (e.g. sending email or marketing campaigns) still require the owner's approval, enforced server-side.",
+  "author": {
+    "name": "SellerClaw",
+    "url": "https://sellerclaw.com"
+  },
+  "homepage": "https://sellerclaw.com",
+  "documentation": "https://github.com/sellerclaw/sellerclaw/tree/main/packages/sellerclaw-cli#mcp-server-for-claude-and-other-mcp-agents",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sellerclaw/sellerclaw"
+  },
+  "license": "MIT",
+  "keywords": ["sellerclaw", "ecommerce", "shopify", "ebay", "amazon", "agent"],
+  "server": {
+    "type": "python",
+    "entry_point": "server/main.py",
+    "mcp_config": {
+      "command": "uvx",
+      "args": ["--from", "sellerclaw-cli[mcp]", "sellerclaw", "mcp"],
+      "env": {
+        "SELLERCLAW_TOKEN": "${user_config.token}"
+      },
+      "platform_overrides": {
+        "win32": {
+          "command": "uvx.exe"
+        }
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "sellerclaw_groups",
+      "description": "List SellerClaw command groups and the commands inside each."
+    },
+    {
+      "name": "sellerclaw_describe",
+      "description": "Show one command's full schema: arguments, filters and body fields."
+    },
+    {
+      "name": "sellerclaw_run",
+      "description": "Run a SellerClaw command and return the API response."
+    }
+  ],
+  "tools_generated": false,
+  "user_config": {
+    "token": {
+      "type": "string",
+      "title": "SellerClaw token (optional)",
+      "description": "Leave empty if you have signed in with `sellerclaw auth login` in a terminal. Otherwise paste an agent token (starts with `sca_`).",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": {
+      "python": ">=3.11,<4.0"
+    }
+  }
+}
