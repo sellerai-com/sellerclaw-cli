@@ -8,7 +8,7 @@
 #   SKILLS_DIR="$HOME/.cursor/skills"  curl -fsSL …/install-skill.sh | sh
 set -eu
 
-BASE="https://raw.githubusercontent.com/sellerai-com/sellerclaw-cli/main/skill/sellerclaw"
+BASE="https://raw.githubusercontent.com/sellerai-com/sellerclaw-cli/main/plugin/shared/skills/sellerclaw"
 SKILLS_DIR="${SKILLS_DIR:-$HOME/.claude/skills}"
 DEST="$SKILLS_DIR/sellerclaw"
 FILES="SKILL.md references/setup.md references/capabilities.md"

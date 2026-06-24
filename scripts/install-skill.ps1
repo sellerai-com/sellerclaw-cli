@@ -6,7 +6,7 @@
 # Install somewhere else (e.g. Cursor) by setting $env:SKILLS_DIR first.
 $ErrorActionPreference = 'Stop'
 
-$Base = "https://raw.githubusercontent.com/sellerai-com/sellerclaw-cli/main/skill/sellerclaw"
+$Base = "https://raw.githubusercontent.com/sellerai-com/sellerclaw-cli/main/plugin/shared/skills/sellerclaw"
 $SkillsDir = if ($env:SKILLS_DIR) { $env:SKILLS_DIR } else { Join-Path $env:USERPROFILE ".claude\skills" }
 $Dest = Join-Path $SkillsDir "sellerclaw"
 $Files = @("SKILL.md", "references/setup.md", "references/capabilities.md")

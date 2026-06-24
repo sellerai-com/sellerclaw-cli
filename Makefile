@@ -6,6 +6,7 @@
 #   make test           Unit tests
 #   make check          lint + test
 #   make build          Build wheel + sdist into dist/
+#   make plugin         Build the Claude plugin variants from plugin/ (TARGET=claude-code for one)
 #   make mcpb           Build the Claude Desktop extension bundle (dist/sellerclaw.mcpb)
 #   make release-check  Report whether a new release is needed
 #   make release        Bump version, tag vX.Y.Z, push -> CI publishes to PyPI
@@ -28,7 +29,7 @@ PART ?= minor
 # release is warranted — test/CI/docs-only churn doesn't require one.
 SHIPPED_PATHS = sellerclaw_cli pyproject.toml README.md
 
-.PHONY: install lint test check build mcpb release-check release
+.PHONY: install lint test check build plugin mcpb release-check release
 
 install:
 	$(UV) sync --group dev
@@ -45,11 +46,19 @@ check: lint test
 build:
 	$(UV) build
 
-# Build the Claude Desktop Extension bundle (extension/ -> dist/sellerclaw.mcpb).
-# The bundle launches the *published* sellerclaw-cli[mcp] via uvx, so rebuild and
-# re-upload it after a release that changes extension/manifest.json.
+# Assemble the Claude plugin variants from plugin/ (shared core + claude overlay + per-target
+# manifests). claude-code lands in the committed plugins/ tree (the marketplace references it);
+# the rest are artifacts under dist/. Build just one with `make plugin TARGET=claude-code`.
+plugin:
+	$(UV) run python scripts/build_plugin.py $(if $(TARGET),--target $(TARGET),)
+
+# Build the Claude Desktop Extension bundle (.mcpb). Assembles the desktop target from plugin/
+# (stamps the version into manifest.json), then packs it -> dist/sellerclaw.mcpb. The bundle launches
+# the *published* sellerclaw-cli[mcp] via uvx, so rebuild and re-upload it after a release that
+# changes the desktop manifest.
 mcpb:
-	npx -y @anthropic-ai/mcpb pack extension dist/sellerclaw.mcpb
+	$(UV) run python scripts/build_plugin.py --target claude-desktop
+	npx -y @anthropic-ai/mcpb pack dist/plugins/claude-desktop dist/sellerclaw.mcpb
 
 # Reports whether the shipped CLI differs from the last published release (the
 # latest v* git tag). release.yml publishes to PyPI on v*.*.* tags.
