@@ -1,8 +1,25 @@
-# sellerclaw-cli
+<div align="center">
 
-Command-line client for the [SellerClaw](https://sellerclaw.ai) Agent API.
+<img src="assets/banner.svg" alt="SellerClaw CLI" width="820">
 
-`sellerclaw-cli` is designed to be driven either directly from a terminal or, more commonly, as a subprocess by automation and LLM agents. Every command:
+<br/>
+<br/>
+
+[![PyPI](https://img.shields.io/pypi/v/sellerclaw-cli?style=flat-square&labelColor=0C0E11&color=C5E756&logo=pypi&logoColor=C5E756)](https://pypi.org/project/sellerclaw-cli/)
+[![Python](https://img.shields.io/pypi/pyversions/sellerclaw-cli?style=flat-square&labelColor=0C0E11&color=C5E756&logo=python&logoColor=C5E756)](https://pypi.org/project/sellerclaw-cli/)
+[![CI](https://img.shields.io/github/actions/workflow/status/sellerai-com/sellerclaw-cli/ci.yml?style=flat-square&labelColor=0C0E11&color=C5E756&logo=github&logoColor=white&label=CI)](https://github.com/sellerai-com/sellerclaw-cli/actions/workflows/ci.yml)
+[![Claude · MCP ready](https://img.shields.io/badge/Claude-MCP%20ready-C5E756?style=flat-square&labelColor=0C0E11)](#mcp-server-for-claude-and-other-mcp-agents)
+[![License: MIT](https://img.shields.io/badge/License-MIT-C5E756?style=flat-square&labelColor=0C0E11)](LICENSE)
+
+**Run your stores, orders, listings, ads & suppliers from a terminal, scripts, or Claude — structured JSON in, structured JSON out.**
+
+[Install](#installation) · [Quick start](#quick-start) · [Use from Claude (MCP)](#mcp-server-for-claude-and-other-mcp-agents) · [Output contract](#output-contract) · [Troubleshooting](#troubleshooting)
+
+</div>
+
+---
+
+`sellerclaw-cli` is the command-line client for the [SellerClaw](https://sellerclaw.ai) Agent API. It is designed to be driven either directly from a terminal or, more commonly, as a subprocess by automation and LLM agents. Every command:
 
 - returns structured **JSON on stdout** on success,
 - returns structured **JSON on stderr** on failure,
@@ -652,3 +669,11 @@ make cli-build   # build wheel + sdist
 ```
 
 Releases are triggered by pushing a `cli-X.Y.Z` tag.
+
+---
+
+<div align="center">
+  <sub>Part of the <a href="https://sellerclaw.ai">SellerClaw</a> ecosystem · built by <a href="https://sellerai.com">SellerAI</a></sub>
+  <br/>
+  <sub><a href="https://github.com/sellerai-com/sellerclaw-agent">sellerclaw-agent</a> · <a href="https://pypi.org/project/sellerclaw-cli/">PyPI</a> · <a href="https://modelcontextprotocol.io">Model Context Protocol</a></sub>
+</div>
