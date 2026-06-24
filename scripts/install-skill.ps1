@@ -1,12 +1,12 @@
 # Install the SellerClaw skill for Claude Code / Cursor. No CLI, Python, or uv required — it just
 # downloads the skill's markdown into your skills directory.
 #
-#   irm https://raw.githubusercontent.com/sellerclaw/sellerclaw/main/packages/sellerclaw-cli/scripts/install-skill.ps1 | iex
+#   irm https://raw.githubusercontent.com/sellerai-com/sellerclaw-cli/main/scripts/install-skill.ps1 | iex
 #
 # Install somewhere else (e.g. Cursor) by setting $env:SKILLS_DIR first.
 $ErrorActionPreference = 'Stop'
 
-$Base = "https://raw.githubusercontent.com/sellerclaw/sellerclaw/main/packages/sellerclaw-cli/skill/sellerclaw"
+$Base = "https://raw.githubusercontent.com/sellerai-com/sellerclaw-cli/main/skill/sellerclaw"
 $SkillsDir = if ($env:SKILLS_DIR) { $env:SKILLS_DIR } else { Join-Path $env:USERPROFILE ".claude\skills" }
 $Dest = Join-Path $SkillsDir "sellerclaw"
 $Files = @("SKILL.md", "references/setup.md", "references/capabilities.md")

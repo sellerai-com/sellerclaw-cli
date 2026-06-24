@@ -57,9 +57,9 @@ sellerclaw-mcp = "sellerclaw_cli.mcp_server:main"
 
 [project.urls]
 Homepage = "https://sellerclaw.ai"
-Documentation = "https://github.com/sellerclaw/sellerclaw/tree/main/packages/sellerclaw-cli#readme"
-Repository = "https://github.com/sellerclaw/sellerclaw"
-Issues = "https://github.com/sellerclaw/sellerclaw/issues"
+Documentation = "https://github.com/sellerai-com/sellerclaw-cli#readme"
+Repository = "https://github.com/sellerai-com/sellerclaw-cli"
+Issues = "https://github.com/sellerai-com/sellerclaw-cli/issues"
 
 [dependency-groups]
 dev = [
@@ -107,7 +107,5 @@ select = ["E", "F", "I", "B", "UP"]
 "sellerclaw_cli/cli.py" = ["B008"]
 "sellerclaw_cli/commands/*.py" = ["B008"]
 
-# Pyright config lives in packages/sellerclaw-cli/pyrightconfig.json so it takes
-# precedence over the repo-root pyrightconfig.json (pyright walks upward from CWD
-# and would otherwise pick up the backend's config, which `include`s src/ and
-# pulls in backend deps that aren't installed in the CLI subpackage env).
+# Pyright settings live in the standalone pyrightconfig.json next to this file so editors and CI
+# resolve this project's own environment and don't inherit any config from a parent directory.

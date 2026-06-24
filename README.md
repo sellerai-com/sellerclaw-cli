@@ -471,12 +471,12 @@ and Claude Code automatically. Safe to re-run.
 
 ```sh
 # macOS / Linux
-curl -fsSL https://raw.githubusercontent.com/sellerclaw/sellerclaw/main/packages/sellerclaw-cli/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/sellerai-com/sellerclaw-cli/main/scripts/install.sh | sh
 ```
 
 ```powershell
 # Windows (PowerShell)
-irm https://raw.githubusercontent.com/sellerclaw/sellerclaw/main/packages/sellerclaw-cli/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/sellerai-com/sellerclaw-cli/main/scripts/install.ps1 | iex
 ```
 
 Then restart Claude Desktop. (Opt-outs: `SELLERCLAW_SKIP_LOGIN=1`, `SELLERCLAW_FORCE_DESKTOP=1`.)
@@ -502,10 +502,13 @@ Step 2 stores your credentials in `~/.config/sellerclaw/config.toml`, and the MC
 
 ### Connect Claude
 
+Both snippets launch the server with `uvx … sellerclaw-cli[mcp]@latest`, so it **always runs the
+latest published version automatically** — there is nothing to upgrade.
+
 **Claude Code** (terminal) — one command, no secrets:
 
 ```sh
-claude mcp add sellerclaw -- sellerclaw mcp
+claude mcp add sellerclaw -- uvx --from 'sellerclaw-cli[mcp]@latest' sellerclaw mcp
 ```
 
 **Claude Desktop** — add this to `claude_desktop_config.json` (Settings → Developer → Edit Config),
@@ -515,16 +518,16 @@ then restart Claude:
 {
   "mcpServers": {
     "sellerclaw": {
-      "command": "sellerclaw",
-      "args": ["mcp"]
+      "command": "uvx",
+      "args": ["--from", "sellerclaw-cli[mcp]@latest", "sellerclaw", "mcp"]
     }
   }
 }
 ```
 
-That's the whole config — no `env`, no token. (If Claude Desktop can't find the `sellerclaw`
-command, replace `"command": "sellerclaw"` with its absolute path — `which sellerclaw` /
-`where sellerclaw` prints it — because the desktop app doesn't always inherit your shell's PATH.)
+That's the whole config — no `env`, no token. (If Claude Desktop can't find the `uvx` command,
+replace `"command": "uvx"` with its absolute path — `which uvx` / `where uvx` prints it — because the
+desktop app doesn't always inherit your shell's PATH.)
 
 For **headless / automation** use where there is no browser to sign in, skip `auth login` and pass
 credentials by environment instead — add an `"env": { "SELLERCLAW_TOKEN": "sca_…" }` block, or export
@@ -536,12 +539,16 @@ credentials by environment instead — add an `"env": { "SELLERCLAW_TOKEN": "sca
 
 ### Claude Desktop Extension (.mcpb)
 
-For a click-to-install experience, the repo ships a Claude Desktop Extension under
-[`extension/`](extension/). Build it with `make cli-mcpb` (produces `dist/sellerclaw.mcpb`), then
-drag the `.mcpb` onto Claude Desktop → Settings → Extensions. The bundle launches the published
-`sellerclaw-cli[mcp]` via `uvx`, so the only prerequisite is [`uv`](https://docs.astral.sh/uv/) on
-PATH; sign-in still uses `sellerclaw auth login` (or paste a token into the extension's optional
-field).
+For a click-to-install experience, download the latest bundle and drag it onto Claude Desktop →
+Settings → Extensions:
+
+**[⬇ Download sellerclaw.mcpb](https://github.com/sellerai-com/sellerclaw-cli/releases/latest/download/sellerclaw.mcpb)**
+
+The bundle launches `sellerclaw-cli[mcp]@latest` via `uvx`, so it **auto-updates to the newest
+release** on its own — the only prerequisite is [`uv`](https://docs.astral.sh/uv/) on PATH (the
+one-line installer above installs it for you). Sign-in still uses `sellerclaw auth login` (or paste a
+token into the extension's optional field). To build the bundle yourself: `make mcpb` (produces
+`dist/sellerclaw.mcpb`); the source lives under [`extension/`](extension/).
 
 ### Teach Claude to use it (skill)
 
@@ -550,12 +557,12 @@ A **skill** documents the setup and the full command surface so Claude drives Se
 
 ```sh
 # macOS / Linux
-curl -fsSL https://raw.githubusercontent.com/sellerclaw/sellerclaw/main/packages/sellerclaw-cli/scripts/install-skill.sh | sh
+curl -fsSL https://raw.githubusercontent.com/sellerai-com/sellerclaw-cli/main/scripts/install-skill.sh | sh
 ```
 
 ```powershell
 # Windows (PowerShell)
-irm https://raw.githubusercontent.com/sellerclaw/sellerclaw/main/packages/sellerclaw-cli/scripts/install-skill.ps1 | iex
+irm https://raw.githubusercontent.com/sellerai-com/sellerclaw-cli/main/scripts/install-skill.ps1 | iex
 ```
 
 It downloads into `~/.claude/skills/sellerclaw` (override with `SKILLS_DIR=~/.cursor/skills`). Or
@@ -634,7 +641,7 @@ rm -rf ~/.config/sellerclaw
 
 ## Development
 
-This package lives in [`packages/sellerclaw-cli/`](.) of the main SellerClaw monorepo. Command groups are **hand-curated** — see [`sellerclaw_cli/_command_group.py`](sellerclaw_cli/_command_group.py) (declarative `Cmd` specs) and the modules under [`sellerclaw_cli/commands/`](sellerclaw_cli/commands/). Discovery (`groups` / `commands` / `describe` / `guide`) is driven by the populated command registry, not an OpenAPI snapshot. When the API gains an endpoint, add or update the relevant group module.
+Command groups are **hand-curated** — see [`sellerclaw_cli/_command_group.py`](sellerclaw_cli/_command_group.py) (declarative `Cmd` specs) and the modules under [`sellerclaw_cli/commands/`](sellerclaw_cli/commands/). Discovery (`groups` / `commands` / `describe` / `guide`) is driven by the populated command registry, not an OpenAPI snapshot. When the API gains an endpoint, add or update the relevant group module.
 
 From the repo root:
 

@@ -10,10 +10,10 @@
     "url": "https://sellerclaw.ai"
   },
   "homepage": "https://sellerclaw.ai",
-  "documentation": "https://github.com/sellerclaw/sellerclaw/tree/main/packages/sellerclaw-cli#mcp-server-for-claude-and-other-mcp-agents",
+  "documentation": "https://github.com/sellerai-com/sellerclaw-cli#mcp-server-for-claude-and-other-mcp-agents",
   "repository": {
     "type": "git",
-    "url": "https://github.com/sellerclaw/sellerclaw"
+    "url": "https://github.com/sellerai-com/sellerclaw-cli"
   },
   "license": "MIT",
   "keywords": ["sellerclaw", "ecommerce", "shopify", "ebay", "amazon", "agent"],
@@ -22,7 +22,7 @@
     "entry_point": "server/main.py",
     "mcp_config": {
       "command": "uvx",
-      "args": ["--from", "sellerclaw-cli[mcp]", "sellerclaw", "mcp"],
+      "args": ["--from", "sellerclaw-cli[mcp]@latest", "sellerclaw", "mcp"],
       "env": {
         "SELLERCLAW_TOKEN": "${user_config.token}"
       },

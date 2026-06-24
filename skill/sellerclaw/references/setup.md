@@ -5,13 +5,13 @@
 macOS / Linux:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/sellerclaw/sellerclaw/main/packages/sellerclaw-cli/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/sellerai-com/sellerclaw-cli/main/scripts/install.sh | sh
 ```
 
 Windows (PowerShell):
 
 ```powershell
-irm https://raw.githubusercontent.com/sellerclaw/sellerclaw/main/packages/sellerclaw-cli/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/sellerai-com/sellerclaw-cli/main/scripts/install.ps1 | iex
 ```
 
 The installer sets up `uv`, installs the CLI, signs the user in via the browser, and wires the MCP
@@ -24,16 +24,18 @@ uv tool install 'sellerclaw-cli[mcp]'     # or: pipx install 'sellerclaw-cli[mcp
 sellerclaw auth login                      # opens a browser — no API token to copy
 ```
 
-Then connect a client:
+Then connect a client. These launch via `uvx … sellerclaw-cli[mcp]@latest`, so the server always runs
+the latest published version automatically:
 
-- **Claude Code:** `claude mcp add sellerclaw -- sellerclaw mcp`
+- **Claude Code:** `claude mcp add sellerclaw -- uvx --from 'sellerclaw-cli[mcp]@latest' sellerclaw mcp`
 - **Claude Desktop:** add to `claude_desktop_config.json` (Settings → Developer → Edit Config), then
   restart:
   ```json
-  { "mcpServers": { "sellerclaw": { "command": "sellerclaw", "args": ["mcp"] } } }
+  { "mcpServers": { "sellerclaw": { "command": "uvx", "args": ["--from", "sellerclaw-cli[mcp]@latest", "sellerclaw", "mcp"] } } }
   ```
-- **Desktop Extension (.mcpb):** double-click the bundle from the SellerClaw repo's
-  `packages/sellerclaw-cli/extension` (needs `uv` installed).
+- **Desktop Extension (.mcpb):** download from
+  https://github.com/sellerai-com/sellerclaw-cli/releases/latest/download/sellerclaw.mcpb and
+  double-click it (needs `uv` installed).
 
 ## Authentication model
 
@@ -48,8 +50,8 @@ the exact config path in use. For headless use, set `SELLERCLAW_TOKEN` (and opti
 - **"not signed in" / every `run` fails with auth** → run `sellerclaw auth login` once in a terminal.
   Discovery (`groups` / `describe`) works without auth; only `run` needs it.
 - **Claude Desktop can't start the server / "command not found"** → the desktop app doesn't always
-  inherit your shell PATH. Put the **absolute** path in the config: run `which sellerclaw`
-  (`where sellerclaw` on Windows) and use that as `"command"`.
+  inherit your shell PATH. Put the **absolute** path in the config: run `which uvx`
+  (`where uvx` on Windows) and use that as `"command"`.
 - **`.mcpb` extension won't launch** → it runs the published package via `uvx`, so `uv` must be
   installed and on PATH. Install from https://docs.astral.sh/uv/ and restart Claude.
 - **Wrong account / API** → check `sellerclaw auth whoami`; re-run `sellerclaw auth login`, or set

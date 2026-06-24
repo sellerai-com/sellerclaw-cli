@@ -137,3 +137,38 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist
+
+  # Build the Claude Desktop extension bundle and attach it to the GitHub Release so non-technical
+  # users get a click-to-install download at a stable URL:
+  #   https://github.com/sellerai-com/sellerclaw-cli/releases/latest/download/sellerclaw.mcpb
+  # The bundle launches `sellerclaw-cli[mcp]@latest` via uvx, so it rarely needs re-downloading.
+  publish-mcpb:
+    name: Attach .mcpb to GitHub Release
+    needs: verify
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Stamp version into extension manifest
+        run: |
+          set -euo pipefail
+          v="${GITHUB_REF_NAME#v}"
+          sed -i -E "s/^( *\"version\": \")[^\"]*(\")/\1${v}\2/" extension/manifest.json
+          grep '"version"' extension/manifest.json
+
+      - name: Build .mcpb bundle
+        run: npx -y @anthropic-ai/mcpb pack extension dist/sellerclaw.mcpb
+
+      - name: Attach to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/sellerclaw.mcpb
+          fail_on_unmatched_files: true

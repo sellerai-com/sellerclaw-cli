@@ -1,6 +1,6 @@
 # SellerClaw MCP — one-line installer for Windows (PowerShell).
 #
-#   irm https://raw.githubusercontent.com/sellerclaw/sellerclaw/main/packages/sellerclaw-cli/scripts/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/sellerai-com/sellerclaw-cli/main/scripts/install.ps1 | iex
 #
 # Installs uv (if missing), installs the sellerclaw CLI with the MCP extra, signs you in via your
 # browser (no API token to copy), and wires the MCP server into Claude Code and Claude Desktop
@@ -41,6 +41,14 @@ if (-not $Bin) {
   throw "'sellerclaw' was not found after install — add %USERPROFILE%\.local\bin to PATH and re-run."
 }
 
+# MCP launches via `uvx … sellerclaw-cli[mcp]@latest` (not the installed binary) so each Claude start
+# auto-updates to the newest release. Resolve an absolute uvx path (uvx ships with uv).
+$Uvx = (Get-Command uvx -ErrorAction SilentlyContinue).Source
+if (-not $Uvx) { $Uvx = Join-Path (Split-Path (Get-Command uv).Source) 'uvx.exe' }
+if (-not (Test-Path $Uvx)) {
+  throw "'uvx' was not found (it ships with uv) — see https://docs.astral.sh/uv/"
+}
+
 # 3. Sign in ------------------------------------------------------------------
 if ($env:SELLERCLAW_SKIP_LOGIN -ne '1') {
   $who = & sellerclaw auth whoami 2>$null
@@ -54,13 +62,10 @@ if ($env:SELLERCLAW_SKIP_LOGIN -ne '1') {
 
 # 4. Claude Code --------------------------------------------------------------
 if (Get-Command claude -ErrorAction SilentlyContinue) {
-  & claude mcp get sellerclaw *> $null
-  if ($LASTEXITCODE -eq 0) {
-    Info "Claude Code: 'sellerclaw' already configured."
-  } else {
-    Info "Claude Code: adding the MCP server…"
-    & claude mcp add sellerclaw -- $Bin mcp
-  }
+  # Re-add every run so re-running the installer migrates any older (non-auto-updating) config.
+  & claude mcp remove sellerclaw *> $null
+  Info "Claude Code: adding the MCP server…"
+  & claude mcp add sellerclaw -- $Uvx --from 'sellerclaw-cli[mcp]@latest' sellerclaw mcp
 }
 
 # 5. Claude Desktop -----------------------------------------------------------
@@ -77,7 +82,7 @@ if ((Test-Path $Dir) -or ($env:SELLERCLAW_FORCE_DESKTOP -eq '1')) {
   if (-not ($data.PSObject.Properties.Name -contains 'mcpServers')) {
     $data | Add-Member -NotePropertyName mcpServers -NotePropertyValue ([pscustomobject]@{})
   }
-  $server = [pscustomobject]@{ command = $Bin; args = @('mcp') }
+  $server = [pscustomobject]@{ command = $Uvx; args = @('--from', 'sellerclaw-cli[mcp]@latest', 'sellerclaw', 'mcp') }
   if ($data.mcpServers.PSObject.Properties.Name -contains 'sellerclaw') {
     $data.mcpServers.sellerclaw = $server
   } else {

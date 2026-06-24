@@ -3,7 +3,8 @@
 
 The bundle stays tiny and cross-platform by *not* shipping Python dependencies — those include
 compiled, platform-specific wheels (pydantic-core, …). Instead it runs the published
-``sellerclaw-cli[mcp]`` through uv, which fetches and caches it on first launch.
+``sellerclaw-cli[mcp]@latest`` through uv: the ``@latest`` keeps users on the newest release with no
+action on their part (uv checks the index each launch and reuses the cached wheel when unchanged).
 
 Claude Desktop normally launches ``uvx`` directly (see ``mcp_config`` in manifest.json); this file
 is the equivalent you can run by hand — ``python server/main.py`` — and what ``entry_point`` points
@@ -16,7 +17,7 @@ import os
 import shutil
 import sys
 
-_PACKAGE = "sellerclaw-cli[mcp]"
+_PACKAGE = "sellerclaw-cli[mcp]@latest"
 
 
 def main() -> None:
