@@ -606,6 +606,19 @@ copy the folder yourself — the source is
 [`plugin/shared/skills/sellerclaw/`](plugin/shared/skills/sellerclaw/). Restart Claude Code (or reload
 skills) afterward.
 
+#### …or with `npx skills` (any agent)
+
+If you use [`npx skills`](https://github.com/vercel-labs/skills), install the **setup skill** straight
+from this repo — it teaches your agent how to install and connect SellerClaw, and works across Claude
+Code, Cursor, Codex and the other agents the tool supports:
+
+```sh
+npx skills add sellerai-com/sellerclaw-cli --skill sellerclaw-setup
+```
+
+The source lives in [`skills/sellerclaw-setup/`](skills/sellerclaw-setup/). Drop `--skill …` to pick
+from everything the repo offers.
+
 ---
 
 ## Agent identification
