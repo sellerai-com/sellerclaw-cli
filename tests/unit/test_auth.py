@@ -46,7 +46,7 @@ class TestRequestDeviceCode:
                 json={
                     "device_code": "dev_abc",
                     "user_code": "ABCD-1234",
-                    "verification_uri": "https://sellerclaw.com/activate",
+                    "verification_uri": "https://sellerclaw.ai/activate",
                     "expires_in": 600,
                     "interval": 5,
                 },
@@ -57,7 +57,7 @@ class TestRequestDeviceCode:
         assert result == DeviceCode(
             device_code="dev_abc",
             user_code="ABCD-1234",
-            verification_uri="https://sellerclaw.com/activate",
+            verification_uri="https://sellerclaw.ai/activate",
             expires_in=600,
             interval=5,
         )

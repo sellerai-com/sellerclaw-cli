@@ -27,7 +27,7 @@ def pytest_configure(config: pytest.Config) -> None:
 
 @pytest.fixture
 def fake_api_url() -> str:
-    return "https://api.test.sellerclaw.com"
+    return "https://api.test.sellerclaw.ai"
 
 
 @pytest.fixture

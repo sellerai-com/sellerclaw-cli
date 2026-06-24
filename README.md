@@ -1,6 +1,6 @@
 # sellerclaw-cli
 
-Command-line client for the [SellerClaw](https://sellerclaw.com) Agent API.
+Command-line client for the [SellerClaw](https://sellerclaw.ai) Agent API.
 
 `sellerclaw-cli` is designed to be driven either directly from a terminal or, more commonly, as a subprocess by automation and LLM agents. Every command:
 
@@ -105,7 +105,7 @@ That's it. See below for details on configuration, other auth flows, and output 
 
 The CLI needs two pieces of configuration:
 
-- **`api_url`** — base URL of the Agent API (default: `https://api.sellerclaw.com`).
+- **`api_url`** — base URL of the Agent API (default: `https://api.sellerclaw.ai`).
 - **`token`** — your personal `sca_…` agent token used for `Authorization: Bearer …` on every request.
 
 Both can be supplied either via environment variables or via a config file.
@@ -115,7 +115,7 @@ Both can be supplied either via environment variables or via a config file.
 | Variable | Purpose | Default |
 | --- | --- | --- |
 | `SELLERCLAW_TOKEN` | Agent token (`sca_…`). Always sent as `Authorization: Bearer <token>`. | *(none)* |
-| `SELLERCLAW_API_URL` | Base URL of the Agent API. | `https://api.sellerclaw.com` |
+| `SELLERCLAW_API_URL` | Base URL of the Agent API. | `https://api.sellerclaw.ai` |
 | `XDG_CONFIG_HOME` | Base dir for the config file (standard XDG behavior). | `~/.config` |
 
 Example:
@@ -159,7 +159,7 @@ For each of `api_url` and `token`, the CLI picks the **first** non-empty source,
 
 1. Environment variable (`SELLERCLAW_API_URL`, `SELLERCLAW_TOKEN`).
 2. Key in `config.toml` (`api_url`, `token`).
-3. Built-in default (`api_url = https://api.sellerclaw.com`; no default token).
+3. Built-in default (`api_url = https://api.sellerclaw.ai`; no default token).
 
 This means you can, for example, keep `api_url` in the config file and inject the token only via env — handy for CI and container workflows:
 
@@ -192,7 +192,7 @@ sellerclaw auth login
 The CLI prints a URL and a short code **to stderr** (so it never pollutes a stdout pipeline):
 
 ```
-Open https://sellerclaw.com/activate
+Open https://sellerclaw.ai/activate
 Enter the code: ABCD-1234
 (waiting up to 600s, polling every 5s...)
 ```
@@ -200,7 +200,7 @@ Enter the code: ABCD-1234
 Open the URL in a browser, paste the code, confirm. The CLI polls the API until the token is granted, then writes it to the config file. On success, stdout gets:
 
 ```json
-{"data":{"authenticated":true,"api_url":"https://api.sellerclaw.com","config_path":"/home/you/.config/sellerclaw/config.toml"}}
+{"data":{"authenticated":true,"api_url":"https://api.sellerclaw.ai","config_path":"/home/you/.config/sellerclaw/config.toml"}}
 ```
 
 ### Email + password

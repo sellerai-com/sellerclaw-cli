@@ -7,9 +7,9 @@
   "long_description": "Exposes the SellerClaw Agent API to Claude through three discovery tools (browse command groups, read a command's schema, run it). Sign in once with `sellerclaw auth login` — no API key to copy. Some actions (e.g. sending email or marketing campaigns) still require the owner's approval, enforced server-side.",
   "author": {
     "name": "SellerClaw",
-    "url": "https://sellerclaw.com"
+    "url": "https://sellerclaw.ai"
   },
-  "homepage": "https://sellerclaw.com",
+  "homepage": "https://sellerclaw.ai",
   "documentation": "https://github.com/sellerclaw/sellerclaw/tree/main/packages/sellerclaw-cli#mcp-server-for-claude-and-other-mcp-agents",
   "repository": {
     "type": "git",

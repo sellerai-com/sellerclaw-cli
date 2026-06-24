@@ -7,7 +7,7 @@ from pathlib import Path
 
 import tomli_w
 
-DEFAULT_API_URL = "https://api.sellerclaw.com"
+DEFAULT_API_URL = "https://api.sellerclaw.ai"
 ENV_TOKEN = "SELLERCLAW_TOKEN"
 ENV_API_URL = "SELLERCLAW_API_URL"
 ENV_XDG_CONFIG_HOME = "XDG_CONFIG_HOME"

@@ -56,7 +56,7 @@ sellerclaw = "sellerclaw_cli.cli:main"
 sellerclaw-mcp = "sellerclaw_cli.mcp_server:main"
 
 [project.urls]
-Homepage = "https://sellerclaw.com"
+Homepage = "https://sellerclaw.ai"
 Documentation = "https://github.com/sellerclaw/sellerclaw/tree/main/packages/sellerclaw-cli#readme"
 Repository = "https://github.com/sellerclaw/sellerclaw"
 Issues = "https://github.com/sellerclaw/sellerclaw/issues"

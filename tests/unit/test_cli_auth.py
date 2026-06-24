@@ -88,7 +88,7 @@ class TestLoginDeviceFlow:
                 json={
                     "device_code": "dev_x",
                     "user_code": "ABCD-1234",
-                    "verification_uri": "https://sellerclaw.com/activate",
+                    "verification_uri": "https://sellerclaw.ai/activate",
                     "expires_in": 600,
                     "interval": 1,
                 },
