@@ -1,0 +1,103 @@
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+
+import pytest
+
+from scripts.build_plugin import TARGETS, assemble, available_targets, read_version
+
+pytestmark = pytest.mark.unit
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+PLUGIN_SRC = REPO_ROOT / "plugin"
+
+CORE_SKILL = "sellerclaw"
+TASK_RECIPES = (
+    "sellerclaw-listings",
+    "sellerclaw-orders",
+    "sellerclaw-ads",
+    "sellerclaw-research",
+)
+
+
+def test_assemble_claude_code_layout_and_version(tmp_path: Path) -> None:
+    out = assemble("claude-code", PLUGIN_SRC, tmp_path / "out", version="9.9.9")
+
+    manifest = out / ".claude-plugin" / "plugin.json"
+    assert manifest.is_file()
+    assert (out / ".mcp.json").is_file()
+
+    data = json.loads(manifest.read_text())
+    # Version is stamped from the caller, overriding whatever placeholder the source template carried.
+    assert data["version"] == "9.9.9"
+    assert data["name"] == "sellerclaw"
+    assert data["hooks"] == "./hooks/hooks.json"
+
+
+def test_assemble_merges_core_and_all_task_recipes(tmp_path: Path) -> None:
+    out = assemble("claude-code", PLUGIN_SRC, tmp_path / "out", version="0.0.0")
+
+    assert (out / "skills" / CORE_SKILL / "SKILL.md").is_file()
+    assert (out / "skills" / CORE_SKILL / "references" / "capabilities.md").is_file()
+    for recipe in TASK_RECIPES:
+        assert (out / "skills" / recipe / "SKILL.md").is_file(), recipe
+
+
+def test_assemble_ships_runnable_hooks(tmp_path: Path) -> None:
+    out = assemble("claude-code", PLUGIN_SRC, tmp_path / "out", version="0.0.0")
+
+    hooks = json.loads((out / "hooks" / "hooks.json").read_text())
+    # The hooks file must be wrapped under a top-level "hooks" key (Claude Code rejects the bare map).
+    assert set(hooks) == {"hooks"}
+    assert "SessionStart" in hooks["hooks"]
+
+    script = out / "hooks" / "session_start.sh"
+    assert script.is_file()
+    assert os.access(script, os.X_OK), "session_start.sh lost its executable bit"
+
+
+def test_assemble_does_not_leak_overlay_docs(tmp_path: Path) -> None:
+    # The claude/ overlay carries a README documenting the seam; it must never reach the plugin root.
+    out = assemble("claude-code", PLUGIN_SRC, tmp_path / "out", version="0.0.0")
+    assert not (out / "README.md").exists()
+
+
+def test_assemble_is_idempotent(tmp_path: Path) -> None:
+    out_dir = tmp_path / "out"
+
+    def tree() -> list[str]:
+        root = assemble("claude-code", PLUGIN_SRC, out_dir, "1.0.0")
+        return sorted(p.relative_to(out_dir).as_posix() for p in root.rglob("*"))
+
+    assert tree() == tree()
+
+
+def test_read_version_is_pyproject_version() -> None:
+    version = read_version(REPO_ROOT)
+    assert version
+    assert version[0].isdigit()
+
+
+@pytest.mark.parametrize("target", available_targets(REPO_ROOT))
+def test_every_available_target_assembles(target: str, tmp_path: Path) -> None:
+    spec = TARGETS[target]
+    out = assemble(target, PLUGIN_SRC, tmp_path / target, version="0.0.0", layers=spec.layers)
+    # Every target carries at least one stampable manifest.
+    has_manifest = (out / ".claude-plugin" / "plugin.json").is_file() or (out / "manifest.json").is_file()
+    assert has_manifest, target
+    # Plugin targets (non-empty layers) ship the shared skills core; the Desktop .mcpb bundle does not.
+    if spec.layers:
+        assert (out / "skills" / CORE_SKILL / "SKILL.md").is_file(), target
+    else:
+        assert not (out / "skills").exists(), target
+
+
+def test_target_out_policy() -> None:
+    # claude-code is committed into the repo so the marketplace can reference it by path; everything
+    # else is a throwaway artifact under the git-ignored dist/.
+    assert TARGETS["claude-code"].out == "plugins/claude-code"
+    assert all(spec.out.startswith("dist/") for name, spec in TARGETS.items() if name != "claude-code")
+    # The Desktop .mcpb bundle ships the MCP server only — no skills/hooks layers.
+    assert TARGETS["claude-desktop"].layers == ()

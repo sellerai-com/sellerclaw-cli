@@ -1,0 +1,15 @@
+{
+  "name": "sellerclaw",
+  "displayName": "SellerClaw",
+  "version": "0.0.0",
+  "description": "Run your SellerClaw e-commerce business from Claude — products, orders, listings, ads, suppliers, email and research — through three discovery tools plus task skills.",
+  "author": {
+    "name": "SellerClaw",
+    "url": "https://sellerclaw.ai"
+  },
+  "homepage": "https://sellerclaw.ai",
+  "repository": "https://github.com/sellerai-com/sellerclaw-cli",
+  "license": "MIT",
+  "keywords": ["sellerclaw", "ecommerce", "shopify", "ebay", "amazon", "agent", "mcp"],
+  "hooks": "./hooks/hooks.json"
+}

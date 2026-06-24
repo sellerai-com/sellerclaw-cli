@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "sellerclaw": {
+      "command": "uvx",
+      "args": ["--from", "sellerclaw-cli[mcp]@latest", "sellerclaw", "mcp"]
+    }
+  }
+}
