@@ -71,11 +71,82 @@ _RUN_TOOL_DESC = (
 )
 
 
+# --------------------------------------------------------------------------------------------- #
+# Audience filter — which command groups the MCP server exposes.
+#
+# The CLI ships the *full* REGISTRY because the self-hosted OpenClaw agent (the sellerclaw-agent
+# repo) drives the same binary and needs its own operating system: the supervisor/subagent task
+# tree, goal lifecycle, owner action-requests, owner-chat reads, in-chat media and the agent file
+# library. An MCP client, by contrast, is a *human* running their own store through Claude (or
+# another MCP agent) — that person already IS the owner, so those orchestration / escalate-to-owner
+# groups are redundant or inverted for them.
+#
+# So the MCP face is an allowlist: only the store-management surface below is discoverable and
+# callable. Everything else stays in the CLI but is invisible to `sellerclaw_groups` /
+# `sellerclaw_describe` / `sellerclaw_run`. An allowlist (not a denylist) means a new
+# agent-internal group added later never leaks to users by default.
+MCP_VISIBLE_GROUPS: frozenset[str] = frozenset(
+    {
+        # Stores, integrations, account
+        "channels",
+        "integrations",
+        "account",
+        # Shopify
+        "shopify-store",
+        "shopify-listings",
+        "shopify-orders",
+        "shopify-finances",
+        "shopify",
+        # eBay
+        "ebay-store",
+        "ebay-listings",
+        "ebay-orders",
+        "ebay-finances",
+        "ebay-promoted",
+        "ebay",
+        # Amazon
+        "amazon-store",
+        "amazon-listings",
+        "amazon-orders",
+        "amazon",
+        # Internal catalog, orders, analytics
+        "catalog",
+        "orders",
+        "listings",
+        "analytics",
+        # Marketing & ads
+        "ad-accounts",
+        "google-ads",
+        "facebook-ads",
+        "klaviyo",
+        "email",
+        # Suppliers
+        "suppliers",
+        # Research & knowledge
+        "research-seo",
+        "research-social",
+        "research-trends",
+        "research-catalog",
+        "kb",
+    }
+)
+
+
+def _visible_groups() -> list[GroupSpec]:
+    """Registry groups the MCP server exposes to clients (see :data:`MCP_VISIBLE_GROUPS`)."""
+    return [g for g in REGISTRY if g.name in MCP_VISIBLE_GROUPS]
+
+
 def _resolve(group: str, command: str) -> tuple[GroupSpec, Cmd]:
-    """Find the (group, command) pair in the registry, or raise an actionable error."""
-    matched = next((g for g in REGISTRY if g.name == group), None)
+    """Find the (group, command) pair among the MCP-visible groups, or raise an actionable error.
+
+    Groups outside :data:`MCP_VISIBLE_GROUPS` are invisible here even though they exist in the CLI,
+    so they read as unknown — an MCP client can neither describe nor run them.
+    """
+    visible = _visible_groups()
+    matched = next((g for g in visible if g.name == group), None)
     if matched is None:
-        names = ", ".join(sorted(g.name for g in REGISTRY))
+        names = ", ".join(sorted(g.name for g in visible))
         raise UserInputError(f"unknown group {group!r}. Call sellerclaw_groups. Available: {names}.")
     cmd = next((c for c in matched.commands if c.name == command), None)
     if cmd is None:
@@ -139,7 +210,7 @@ def _call_example(group: str, cmd: Cmd) -> dict[str, Any]:
 
 
 def list_groups() -> list[dict[str, Any]]:
-    """Return every command group with its commands. The first call an agent should make."""
+    """Return every MCP-visible command group with its commands. The first call an agent makes."""
     return [
         {
             "group": g.name,
@@ -148,7 +219,7 @@ def list_groups() -> list[dict[str, Any]]:
                 {"name": c.name, "method": c.method, "summary": c.summary} for c in g.commands
             ],
         }
-        for g in sorted(REGISTRY, key=lambda x: x.name)
+        for g in sorted(_visible_groups(), key=lambda x: x.name)
     ]
 
 
@@ -168,6 +239,31 @@ def describe_command(group: str, command: str) -> dict[str, Any]:
         "body_fields": [_body_schema(b) for b in cmd.body],
         "call_example": _call_example(matched.name, cmd),
     }
+
+
+def _request_token() -> str | None:
+    """The OAuth bearer verified for the current HTTP request, or None over stdio (no request)."""
+    try:
+        from mcp.server.auth.middleware.auth_context import get_access_token
+    except ImportError:
+        return None
+    access_token = get_access_token()
+    return access_token.token if access_token is not None else None
+
+
+def _client_for_tool() -> Client:
+    """Build the Client a tool call should use.
+
+    In the hosted HTTP server every request carries its own OAuth bearer (one user per request),
+    so the token comes from the verified request context. Over stdio there is no request context,
+    so fall back to the locally configured token (``sellerclaw auth login`` / ``SELLERCLAW_TOKEN``).
+    """
+    token = _request_token()
+    if token is not None:
+        from sellerclaw_cli import _config
+
+        return Client(base_url=_config.load().api_url, token=token)
+    return Client.from_env()
 
 
 def run_command(
@@ -204,7 +300,7 @@ def run_command(
     if body is not None and not cmd.takes_body:
         raise UserInputError(f"{group} {command} does not take a body; drop the `body` argument.")
 
-    with Client.from_env() as client:
+    with _client_for_tool() as client:
         return client.request(cmd.method, path, params=params or None, json=body)
 
 
@@ -236,12 +332,8 @@ def _map_flags(group: str, command: str, cmd: Cmd, flags: dict[str, Any]) -> dic
     return params
 
 
-def build_server() -> Any:
-    """Construct the FastMCP server with the three discovery/proxy tools.
-
-    The optional ``mcp`` SDK is imported here (not at module load) so importing this module — and
-    the core CLI — never requires it. Importing the CLI package populates the command ``REGISTRY``.
-    """
+def _import_fastmcp() -> Any:
+    """Import FastMCP lazily so the core CLI never depends on the optional ``mcp`` SDK."""
     try:
         from mcp.server.fastmcp import FastMCP
     except ModuleNotFoundError as exc:
@@ -249,14 +341,143 @@ def build_server() -> Any:
             "the MCP server needs the optional 'mcp' dependency. "
             "Install it with: pip install 'sellerclaw-cli[mcp]'."
         ) from exc
+    return FastMCP
 
-    import sellerclaw_cli.cli  # noqa: F401 — importing registers every group into REGISTRY
 
-    server = FastMCP(SERVER_NAME, instructions=SERVER_INSTRUCTIONS)
+def _register_tools(server: Any) -> None:
+    """Register the three discovery/proxy tools on a FastMCP server."""
     server.add_tool(list_groups, name="sellerclaw_groups", description=_GROUPS_TOOL_DESC)
     server.add_tool(describe_command, name="sellerclaw_describe", description=_DESCRIBE_TOOL_DESC)
     server.add_tool(run_command, name="sellerclaw_run", description=_RUN_TOOL_DESC)
+
+
+def build_server() -> Any:
+    """Construct the stdio FastMCP server with the three discovery/proxy tools.
+
+    The optional ``mcp`` SDK is imported here (not at module load) so importing this module — and
+    the core CLI — never requires it. Importing the CLI package populates the command ``REGISTRY``.
+    """
+    fast_mcp = _import_fastmcp()
+    import sellerclaw_cli.cli  # noqa: F401 — importing registers every group into REGISTRY
+
+    server = fast_mcp(SERVER_NAME, instructions=SERVER_INSTRUCTIONS)
+    _register_tools(server)
     return server
+
+
+class SellerclawTokenVerifier:
+    """Resource-server token verifier for the hosted HTTP MCP server.
+
+    We don't decode the ``sca_`` access token ourselves — a token is valid iff the SellerClaw
+    Agent API accepts it (``GET /agent/me`` returns 200). Anything else is rejected, which makes
+    FastMCP answer the MCP request with ``401`` + ``WWW-Authenticate`` and the client starts OAuth.
+    """
+
+    def __init__(self, *, api_url: str) -> None:
+        self._api_url = api_url
+
+    async def verify_token(self, token: str) -> Any:
+        """Return an ``AccessToken`` if the Agent API accepts the bearer, else ``None``."""
+        import httpx
+        from mcp.server.auth.provider import AccessToken
+
+        try:
+            async with httpx.AsyncClient(base_url=self._api_url, timeout=10.0) as client:
+                response = await client.get(
+                    "/agent/me", headers={"Authorization": f"Bearer {token}"}
+                )
+        except httpx.HTTPError:
+            return None
+        if response.status_code != 200:
+            return None
+        subject: str | None = None
+        try:
+            body = response.json()
+            subject = str(body.get("id") or body.get("user_id") or "") or None
+        except (ValueError, AttributeError):
+            subject = None
+        return AccessToken(
+            token=token, client_id="sellerclaw-mcp", scopes=[], expires_at=None, subject=subject
+        )
+
+
+def build_http_server(
+    *,
+    issuer_url: str,
+    resource_url: str | None,
+    api_url: str,
+    host: str = "0.0.0.0",  # noqa: S104 — containerized service must bind all interfaces
+    port: int = 8080,
+) -> Any:
+    """Build a stateless streamable-HTTP FastMCP server that authenticates each request via OAuth.
+
+    ``issuer_url`` is the authorization server (the SellerClaw backend); ``resource_url`` is this
+    MCP server's own public URL. FastMCP serves the protected-resource metadata and answers
+    unauthenticated MCP requests with ``401`` + ``WWW-Authenticate`` — the trigger for OAuth.
+    """
+    fast_mcp = _import_fastmcp()
+    from mcp.server.auth.settings import AuthSettings
+
+    import sellerclaw_cli.cli  # noqa: F401 — importing registers every group into REGISTRY
+
+    auth = AuthSettings(
+        issuer_url=issuer_url,  # type: ignore[arg-type]
+        resource_server_url=resource_url,  # type: ignore[arg-type]
+        required_scopes=[],
+    )
+    server = fast_mcp(
+        SERVER_NAME,
+        instructions=SERVER_INSTRUCTIONS,
+        token_verifier=SellerclawTokenVerifier(api_url=api_url),
+        auth=auth,
+        stateless_http=True,
+        host=host,
+        port=port,
+    )
+    _register_tools(server)
+    return server
+
+
+def _http_server_from_env() -> Any:
+    """Build the hosted HTTP server from environment configuration."""
+    import os
+
+    from sellerclaw_cli import _config
+
+    issuer_url = os.environ.get("SELLERCLAW_MCP_ISSUER_URL", "").strip()
+    if not issuer_url:
+        raise UserInputError("SELLERCLAW_MCP_ISSUER_URL is required to run the HTTP MCP server.")
+    resource_url = os.environ.get("SELLERCLAW_MCP_RESOURCE_URL", "").strip() or None
+    host = os.environ.get("HOST", "0.0.0.0")  # noqa: S104 — containerized service binds all
+    port = int(os.environ.get("PORT", "8080"))
+    return build_http_server(
+        issuer_url=issuer_url,
+        resource_url=resource_url,
+        api_url=_config.load().api_url,
+        host=host,
+        port=port,
+    )
+
+
+def create_http_app() -> Any:
+    """ASGI app factory for the hosted MCP server (e.g. ``uvicorn ... --factory``)."""
+    return _http_server_from_env().streamable_http_app()
+
+
+def serve_http() -> None:
+    """Run the hosted streamable-HTTP MCP server (blocks until shutdown)."""
+    _http_server_from_env().run(transport="streamable-http")
+
+
+def main_http() -> None:
+    """Console entry point for the hosted HTTP MCP server (``sellerclaw-mcp-http``)."""
+    import sys
+
+    try:
+        serve_http()
+    except UserInputError as err:
+        sys.stderr.write(err.message + "\n")
+        raise SystemExit(1) from None
 
 
 def serve() -> None:

@@ -7,12 +7,14 @@ import httpx
 import pytest
 import respx
 
+from sellerclaw_cli._command_group import REGISTRY
 from sellerclaw_cli._errors import UserInputError
 
 # Importing the CLI app registers every command group into the shared REGISTRY that the MCP
 # proxy tools read. Without this import the registry would be empty for direct-call tests.
 from sellerclaw_cli.cli import app  # noqa: F401
 from sellerclaw_cli.mcp_server import (
+    MCP_VISIBLE_GROUPS,
     build_server,
     describe_command,
     list_groups,
@@ -43,6 +45,55 @@ def _url(fake_api_url: str, group: str, command: str, **positionals: str) -> str
     for name, value in positionals.items():
         path = path.replace("{" + name + "}", value)
     return f"{fake_api_url}{path}"
+
+
+# --------------------------------------------------------------------------- audience filter
+
+# Groups the CLI keeps for the OpenClaw agent (sellerclaw-agent) but the MCP server must hide
+# from human MCP clients: the agent's own task/goal orchestration, owner escalation & chat reads,
+# in-chat media/files, plus the Shopify content + spreadsheet/web utilities left out of the
+# allowlist. All exist in the CLI registry; none may reach `sellerclaw_groups`.
+_HIDDEN_FROM_MCP = {
+    "chats",
+    "goals",
+    "team-tasks",
+    "subagent-tasks",
+    "action-requests",
+    "media",
+    "files",
+    "spreadsheet",
+    "web",
+    "shopify-collections",
+    "shopify-pages",
+    "shopify-menus",
+    "shopify-themes",
+}
+
+
+def test_allowlist_names_all_exist_in_registry() -> None:
+    """Guard against a typo in MCP_VISIBLE_GROUPS — every name must be a real CLI group."""
+    unknown = MCP_VISIBLE_GROUPS - {g.name for g in REGISTRY}
+    assert not unknown, f"MCP_VISIBLE_GROUPS names absent from the CLI registry: {sorted(unknown)}"
+
+
+def test_list_groups_exposes_exactly_the_allowlist() -> None:
+    assert {g["group"] for g in list_groups()} == set(MCP_VISIBLE_GROUPS)
+
+
+def test_list_groups_hides_agent_internal_groups() -> None:
+    # The hidden groups really do exist in the CLI (so this stays meaningful), but none surface.
+    assert _HIDDEN_FROM_MCP <= {g.name for g in REGISTRY}
+    assert not (_HIDDEN_FROM_MCP & {g["group"] for g in list_groups()})
+
+
+def test_describe_hidden_group_reads_as_unknown() -> None:
+    with pytest.raises(UserInputError, match="unknown group 'team-tasks'"):
+        describe_command("team-tasks", "overview")
+
+
+def test_run_hidden_group_reads_as_unknown() -> None:
+    with pytest.raises(UserInputError, match="unknown group 'action-requests'"):
+        run_command("action-requests", "list")
 
 
 # --------------------------------------------------------------------------- discovery

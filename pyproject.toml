@@ -54,6 +54,7 @@ mcp = ["mcp>=1.9.0"]
 [project.scripts]
 sellerclaw = "sellerclaw_cli.cli:main"
 sellerclaw-mcp = "sellerclaw_cli.mcp_server:main"
+sellerclaw-mcp-http = "sellerclaw_cli.mcp_server:main_http"
 
 [project.urls]
 Homepage = "https://sellerclaw.ai"
