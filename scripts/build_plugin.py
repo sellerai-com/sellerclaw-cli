@@ -99,6 +99,26 @@ def build_target(name: str, repo_root: Path, version: str | None = None) -> Path
     return assemble(name, repo_root / "plugin", out, version, spec.layers)
 
 
+def pack_zip(out: Path, zip_path: Path, top_dir: str = "sellerclaw") -> Path:
+    """Pack an assembled plugin output into a single ``.zip`` whose files live under ``top_dir/``.
+
+    Extracting the archive yields one tidy ``<top_dir>/`` folder ready to drop into claude.ai's
+    *Customize -> Personal plugins -> Upload plugin* dialog (the web path for users who would rather
+    upload by hand than add the marketplace).
+    """
+    zip_path = zip_path.with_suffix(".zip")
+    staging = zip_path.parent / f".{zip_path.stem}.stage"
+    if staging.exists():
+        shutil.rmtree(staging)
+    shutil.copytree(out, staging / top_dir)
+    zip_path.parent.mkdir(parents=True, exist_ok=True)
+    if zip_path.exists():
+        zip_path.unlink()
+    shutil.make_archive(str(zip_path.with_suffix("")), "zip", root_dir=staging, base_dir=top_dir)
+    shutil.rmtree(staging)
+    return zip_path
+
+
 def available_targets(repo_root: Path) -> list[str]:
     return [n for n in TARGETS if (repo_root / "plugin" / "targets" / n).is_dir()]
 
@@ -116,9 +136,18 @@ def main(argv: list[str] | None = None) -> int:
         "--version",
         help="Override the stamped version (default: read from pyproject.toml). CI passes the release tag.",
     )
+    parser.add_argument(
+        "--zip",
+        type=Path,
+        help="After building, pack the target's output into this .zip (one folder, for manual upload "
+        "to claude.ai's Upload plugin dialog). Requires --target.",
+    )
     args = parser.parse_args(argv)
     repo_root = args.repo_root.resolve()
     version = args.version or read_version(repo_root)
+    if args.zip and not args.target:
+        print("--zip requires --target", file=sys.stderr)
+        return 1
     names = [args.target] if args.target else available_targets(repo_root)
     if not names:
         print("no plugin targets found under plugin/targets/", file=sys.stderr)
@@ -126,6 +155,10 @@ def main(argv: list[str] | None = None) -> int:
     for name in names:
         out = build_target(name, repo_root, version)
         print(f"built {name} -> {out.relative_to(repo_root)} (v{version})")
+        if args.zip:
+            zip_path = args.zip if args.zip.is_absolute() else repo_root / args.zip
+            archive = pack_zip(out, zip_path)
+            print(f"packed {name} -> {archive.relative_to(repo_root)}")
     return 0
 
 

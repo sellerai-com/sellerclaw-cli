@@ -496,8 +496,16 @@ research recipes), and a session-start primer hook together, from our marketplac
 /plugin install sellerclaw@sellerclaw
 ```
 
-On **claude.ai (web)** add it under Customize → Personal plugins → *Add marketplace* (or *Upload
-plugin*). Sign in once with `sellerclaw auth login` so the three MCP tools can act on your account.
+On **claude.ai (web)** the easiest path is Customize → Personal plugins → *Add marketplace* with
+`sellerai-com/sellerclaw-cli`. Prefer to upload by hand? Download the packaged web plugin and use
+*Upload plugin* instead:
+
+```text
+https://github.com/sellerai-com/sellerclaw-cli/releases/latest/download/sellerclaw-claude-web.zip
+```
+
+Unzip it, then pick the `sellerclaw` folder in the *Upload plugin* dialog. Either way, sign in once
+with `sellerclaw auth login` so the three MCP tools can act on your account.
 
 > All variants are built from one source tree (`plugin/`) with `make plugin`. Claude Code / Desktop
 > run the MCP locally via `uvx`; the web/cowork variant ships the same skills + hooks today and points

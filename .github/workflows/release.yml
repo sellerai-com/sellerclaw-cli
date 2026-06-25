@@ -138,12 +138,14 @@ jobs:
         with:
           packages-dir: dist
 
-  # Build the Claude Desktop extension bundle and attach it to the GitHub Release so non-technical
-  # users get a click-to-install download at a stable URL:
+  # Build the click-to-install downloads and attach them to the GitHub Release so non-technical
+  # users get stable URLs:
   #   https://github.com/sellerai-com/sellerclaw-cli/releases/latest/download/sellerclaw.mcpb
-  # The bundle launches `sellerclaw-cli[mcp]@latest` via uvx, so it rarely needs re-downloading.
+  #   https://github.com/sellerai-com/sellerclaw-cli/releases/latest/download/sellerclaw-claude-web.zip
+  # The Desktop bundle launches `sellerclaw-cli[mcp]@latest` via uvx; the web .zip is uploaded by hand
+  # at claude.ai (Customize -> Personal plugins -> Upload plugin) and points at the hosted connector.
   publish-mcpb:
-    name: Attach .mcpb to GitHub Release
+    name: Attach Desktop .mcpb and web .zip to GitHub Release
     needs: verify
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
@@ -167,8 +169,17 @@ jobs:
       - name: Build .mcpb bundle
         run: npx -y @anthropic-ai/mcpb pack dist/plugins/claude-desktop dist/sellerclaw.mcpb
 
+      - name: Pack the claude-web upload bundle (.zip)
+        run: |
+          set -euo pipefail
+          v="${GITHUB_REF_NAME#v}"
+          python3 scripts/build_plugin.py --target claude-web --version "${v}" --zip dist/sellerclaw-claude-web.zip
+          ls -l dist/sellerclaw-claude-web.zip
+
       - name: Attach to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/sellerclaw.mcpb
+          files: |
+            dist/sellerclaw.mcpb
+            dist/sellerclaw-claude-web.zip
           fail_on_unmatched_files: true

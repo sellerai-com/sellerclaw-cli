@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import json
 import os
+import zipfile
 from pathlib import Path
 
 import pytest
 
-from scripts.build_plugin import TARGETS, assemble, available_targets, read_version
+from scripts.build_plugin import TARGETS, assemble, available_targets, pack_zip, read_version
 
 pytestmark = pytest.mark.unit
 
@@ -92,6 +93,22 @@ def test_every_available_target_assembles(target: str, tmp_path: Path) -> None:
         assert (out / "skills" / CORE_SKILL / "SKILL.md").is_file(), target
     else:
         assert not (out / "skills").exists(), target
+
+
+def test_pack_zip_wraps_output_in_a_single_folder(tmp_path: Path) -> None:
+    # The web upload bundle must extract to one tidy folder so users can drop it straight into
+    # claude.ai's Upload plugin dialog.
+    out = assemble("claude-web", PLUGIN_SRC, tmp_path / "out", version="0.0.0", layers=TARGETS["claude-web"].layers)
+    archive = pack_zip(out, tmp_path / "sellerclaw-claude-web.zip")
+
+    assert archive.is_file()
+    with zipfile.ZipFile(archive) as zf:
+        names = zf.namelist()
+    # Everything lives under the single top-level folder, including the plugin manifest and core skill.
+    assert all(n.startswith("sellerclaw/") for n in names), names
+    assert "sellerclaw/.claude-plugin/plugin.json" in names
+    assert "sellerclaw/.mcp.json" in names
+    assert f"sellerclaw/skills/{CORE_SKILL}/SKILL.md" in names
 
 
 def test_target_out_policy() -> None:

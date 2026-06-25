@@ -8,6 +8,7 @@
 #   make build          Build wheel + sdist into dist/
 #   make plugin         Build the Claude plugin variants from plugin/ (TARGET=claude-code for one)
 #   make mcpb           Build the Claude Desktop extension bundle (dist/sellerclaw.mcpb)
+#   make web-zip        Pack the claude-web plugin for manual upload to claude.ai (dist/sellerclaw-claude-web.zip)
 #   make release-check  Report whether a new release is needed
 #   make release        Bump version, tag vX.Y.Z, push -> CI publishes to PyPI
 #
@@ -29,7 +30,7 @@ PART ?= minor
 # release is warranted — test/CI/docs-only churn doesn't require one.
 SHIPPED_PATHS = sellerclaw_cli pyproject.toml README.md
 
-.PHONY: install lint test check build plugin mcpb release-check release
+.PHONY: install lint test check build plugin mcpb web-zip release-check release
 
 install:
 	$(UV) sync --group dev
@@ -59,6 +60,12 @@ plugin:
 mcpb:
 	$(UV) run python scripts/build_plugin.py --target claude-desktop
 	npx -y @anthropic-ai/mcpb pack dist/plugins/claude-desktop dist/sellerclaw.mcpb
+
+# Pack the claude-web plugin (skills + hooks + remote MCP declaration) into a single .zip whose
+# files live under a `sellerclaw/` folder, for users who upload by hand at claude.ai
+# (Customize -> Personal plugins -> Upload plugin) instead of adding the marketplace.
+web-zip:
+	$(UV) run python scripts/build_plugin.py --target claude-web --zip dist/sellerclaw-claude-web.zip
 
 # Reports whether the shipped CLI differs from the last published release (the
 # latest v* git tag). release.yml publishes to PyPI on v*.*.* tags.
