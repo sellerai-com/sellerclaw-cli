@@ -127,6 +127,7 @@ MCP_VISIBLE_GROUPS: frozenset[str] = frozenset(
         "research-social",
         "research-trends",
         "research-catalog",
+        "store-audit",
         "kb",
     }
 )
