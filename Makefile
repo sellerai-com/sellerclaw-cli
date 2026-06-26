@@ -9,8 +9,15 @@
 #   make plugin         Build the Claude plugin variants from plugin/ (TARGET=claude-code for one)
 #   make mcpb           Build the Claude Desktop extension bundle (dist/sellerclaw.mcpb)
 #   make web-zip        Pack the claude-web plugin for manual upload to claude.ai (dist/sellerclaw-claude-web.zip)
+#   make plugin-bump    Bump plugin/VERSION + rebuild committed plugin (publish on push, no CLI release)
 #   make release-check  Report whether a new release is needed
 #   make release        Bump version, tag vX.Y.Z, push -> CI publishes to PyPI
+#
+# Plugin vs CLI versioning:
+#   The Claude plugin/connector is versioned independently of the CLI via plugin/VERSION (build_plugin.py
+#   stamps it into the manifests). Ship plugin/skill/manifest changes without a CLI release:
+#     make plugin-bump            # bump minor (PART=patch|major or VERSION=X.Y.Z), rebuilds plugins/
+#     git commit -am ... && git push   # ci.yml verifies, publish-plugin.yml cuts plugin-vX.Y.Z + bundles
 #
 # Release usage:
 #   make release                 # bump minor from the latest v* tag (default)
@@ -30,7 +37,7 @@ PART ?= minor
 # release is warranted — test/CI/docs-only churn doesn't require one.
 SHIPPED_PATHS = sellerclaw_cli pyproject.toml README.md
 
-.PHONY: install lint test check build plugin mcpb web-zip release-check release
+.PHONY: install lint test check build plugin mcpb web-zip plugin-bump release-check release
 
 install:
 	$(UV) sync --group dev
@@ -66,6 +73,30 @@ mcpb:
 # (Customize -> Personal plugins -> Upload plugin) instead of adding the marketplace.
 web-zip:
 	$(UV) run python scripts/build_plugin.py --target claude-web --zip dist/sellerclaw-claude-web.zip
+
+# Bump the independent plugin version (plugin/VERSION) and rebuild the committed marketplace plugin.
+# Commit the result and push to main: ci.yml verifies the tree and publish-plugin.yml builds the
+# Desktop .mcpb + claude-web .zip and cuts a plugin-vX.Y.Z release — no CLI release, no PyPI publish.
+# PART=major|minor|patch (default minor), or pass VERSION=X.Y.Z for an exact version.
+plugin-bump:
+	@set -eu; \
+	cur=$$(tr -d '[:space:]' < plugin/VERSION 2>/dev/null || echo 0.0.0); \
+	if [ -n "$${VERSION:-}" ]; then \
+	  new="$$VERSION"; \
+	else \
+	  major=$$(echo "$$cur" | cut -d. -f1); \
+	  minor=$$(echo "$$cur" | cut -d. -f2); \
+	  patch=$$(echo "$$cur" | cut -d. -f3); \
+	  case "$(PART)" in \
+	    major) new="$$((major+1)).0.0" ;; \
+	    minor) new="$$major.$$((minor+1)).0" ;; \
+	    patch) new="$$major.$$minor.$$((patch+1))" ;; \
+	    *) echo "Unknown PART=$(PART) (use major|minor|patch)" >&2; exit 1 ;; \
+	  esac; \
+	fi; \
+	printf '%s\n' "$$new" > plugin/VERSION; \
+	$(UV) run python scripts/build_plugin.py --target claude-code; \
+	echo "plugin/VERSION: $$cur -> $$new — committed plugins/ rebuilt. Commit & push to publish."
 
 # Reports whether the shipped CLI differs from the last published release (the
 # latest v* git tag). release.yml publishes to PyPI on v*.*.* tags.

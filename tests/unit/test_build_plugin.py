@@ -77,9 +77,10 @@ def test_assemble_is_idempotent(tmp_path: Path) -> None:
     assert tree() == tree()
 
 
-def test_read_version_is_pyproject_version() -> None:
+def test_read_version_reads_plugin_version_file() -> None:
+    # The plugin version is decoupled from the CLI/PyPI version: it comes from plugin/VERSION.
     version = read_version(REPO_ROOT)
-    assert version
+    assert version == (REPO_ROOT / "plugin" / "VERSION").read_text().strip()
     assert version[0].isdigit()
 
 

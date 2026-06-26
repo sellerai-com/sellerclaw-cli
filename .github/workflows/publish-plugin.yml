@@ -1,0 +1,89 @@
+name: Publish plugin
+
+# Publishes the Claude plugin/connector artifacts independently of a CLI (PyPI) release.
+#
+# The marketplace plugin (plugins/claude-code + .claude-plugin/marketplace.json) is served straight
+# from main, so a plain push already updates it — ci.yml rebuilds it from source and fails on drift.
+# What a plain push does NOT do is refresh the click-to-install downloads (the Desktop .mcpb and the
+# claude-web .zip), which previously only rebuilt on a `v*` CLI tag. This workflow fills that gap:
+# bump plugin/VERSION, commit (with the rebuilt plugins/ tree) and push — it builds the bundles and
+# cuts a `plugin-vX.Y.Z` GitHub release so releases/latest/download/... refreshes. No CLI release,
+# no PyPI publish. Can also be run manually for the current plugin/VERSION.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "plugin/VERSION"
+
+concurrency:
+  group: publish-plugin
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build bundles and cut a plugin release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Read plugin version
+        id: ver
+        run: |
+          set -euo pipefail
+          v="$(tr -d '[:space:]' < plugin/VERSION)"
+          [ -n "$v" ] || { echo "::error::plugin/VERSION is empty"; exit 1; }
+          echo "value=$v" >> "$GITHUB_OUTPUT"
+
+      # The committed marketplace plugin is generated from plugin/ — refuse to publish if it drifts,
+      # so the marketplace and the bundles always ship the same version.
+      - name: Verify committed marketplace plugin is up to date
+        run: |
+          set -euo pipefail
+          python3 scripts/build_plugin.py --target claude-code
+          if ! git diff --quiet -- plugins/; then
+            echo "::error::plugins/claude-code is stale — run 'make plugin' and commit before publishing." >&2
+            git diff --stat -- plugins/
+            exit 1
+          fi
+
+      - name: Build Desktop .mcpb bundle
+        run: |
+          set -euo pipefail
+          python3 scripts/build_plugin.py --target claude-desktop
+          grep '"version"' dist/plugins/claude-desktop/manifest.json
+          npx -y @anthropic-ai/mcpb pack dist/plugins/claude-desktop dist/sellerclaw.mcpb
+
+      - name: Pack the claude-web upload bundle (.zip)
+        run: |
+          set -euo pipefail
+          python3 scripts/build_plugin.py --target claude-web --zip dist/sellerclaw-claude-web.zip
+          ls -l dist/sellerclaw-claude-web.zip
+
+      - name: Publish plugin release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: plugin-v${{ steps.ver.outputs.value }}
+          name: Plugin v${{ steps.ver.outputs.value }}
+          body: |
+            SellerClaw Claude plugin/connector v${{ steps.ver.outputs.value }}.
+            Independent of the `sellerclaw-cli` (PyPI) version — bundles the skills, manifests and the
+            remote-MCP connector declaration. Desktop `.mcpb` and the claude-web `.zip` are attached.
+          make_latest: true
+          files: |
+            dist/sellerclaw.mcpb
+            dist/sellerclaw-claude-web.zip
+          fail_on_unmatched_files: true

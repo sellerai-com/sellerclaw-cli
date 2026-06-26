@@ -54,6 +54,17 @@ MANIFESTS = (".claude-plugin/plugin.json", "manifest.json")
 
 
 def read_version(repo_root: Path) -> str:
+    """Plugin version — decoupled from the CLI/PyPI version.
+
+    Sourced from ``plugin/VERSION`` so plugin, skill or manifest changes can ship (and bump the
+    version Claude Code caches the marketplace plugin by) without cutting a CLI release. Falls back
+    to ``pyproject.toml`` if the file is missing. Callers can still pass an explicit ``--version``.
+    """
+    version_file = repo_root / "plugin" / "VERSION"
+    if version_file.is_file():
+        version = version_file.read_text().strip()
+        if version:
+            return version
     data = tomllib.loads((repo_root / "pyproject.toml").read_text())
     return str(data["project"]["version"])
 
