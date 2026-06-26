@@ -10,6 +10,5 @@
   "homepage": "https://sellerclaw.ai",
   "repository": "https://github.com/sellerai-com/sellerclaw-cli",
   "license": "MIT",
-  "keywords": ["sellerclaw", "ecommerce", "shopify", "ebay", "amazon", "agent", "mcp"],
-  "hooks": "./hooks/hooks.json"
+  "keywords": ["sellerclaw", "ecommerce", "shopify", "ebay", "amazon", "agent", "mcp"]
 }

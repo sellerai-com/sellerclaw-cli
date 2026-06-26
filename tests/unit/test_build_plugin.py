@@ -34,7 +34,9 @@ def test_assemble_claude_code_layout_and_version(tmp_path: Path) -> None:
     # Version is stamped from the caller, overriding whatever placeholder the source template carried.
     assert data["version"] == "9.9.9"
     assert data["name"] == "sellerclaw"
-    assert data["hooks"] == "./hooks/hooks.json"
+    # The standard hooks/hooks.json is auto-loaded by Claude Code; the manifest must NOT also
+    # declare it, or the plugin fails to load with "Duplicate hooks file detected".
+    assert "hooks" not in data
 
 
 def test_assemble_merges_core_and_all_task_recipes(tmp_path: Path) -> None:
