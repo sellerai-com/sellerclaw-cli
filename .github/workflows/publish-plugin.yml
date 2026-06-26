@@ -1,4 +1,4 @@
-name: Publish plugin
+name: Release — Claude plugin bundles
 
 # Publishes the Claude plugin/connector artifacts independently of a CLI (PyPI) release.
 #
