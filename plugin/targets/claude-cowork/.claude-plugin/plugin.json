@@ -1,14 +1,35 @@
 {
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "sellerclaw",
   "displayName": "SellerClaw",
   "version": "0.0.0",
-  "description": "Run your SellerClaw e-commerce business from Claude — products, orders, listings, ads, suppliers, email and research — through the SellerClaw connector plus task skills.",
+  "description": "Operate your e-commerce and marketing channels in Claude Cowork — eBay, Shopify, Amazon, Meta Ads, Google Ads and more. Connect them once on SellerClaw, then manage products, orders, listings, ads and suppliers through the SellerClaw connector plus task skills.",
   "author": {
-    "name": "SellerClaw",
-    "url": "https://sellerclaw.ai"
+    "name": "SellerAI",
+    "email": "hello@sellerai.com",
+    "url": "https://sellerai.com"
   },
   "homepage": "https://sellerclaw.ai",
   "repository": "https://github.com/sellerai-com/sellerclaw-cli",
   "license": "MIT",
-  "keywords": ["sellerclaw", "ecommerce", "shopify", "ebay", "amazon", "agent", "mcp"]
+  "keywords": [
+    "sellerclaw",
+    "sellerai",
+    "ecommerce",
+    "e-commerce",
+    "shopify",
+    "ebay",
+    "amazon",
+    "meta ads",
+    "google ads",
+    "advertising",
+    "marketing",
+    "orders",
+    "listings",
+    "suppliers",
+    "dropshipping",
+    "agent",
+    "mcp"
+  ],
+  "defaultEnabled": true
 }
