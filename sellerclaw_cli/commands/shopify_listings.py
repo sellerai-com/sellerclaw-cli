@@ -43,13 +43,22 @@ SPECS = (
         "GET",
         "/agent/stores/{store_id}/listings/search",
         summary=(
-            "Search one store's mirrored listings by title, SKU, or remote id (case-insensitive "
-            "substring). To search across all stores at once, or to resolve a mentioned listing by "
-            "id, use the 'listings' group instead."
+            "Search one store's listings by title, SKU, or remote id. Default: the local mirror "
+            "(carries a SellerClaw id for chat cards). Pass --live to query Shopify directly for "
+            "current price/stock (no SellerClaw id). To search across all stores, use 'listings'."
         ),
         flags=(
             flag("q", required=True, help="Search text (matched as a substring of title/SKU/remote id)."),
-            flag("type", help="Deprecated/ignored: matching always spans title, SKU, and remote id."),
+            flag(
+                "type",
+                help="Live-search field (sku by default); ignored by the mirror, which spans title/SKU/remote id.",
+            ),
+            flag(
+                "live",
+                type=bool,
+                help="Query the live store instead of the mirror — current price/stock, but no SellerClaw id.",
+            ),
+            flag("limit", type=int, minimum=1, maximum=500, default=100, help="Max results."),
         ),
     ),
     Cmd(

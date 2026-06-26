@@ -127,7 +127,7 @@ def test_describe_command_surfaces_flag_choices_and_ranges() -> None:
     flags = {f["name"]: f for f in detail["flags"]}
     assert "limit" in flags
     assert flags["limit"]["minimum"] == 1
-    assert flags["limit"]["maximum"] == 200
+    assert flags["limit"]["maximum"] == 500
 
 
 def test_describe_command_unknown_group_raises() -> None:

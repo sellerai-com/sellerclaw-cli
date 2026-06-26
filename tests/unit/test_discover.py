@@ -124,8 +124,8 @@ def test_describe_surfaces_flag_constraints_for_ebay_list() -> None:
     assert "--limit" in flags
     limit = flags["--limit"]
     assert limit["minimum"] == 1
-    assert limit["maximum"] == 200
-    assert limit["default"] == 200
+    assert limit["maximum"] == 500
+    assert limit["default"] == 100
     # Flag name now matches the query param ("limit"), so no separate mapping is surfaced.
     assert "query_param" not in limit
     assert limit["aliases"] == ["--page-size"]

@@ -6,72 +6,84 @@ from sellerclaw_cli._command_group import Cmd, body_field, build_group, flag
 
 NAME = "ebay-listings"
 
-# Combines the live-eBay listing ops (/agent/ebay/...) with the draft/publish ops
-# that live under the store resource (/agent/stores/{store_id}/ebay-*).
+# Listing READS come from the unified SellerClaw mirror (/agent/stores/{store_id}/listings),
+# warmed on connect + refreshed periodically; pass --live on search to hit eBay directly. The
+# draft/publish ops stay under the store resource (/agent/stores/{store_id}/ebay-*).
 SPECS = (
     Cmd(
         "list",
         "GET",
-        "/agent/ebay/stores/{store_id}/listings",
-        summary="List live eBay listings (a sample page; use 'summary' for full-catalog counts).",
+        "/agent/stores/{store_id}/listings",
+        summary="List the store's eBay listings from the SellerClaw mirror.",
         flags=(
+            flag(
+                "status",
+                choices=("active", "published", "draft", "withdrawn"),
+                help="Mirror status to filter by; omit for all.",
+            ),
+            flag("search", help="Match title, SKU, or remote id."),
             flag(
                 "limit",
                 type=int,
-                param="limit",
                 aliases=("--page-size",),
                 minimum=1,
-                maximum=200,
-                default=200,
-                help="Max listings to return (a single sample page; use 'summary' for full-catalog counts).",
+                maximum=500,
+                default=100,
+                help="Max results.",
             ),
         ),
     ),
     Cmd(
         "summary",
         "GET",
-        "/agent/ebay/stores/{store_id}/listings/summary",
+        "/agent/stores/{store_id}/listings/summary",
         summary=(
-            "Aggregate stats over all live eBay listings (listing/variant counts, total & "
+            "Aggregate stats over the store's eBay listings (listing/variant counts, total & "
             "zero stock, price min/max/avg, currencies). Use this instead of listing every row "
             "when the owner wants an overview of a large catalog."
+        ),
+        flags=(
+            flag(
+                "status",
+                choices=("active", "published", "draft", "withdrawn"),
+                help="Mirror status to filter by; omit for all.",
+            ),
         ),
     ),
     Cmd(
         "search",
-        "POST",
-        "/agent/ebay/stores/{store_id}/listings/search",
+        "GET",
+        "/agent/stores/{store_id}/listings/search",
         summary=(
-            "Look up live eBay listings by exact SKU or eBay item id only (body: "
-            '{"search_type": "sku"|"remote_id", "search_values": ["..."]}). This is NOT a '
-            "title/keyword search — to find a listing by name, use the 'listings search' group, "
-            "and to resolve a mentioned listing use 'listings get <id>'."
+            "Search one store's eBay listings by title, SKU, or remote id. Default: the local "
+            "mirror (carries a SellerClaw id for chat cards). Pass --live to query eBay directly "
+            "for current price/stock (no SellerClaw id). To search across all stores, use 'listings'."
         ),
-        body=(
-            body_field(
-                "search_type",
-                required=True,
-                choices=("sku", "remote_id"),
-                help="What the values are: exact SKU or eBay item id (remote_id).",
+        flags=(
+            flag("q", required=True, help="Search text (matched as a substring of title/SKU/remote id)."),
+            flag(
+                "type",
+                help="Live-search field: sku (default) or remote_id (eBay item id); ignored by the mirror.",
             ),
-            body_field(
-                "search_values",
-                repeatable=True,
-                help="List of exact SKUs or eBay item ids to look up.",
+            flag(
+                "live",
+                type=bool,
+                help="Query eBay live instead of the mirror — current price/stock, but no SellerClaw id.",
             ),
+            flag("limit", type=int, minimum=1, maximum=500, default=100, help="Max results."),
         ),
     ),
     Cmd(
         "sync-stock",
         "POST",
-        "/agent/ebay/stores/{store_id}/listings/sync-stock",
+        "/agent/stores/{store_id}/listings/sync-stock",
         summary="Sync stock to eBay.",
         body=(
             body_field(
                 "items",
                 type=dict,
                 repeatable=True,
-                help="Stock items to push, each {sku, quantity, remote_id?, item_id?}.",
+                help="Stock items to push, each {sku, quantity, remote_id?, price?, compare_at_price?}.",
             ),
         ),
     ),

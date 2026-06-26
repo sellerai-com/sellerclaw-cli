@@ -6,61 +6,67 @@ from sellerclaw_cli._command_group import Cmd, body_field, build_group, flag
 
 NAME = "amazon-listings"
 
-# Read-only listing ops for Amazon (v1): live reads from SP-API plus price/stock sync on existing
-# offers. Publishing new listings is not available yet.
+# Amazon listings: reads come from the unified SellerClaw mirror (warmed on connect + refreshed
+# periodically); pass --live on search to hit Amazon directly. Stock sync is always live.
 SPECS = (
     Cmd(
         "list",
         "GET",
-        "/agent/amazon/stores/{store_id}/listings",
-        summary="List live Amazon offers (a sample page; use 'summary' for full-catalog counts).",
+        "/agent/stores/{store_id}/listings",
+        summary="List the store's Amazon listings from the SellerClaw mirror.",
         flags=(
             flag(
-                "limit",
-                type=int,
-                minimum=1,
-                maximum=500,
-                default=100,
-                help="Max offers to return (a single sample page; use 'summary' for full-catalog counts).",
+                "status",
+                choices=("active", "published", "draft", "withdrawn"),
+                help="Mirror status to filter by; omit for all.",
             ),
+            flag("search", help="Match title, SKU, or remote id."),
+            flag("limit", type=int, minimum=1, maximum=500, default=100, help="Max results."),
         ),
     ),
     Cmd(
         "summary",
         "GET",
-        "/agent/amazon/stores/{store_id}/listings/summary",
+        "/agent/stores/{store_id}/listings/summary",
         summary=(
-            "Aggregate stats over the store's live Amazon offers (counts collapsed by ASIN, total "
-            "& zero stock, price min/max/avg, currencies). Use this instead of listing every row "
-            "for an overview of a large catalog."
+            "Aggregate stats over the store's Amazon listings (row count, total & zero stock, "
+            "price min/max/avg, currencies). Use this instead of listing every row for an overview."
+        ),
+        flags=(
+            flag(
+                "status",
+                choices=("active", "published", "draft", "withdrawn"),
+                help="Mirror status to filter by; omit for all.",
+            ),
         ),
     ),
     Cmd(
         "search",
-        "POST",
-        "/agent/amazon/stores/{store_id}/listings/search",
+        "GET",
+        "/agent/stores/{store_id}/listings/search",
         summary=(
-            "Look up live Amazon offers by exact SKU or ASIN only "
-            '(body: {"search_type": "sku"|"asin", "search_values": ["..."]}).'
+            "Search one store's Amazon listings by title, SKU, or remote id. Default: the local "
+            "mirror (carries a SellerClaw id for chat cards). Pass --live to query Amazon directly "
+            "for current price/stock (no SellerClaw id)."
         ),
-        body=(
-            body_field(
-                "search_type",
-                required=True,
-                choices=("sku", "asin"),
-                help="What the values are: exact SKU or ASIN.",
+        flags=(
+            flag("q", required=True, help="Search text (matched as a substring of title/SKU/remote id)."),
+            flag(
+                "type",
+                help="Live-search field: sku (default) or asin; ignored by the mirror.",
             ),
-            body_field(
-                "search_values",
-                repeatable=True,
-                help="List of exact SKUs or ASINs to look up.",
+            flag(
+                "live",
+                type=bool,
+                help="Query Amazon live instead of the mirror — current price/stock, but no SellerClaw id.",
             ),
+            flag("limit", type=int, minimum=1, maximum=500, default=100, help="Max results."),
         ),
     ),
     Cmd(
         "sync-stock",
         "POST",
-        "/agent/amazon/stores/{store_id}/listings/sync-stock",
+        "/agent/stores/{store_id}/listings/sync-stock",
         summary=(
             "Update price and/or merchant quantity on existing Amazon offers "
             '(body: {"items": [{"sku": "...", "quantity": 5, "price": 19.99}]}). '
@@ -71,13 +77,13 @@ SPECS = (
                 "items",
                 type=dict,
                 repeatable=True,
-                help="Offers to update, each {sku, quantity?, price?, currency?}.",
+                help="Offers to update, each {sku (required), quantity?, price?, remote_id?}.",
             ),
         ),
     ),
 )
 
-app = build_group(NAME, "Amazon listings: read offers and sync price/stock (store_id is the first argument).", SPECS)
+app = build_group(NAME, "Amazon listings: read offers (mirror, --live on search) and sync price/stock.", SPECS)
 
 
 def register(parent: typer.Typer) -> None:
