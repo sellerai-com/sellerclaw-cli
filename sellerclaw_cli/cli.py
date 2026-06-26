@@ -176,11 +176,16 @@ _GROUPS = (
     amazon_store,
     amazon,
     spreadsheet,
+    store_audit,
     research_seo,
     research_social,
     research_trends,
     research_catalog,
     web,
+    woocommerce_listings,
+    woocommerce_orders,
+    woocommerce_store,
+    woocommerce,
 )
 
 for _group in _GROUPS:
