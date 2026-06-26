@@ -5,10 +5,14 @@ name: Release — Claude plugin bundles
 # The marketplace plugin (plugins/claude-code + .claude-plugin/marketplace.json) is served straight
 # from main, so a plain push already updates it — ci.yml rebuilds it from source and fails on drift.
 # What a plain push does NOT do is refresh the click-to-install downloads (the Desktop .mcpb and the
-# claude-web .zip), which previously only rebuilt on a `v*` CLI tag. This workflow fills that gap:
+# claude-web .zip). This workflow fills that gap, fully independent of the CLI/PyPI release:
 # bump plugin/VERSION, commit (with the rebuilt plugins/ tree) and push — it builds the bundles and
-# cuts a `plugin-vX.Y.Z` GitHub release so releases/latest/download/... refreshes. No CLI release,
-# no PyPI publish. Can also be run manually for the current plugin/VERSION.
+#   1) cuts an immutable `plugin-vX.Y.Z` release (history, not marked Latest), and
+#   2) moves the rolling `plugin-latest` release to the new bundles, so the STABLE download URLs
+#      always serve the newest plugin, decoupled from the CLI release line and the "Latest" badge:
+#        https://github.com/sellerai-com/sellerclaw-cli/releases/download/plugin-latest/sellerclaw.mcpb
+#        https://github.com/sellerai-com/sellerclaw-cli/releases/download/plugin-latest/sellerclaw-claude-web.zip
+# No CLI release, no PyPI publish. Can also be run manually for the current plugin/VERSION.
 
 on:
   workflow_dispatch:
@@ -73,7 +77,9 @@ jobs:
           python3 scripts/build_plugin.py --target claude-web --zip dist/sellerclaw-claude-web.zip
           ls -l dist/sellerclaw-claude-web.zip
 
-      - name: Publish plugin release
+      # Immutable per-version release (history / pin a specific bundle). Not marked Latest — the CLI
+      # release keeps the GitHub "Latest" badge; plugin downloads use the rolling tag below.
+      - name: Publish versioned plugin release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: plugin-v${{ steps.ver.outputs.value }}
@@ -82,8 +88,24 @@ jobs:
             SellerClaw Claude plugin/connector v${{ steps.ver.outputs.value }}.
             Independent of the `sellerclaw-cli` (PyPI) version — bundles the skills, manifests and the
             remote-MCP connector declaration. Desktop `.mcpb` and the claude-web `.zip` are attached.
-          make_latest: true
+            Stable download (always newest): releases/download/plugin-latest/sellerclaw.mcpb
+          make_latest: false
           files: |
             dist/sellerclaw.mcpb
             dist/sellerclaw-claude-web.zip
           fail_on_unmatched_files: true
+
+      # Move the stable `plugin-latest` pointer to the new bundles. Recreated each run so the tag and
+      # assets always reflect the newest plugin — this is what the app's download buttons and the docs
+      # link to (releases/download/plugin-latest/...), independent of the "Latest" badge / CLI line.
+      - name: Refresh the plugin-latest download pointer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release delete plugin-latest --yes --cleanup-tag 2>/dev/null || true
+          gh release create plugin-latest \
+            dist/sellerclaw.mcpb dist/sellerclaw-claude-web.zip \
+            --title "Plugin (latest)" \
+            --latest=false \
+            --notes "Rolling pointer to the newest SellerClaw Claude plugin bundle (currently plugin-v${{ steps.ver.outputs.value }}). Stable URLs: releases/download/plugin-latest/sellerclaw.mcpb and releases/download/plugin-latest/sellerclaw-claude-web.zip."

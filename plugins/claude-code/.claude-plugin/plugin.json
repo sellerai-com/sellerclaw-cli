@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "sellerclaw",
   "displayName": "SellerClaw",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Operate your e-commerce and marketing channels from Claude Code — eBay, Shopify, Amazon, Meta Ads, Google Ads and more. Connect them once on SellerClaw, then manage products, orders, listings, ads and suppliers through three discovery tools plus task skills.",
   "author": {
     "name": "SellerAI",

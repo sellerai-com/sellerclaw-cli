@@ -52,7 +52,7 @@ published version:
   ```
 - **Other MCP clients (Cursor, Agent SDK, etc.):** same command — `uvx --from 'sellerclaw-cli[mcp]@latest' sellerclaw mcp`, transport **stdio**.
 - **Desktop Extension (.mcpb):** download and double-click (needs `uv` installed):
-  https://github.com/sellerai-com/sellerclaw-cli/releases/latest/download/sellerclaw.mcpb
+  https://github.com/sellerai-com/sellerclaw-cli/releases/download/plugin-latest/sellerclaw.mcpb
 
 ## Verify it worked
 

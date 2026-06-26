@@ -34,7 +34,7 @@ the latest published version automatically:
   { "mcpServers": { "sellerclaw": { "command": "uvx", "args": ["--from", "sellerclaw-cli[mcp]@latest", "sellerclaw", "mcp"] } } }
   ```
 - **Desktop Extension (.mcpb):** download from
-  https://github.com/sellerai-com/sellerclaw-cli/releases/latest/download/sellerclaw.mcpb and
+  https://github.com/sellerai-com/sellerclaw-cli/releases/download/plugin-latest/sellerclaw.mcpb and
   double-click it (needs `uv` installed).
 
 ## Authentication model

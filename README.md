@@ -501,7 +501,7 @@ On **claude.ai (web)** the easiest path is Customize → Personal plugins → *A
 *Upload plugin* instead:
 
 ```text
-https://github.com/sellerai-com/sellerclaw-cli/releases/latest/download/sellerclaw-claude-web.zip
+https://github.com/sellerai-com/sellerclaw-cli/releases/download/plugin-latest/sellerclaw-claude-web.zip
 ```
 
 Unzip it, then pick the `sellerclaw` folder in the *Upload plugin* dialog. Either way, sign in once
@@ -589,7 +589,7 @@ credentials by environment instead — add an `"env": { "SELLERCLAW_TOKEN": "sca
 For a click-to-install experience, download the latest bundle and drag it onto Claude Desktop →
 Settings → Extensions:
 
-**[⬇ Download sellerclaw.mcpb](https://github.com/sellerai-com/sellerclaw-cli/releases/latest/download/sellerclaw.mcpb)**
+**[⬇ Download sellerclaw.mcpb](https://github.com/sellerai-com/sellerclaw-cli/releases/download/plugin-latest/sellerclaw.mcpb)**
 
 The bundle launches `sellerclaw-cli[mcp]@latest` via `uvx`, so it **auto-updates to the newest
 release** on its own — the only prerequisite is [`uv`](https://docs.astral.sh/uv/) on PATH (the
