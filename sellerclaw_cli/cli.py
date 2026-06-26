@@ -63,11 +63,17 @@ from sellerclaw_cli.commands import (
     shopify_pages,
     shopify_store,
     shopify_themes,
+    social,
     spreadsheet,
+    store_audit,
     subagent_tasks,
     suppliers,
     team_tasks,
     web,
+    woocommerce,
+    woocommerce_listings,
+    woocommerce_orders,
+    woocommerce_store,
 )
 
 # Match usage/abort errors raised by either the public click package or typer's vendored
@@ -145,6 +151,7 @@ _GROUPS = (
     team_tasks,
     action_requests,
     email,
+    social,
     goals,
     google_ads,
     facebook_ads,
