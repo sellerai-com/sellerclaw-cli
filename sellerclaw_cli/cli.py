@@ -45,6 +45,11 @@ from sellerclaw_cli.commands import (
     ebay_promoted,
     ebay_store,
     email,
+    etsy,
+    etsy_finances,
+    etsy_listings,
+    etsy_orders,
+    etsy_store,
     facebook_ads,
     goals,
     google_ads,
@@ -194,6 +199,11 @@ _GROUPS = (
     bigcommerce_orders,
     bigcommerce_store,
     bigcommerce,
+    etsy_listings,
+    etsy_orders,
+    etsy_store,
+    etsy_finances,
+    etsy,
 )
 
 for _group in _GROUPS:
