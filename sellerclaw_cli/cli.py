@@ -31,6 +31,10 @@ from sellerclaw_cli.commands import (
     amazon_orders,
     amazon_store,
     analytics,
+    bigcommerce,
+    bigcommerce_listings,
+    bigcommerce_orders,
+    bigcommerce_store,
     catalog,
     channels,
     chats,
@@ -186,6 +190,10 @@ _GROUPS = (
     woocommerce_orders,
     woocommerce_store,
     woocommerce,
+    bigcommerce_listings,
+    bigcommerce_orders,
+    bigcommerce_store,
+    bigcommerce,
 )
 
 for _group in _GROUPS:
