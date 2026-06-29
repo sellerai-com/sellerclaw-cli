@@ -276,3 +276,15 @@ def test_ads_groups_mirror_each_other() -> None:
     shared = {"list-campaigns", "get-campaign", "create-campaign", "update-campaign", "metrics", "action-log"}
     assert shared <= google
     assert shared <= facebook
+
+
+def test_channels_set_margin_patches_margin() -> None:
+    """`channels set-margin` PATCHes a store with a required numeric `margin` body field."""
+    set_margin = next(
+        c for g in REGISTRY if g.name == "channels" for c in g.commands if c.name == "set-margin"
+    )
+    assert set_margin.method == "PATCH"
+    assert set_margin.path == "/agent/sales-channels/{sales_channel_id}"
+    margin_field = next(f for f in set_margin.body if f.name == "margin")
+    assert margin_field.required is True
+    assert margin_field.type is float

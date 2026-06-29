@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typer
 
-from sellerclaw_cli._command_group import Cmd, build_group, flag
+from sellerclaw_cli._command_group import Cmd, body_field, build_group, flag
 
 NAME = "channels"
 
@@ -26,6 +26,21 @@ SPECS = (
         "GET",
         "/agent/sales-channels/{sales_channel_id}",
         summary="Get one sales channel by id.",
+    ),
+    Cmd(
+        "set-margin",
+        "PATCH",
+        "/agent/sales-channels/{sales_channel_id}",
+        summary="Set this store's dropshipping markup (margin multiplier, e.g. 1.3 = +30%).",
+        body=(
+            body_field(
+                "margin",
+                type=float,
+                required=True,
+                help="Cost multiplier applied when pricing listings (>= 1.0; 1.15 = +15%).",
+                example=1.3,
+            ),
+        ),
     ),
 )
 
