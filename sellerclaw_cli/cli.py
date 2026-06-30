@@ -83,6 +83,10 @@ from sellerclaw_cli.commands import (
     walmart_orders,
     walmart_store,
     web,
+    wix,
+    wix_listings,
+    wix_orders,
+    wix_store,
     woocommerce,
     woocommerce_listings,
     woocommerce_orders,
@@ -212,6 +216,10 @@ _GROUPS = (
     walmart_orders,
     walmart_store,
     walmart,
+    wix_listings,
+    wix_orders,
+    wix_store,
+    wix,
 )
 
 for _group in _GROUPS:
