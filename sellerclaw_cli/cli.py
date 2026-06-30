@@ -78,6 +78,10 @@ from sellerclaw_cli.commands import (
     subagent_tasks,
     suppliers,
     team_tasks,
+    walmart,
+    walmart_listings,
+    walmart_orders,
+    walmart_store,
     web,
     woocommerce,
     woocommerce_listings,
@@ -204,6 +208,10 @@ _GROUPS = (
     etsy_store,
     etsy_finances,
     etsy,
+    walmart_listings,
+    walmart_orders,
+    walmart_store,
+    walmart,
 )
 
 for _group in _GROUPS:
