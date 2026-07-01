@@ -42,6 +42,25 @@ SPECS = (
             ),
         ),
     ),
+    Cmd(
+        "set-lead-time",
+        "PATCH",
+        "/agent/sales-channels/{sales_channel_id}",
+        summary=(
+            "Set this store's supplier restock lead time (days) — how long a reorder takes to "
+            "arrive. Drives the reorder math in `analytics inventory`; unset stores fall back to a "
+            "built-in default."
+        ),
+        body=(
+            body_field(
+                "reorder_lead_time_days",
+                type=int,
+                required=True,
+                help="Days from placing a reorder to stock arriving (1-365).",
+                example=14,
+            ),
+        ),
+    ),
 )
 
 app = build_group(NAME, "Connected sales channels (stores).", SPECS)

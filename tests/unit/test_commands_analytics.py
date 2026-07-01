@@ -123,3 +123,64 @@ def test_analytics_metrics_forwards_fresh_flag(
     result = runner.invoke(app, ["analytics", "metrics", STORE_ID, "--fresh"])
     assert result.exit_code == 0, result.stderr
     assert route.calls.last.request.url.params["fresh"] == "true"
+
+
+_INVENTORY_JSON = {
+    "store_id": STORE_ID,
+    "period": "last_30d",
+    "period_start": "2026-05-13T00:00:00Z",
+    "period_end": "2026-06-12T00:00:00Z",
+    "currency": "USD",
+    "lead_time_days": 14,
+    "lead_time_is_default": True,
+    "velocity_days": 30,
+    "stockouts": [],
+    "out_of_stock_count": 0,
+    "total_lost_revenue_per_day": "0",
+    "reorders": [],
+    "reorder_count": 0,
+}
+
+
+@respx.mock
+def test_analytics_inventory_gets_and_forwards_period_and_top(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.get(f"{fake_api_url}/agent/analytics/stores/{STORE_ID}/inventory").mock(
+        return_value=httpx.Response(200, json=_INVENTORY_JSON)
+    )
+    result = runner.invoke(
+        app, ["analytics", "inventory", STORE_ID, "--period", "last_7d", "--top", "5"]
+    )
+    assert result.exit_code == 0, result.stderr
+    assert route.call_count == 1
+    params = route.calls.last.request.url.params
+    assert params["period"] == "last_7d"
+    assert params["top"] == "5"
+
+
+@respx.mock
+def test_analytics_inventory_rejects_bad_period_locally(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.get(f"{fake_api_url}/agent/analytics/stores/{STORE_ID}/inventory").mock(
+        return_value=httpx.Response(200, json=_INVENTORY_JSON)
+    )
+    result = runner.invoke(app, ["analytics", "inventory", STORE_ID, "--period", "bogus"])
+    assert result.exit_code != 0
+    assert route.call_count == 0
+
+
+@respx.mock
+def test_analytics_inventory_rejects_out_of_range_top_locally(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.get(f"{fake_api_url}/agent/analytics/stores/{STORE_ID}/inventory").mock(
+        return_value=httpx.Response(200, json=_INVENTORY_JSON)
+    )
+    result = runner.invoke(app, ["analytics", "inventory", STORE_ID, "--top", "500"])
+    assert result.exit_code != 0
+    assert route.call_count == 0

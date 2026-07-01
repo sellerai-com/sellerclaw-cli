@@ -61,6 +61,40 @@ SPECS = (
         ),
     ),
     Cmd(
+        "inventory",
+        "GET",
+        "/agent/analytics/stores/{store_id}/inventory",
+        summary=(
+            "Stock health for a store: what is (about to be) out of stock while still listed, and "
+            "what to reorder. Joins current stock (listing mirror) with sales velocity over the "
+            "window. Returns `stockouts` (items at/near zero — each with `current_stock`, "
+            "`daily_velocity`, `days_of_cover`, `lost_revenue_per_day`, `is_out_of_stock`; costliest "
+            "first) with `out_of_stock_count` + `total_lost_revenue_per_day`; and `reorders` (each "
+            "with `days_of_cover`, `reorder_point`, `suggested_order_qty`, `needs_reorder`; most "
+            "urgent first) with `reorder_count`. `lead_time_days` is the restock time used for the "
+            "reorder math; `lead_time_is_default` = true means the owner has not set one (set it via "
+            "`channels set-lead-time`). Use for 'what's out of stock', 'what do I need to reorder', "
+            "'am I about to sell out'."
+        ),
+        flags=(
+            flag(
+                "period",
+                help="Velocity window (how far back sales are measured).",
+                choices=("last_7d", "last_30d", "last_90d", "this_month", "this_year"),
+                default="last_30d",
+            ),
+            flag(
+                "top",
+                type=int,
+                param="top",
+                minimum=1,
+                maximum=100,
+                default=20,
+                help="How many rows to return per facet (stockouts / reorders).",
+            ),
+        ),
+    ),
+    Cmd(
         "timeseries",
         "GET",
         "/agent/analytics/stores/{store_id}/timeseries",
