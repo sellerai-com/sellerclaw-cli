@@ -184,3 +184,110 @@ def test_analytics_inventory_rejects_out_of_range_top_locally(
     result = runner.invoke(app, ["analytics", "inventory", STORE_ID, "--top", "500"])
     assert result.exit_code != 0
     assert route.call_count == 0
+
+
+_DIGEST_JSON = {
+    "store_id": STORE_ID,
+    "platform": "ebay",
+    "generated_at": "2026-06-30T12:00:00Z",
+    "headline": {
+        "orders_to_ship": 2,
+        "shipments_overdue": 1,
+        "disputes_open": 0,
+        "disputes_overdue": 0,
+        "amount_at_risk": "0",
+        "amount_at_risk_currency": None,
+        "out_of_stock": 3,
+        "reorders_due": 1,
+        "account_level": "TOP_RATED",
+        "account_at_risk": False,
+        "attention_count": 3,
+        "has_errors": False,
+    },
+    "orders": {"awaiting_count": 2, "top_oldest": [], "truncated": False, "error": None},
+    "inventory": {
+        "available": True,
+        "out_of_stock_count": 3,
+        "total_lost_revenue_per_day": "40",
+        "currency": "USD",
+        "reorder_count": 1,
+        "lead_time_days": 14,
+        "lead_time_is_default": True,
+        "top_stockouts": [],
+        "top_reorders": [],
+        "error": None,
+    },
+    "shipping": {
+        "available": True,
+        "in_transit_count": 3,
+        "overdue_count": 1,
+        "top_overdue": [],
+        "truncated": False,
+        "error": None,
+    },
+    "disputes": {
+        "available": True,
+        "total_open": 0,
+        "overdue_count": 0,
+        "amount_at_risk": "0",
+        "currency": None,
+        "soonest_respond_by": None,
+        "top_urgent": [],
+        "error": None,
+    },
+    "account_health": {
+        "available": True,
+        "level": "TOP_RATED",
+        "at_risk": False,
+        "closest_metric": None,
+        "metrics": [],
+        "error": None,
+    },
+}
+
+
+@respx.mock
+def test_analytics_operations_digest_gets_and_substitutes_store_id(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.get(f"{fake_api_url}/agent/stores/{STORE_ID}/operations-digest").mock(
+        return_value=httpx.Response(200, json=_DIGEST_JSON)
+    )
+    result = runner.invoke(app, ["analytics", "operations-digest", STORE_ID])
+    assert result.exit_code == 0, result.stderr
+    assert route.call_count == 1
+    # No window flag → the server default applies (velocity_period not sent).
+    assert "velocity_period" not in route.calls.last.request.url.params
+    payload = json.loads(result.stdout)
+    assert payload["data"]["headline"]["attention_count"] == 3
+
+
+@respx.mock
+def test_analytics_operations_digest_forwards_velocity_period(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.get(f"{fake_api_url}/agent/stores/{STORE_ID}/operations-digest").mock(
+        return_value=httpx.Response(200, json=_DIGEST_JSON)
+    )
+    result = runner.invoke(
+        app, ["analytics", "operations-digest", STORE_ID, "--velocity-period", "last_7d"]
+    )
+    assert result.exit_code == 0, result.stderr
+    assert route.calls.last.request.url.params["velocity_period"] == "last_7d"
+
+
+@respx.mock
+def test_analytics_operations_digest_rejects_bad_period_locally(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.get(f"{fake_api_url}/agent/stores/{STORE_ID}/operations-digest").mock(
+        return_value=httpx.Response(200, json=_DIGEST_JSON)
+    )
+    result = runner.invoke(
+        app, ["analytics", "operations-digest", STORE_ID, "--velocity-period", "bogus"]
+    )
+    assert result.exit_code != 0
+    assert route.call_count == 0

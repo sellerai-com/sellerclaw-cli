@@ -95,6 +95,34 @@ SPECS = (
         ),
     ),
     Cmd(
+        "operations-digest",
+        "GET",
+        "/agent/stores/{store_id}/operations-digest",
+        summary=(
+            "One morning operations briefing for a store — what needs attention today, across "
+            "every platform. Universal blocks (all stores): `orders` (orders awaiting shipment — "
+            "`awaiting_count` + the oldest `top_oldest` at risk of a late ship) and `inventory` "
+            "(sold-out-but-listed `top_stockouts` with `total_lost_revenue_per_day`, plus "
+            "`top_reorders` with `reorder_count`). Enrichment blocks — filled only where the "
+            "marketplace exposes them (eBay today): `shipping` (in-transit/overdue parcels + "
+            "tracking links), `disputes` (open returns/disputes with deadlines and "
+            "`amount_at_risk`), `account_health` (seller level + the metric nearest its "
+            "threshold). Each block has `available` (false = the platform has no such concept, "
+            "not an error) and `error` (set when a supported block failed to load). Lead with "
+            "`headline` — `orders_to_ship`, `shipments_overdue`, `disputes_open`, `out_of_stock`, "
+            "`reorders_due`, `account_at_risk`, `attention_count`, `has_errors`. Use for 'what "
+            "needs my attention today', 'morning check', 'anything urgent on this store'."
+        ),
+        flags=(
+            flag(
+                "velocity_period",
+                help="Velocity window for the inventory block (how far back sales are measured).",
+                choices=("last_7d", "last_30d", "last_90d", "this_month", "this_year"),
+                default="last_30d",
+            ),
+        ),
+    ),
+    Cmd(
         "timeseries",
         "GET",
         "/agent/analytics/stores/{store_id}/timeseries",
