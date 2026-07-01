@@ -52,16 +52,26 @@ def test_add_watch_posts_body_and_substitutes_store_id(
 
 
 @respx.mock
-def test_add_watch_requires_competitor_item_id_locally(
+def test_add_watch_by_url_posts_body(
     env_pointing_at_fake_api: None,  # noqa: ARG001
     fake_api_url: str,
 ) -> None:
     route = respx.post(f"{fake_api_url}/agent/competitors/stores/{STORE_ID}/watches").mock(
         return_value=httpx.Response(201, json={"id": WATCH_ID})
     )
-    result = runner.invoke(app, ["competitors", "add-watch", STORE_ID, "-b", "{}"])
-    assert result.exit_code != 0
-    assert route.call_count == 0  # missing required field caught before the network call
+    result = runner.invoke(
+        app,
+        [
+            "competitors",
+            "add-watch",
+            STORE_ID,
+            "-b",
+            json.dumps({"url": "https://shop.example/p", "our_sku": "SKU-7"}),
+        ],
+    )
+    assert result.exit_code == 0, result.stderr
+    sent = json.loads(route.calls.last.request.content)
+    assert sent == {"url": "https://shop.example/p", "our_sku": "SKU-7"}
 
 
 @respx.mock

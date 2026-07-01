@@ -12,22 +12,28 @@ SPECS = (
         "POST",
         "/agent/competitors/stores/{store_id}/watches",
         summary=(
-            "Track a competitor's eBay listing for a store so its price is polled and shown in the "
-            "undercutting report. Get the competitor_item_id from `research-catalog ebay-search` "
-            "(the eBay Browse item id, e.g. 'v1|123456789|0'). Link your matching SKU via our_sku so "
-            "the report can compare the rival's price against your cost floor. Idempotent on the "
-            "competitor item id — re-adding refreshes the label/SKU and reactivates it."
+            "Track a competitor's listing for a store so its price is polled and shown in the "
+            "undercutting report. Provide EITHER `url` (a product page on any marketplace — Amazon, "
+            "Walmart, Shopify, Etsy, …, checked by scraping) OR `competitor_item_id` (+ marketplace, "
+            "an eBay listing checked exactly via Browse; get the id from `research-catalog "
+            "ebay-search`). Link your matching SKU via our_sku so the report can compare the rival's "
+            "price against your cost floor. Idempotent per listing — re-adding refreshes and "
+            "reactivates it."
         ),
         body=(
             body_field(
+                "url",
+                help="Product page URL on any marketplace (Amazon, Walmart, Shopify, Etsy…). Provide url OR competitor_item_id.",
+                example="https://www.amazon.com/dp/B0XXXXConfirm",
+            ),
+            body_field(
                 "competitor_item_id",
-                required=True,
-                help="eBay Browse item id to track (from research-catalog ebay-search), e.g. 'v1|123456789|0'.",
+                help="eBay Browse item id from research-catalog ebay-search (e.g. 'v1|123456789|0'). Provide url OR this.",
                 example="v1|123456789|0",
             ),
             body_field(
                 "marketplace_id",
-                help="eBay marketplace the rival sells on (EBAY_US, EBAY_GB, EBAY_DE, ...). Defaults to EBAY_US.",
+                help="eBay marketplace for competitor_item_id (EBAY_US, EBAY_GB, …). Default EBAY_US; ignored for url.",
                 example="EBAY_US",
             ),
             body_field(
@@ -87,7 +93,8 @@ SPECS = (
 
 app = build_group(
     NAME,
-    "eBay competitor price monitoring: watch list, price snapshots, and the undercutting report.",
+    "Competitor price monitoring on any marketplace (eBay by item id, others by URL): "
+    "watch list, price snapshots, and the undercutting report.",
     SPECS,
 )
 
