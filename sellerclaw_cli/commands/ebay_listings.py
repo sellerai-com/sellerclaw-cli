@@ -74,6 +74,42 @@ SPECS = (
         ),
     ),
     Cmd(
+        "performance",
+        "GET",
+        "/agent/ebay/stores/{store_id}/listing-performance",
+        summary=(
+            "Listing performance audit (mockup 16): organic funnel + content completeness for the "
+            "store's top listings by impressions. Per card, returns eBay's Traffic Report funnel "
+            "(impressions, ctr, views, conversion_rate, transactions) plus a transparent SellerClaw "
+            "completeness index (completeness_pct 0..1 = filled fields / all — NOT an eBay score) and "
+            "`gaps` (what's missing: photos, item specifics, description, video). Cards that get traffic "
+            "but convert below the store's own catalog median are flagged `underperforming` with an "
+            "`opportunity` (est. $ uplift to the median). Summary fields: `listings_to_improve`, "
+            "`avg_completeness_pct`, `lost_traffic_views`, `opportunity_total`, `median_conversion_rate`, "
+            "`currency`, `last_updated` (eBay data-freshness date). Weak-but-trafficked cards come first. "
+            "Fix flagged cards with `ebay-listings update` / `update-draft` (title, aspects, description, "
+            "images). The window ends ~3 days back so eBay's lagging traffic data is already settled."
+        ),
+        flags=(
+            flag(
+                "days",
+                type=int,
+                minimum=1,
+                maximum=90,
+                default=7,
+                help="Trailing window length in days (the window ends ~3 days back).",
+            ),
+            flag(
+                "top_n",
+                type=int,
+                minimum=1,
+                maximum=50,
+                default=20,
+                help="How many top-traffic listings to audit for content.",
+            ),
+        ),
+    ),
+    Cmd(
         "sync-stock",
         "POST",
         "/agent/stores/{store_id}/listings/sync-stock",
