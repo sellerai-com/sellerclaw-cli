@@ -35,6 +35,17 @@ SPECS = (
             "ROAS, ACOS, ad spend and ad sales for the window."
         ),
     ),
+    Cmd(
+        "effectiveness",
+        "GET",
+        "/agent/ebay/stores/{store_id}/promoted/reports/{report_task_id}/effectiveness",
+        summary=(
+            "Get a report task's status; once COMPLETED it also returns the full ad-effectiveness "
+            "view: store totals (spend/ad-sales/ROAS/ACOS) plus a breakdown by ad tool (Promoted "
+            "Listings vs Advanced) and a per-SKU table, each row labelled scale / watch / cut. Use "
+            "the same report task id you polled with 'get-report'."
+        ),
+    ),
 )
 
 app = build_group(NAME, "eBay Promoted Listings (read-only): campaigns and performance reports.", SPECS)
