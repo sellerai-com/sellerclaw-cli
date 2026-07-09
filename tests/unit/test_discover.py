@@ -186,12 +186,23 @@ def test_describe_surfaces_body_fields_and_example() -> None:
 
 def test_describe_marks_freeform_body() -> None:
     """A command that takes a body but declares no schema is flagged free-form (no field list)."""
-    result = runner.invoke(app, ["describe", "shopify", "graphql"])
+    result = runner.invoke(app, ["describe", "shopify-collections", "update"])
     assert result.exit_code == 0, result.output
     detail = _data(result.stdout)
     assert detail["body"] is True
     assert detail["body_fields"] == []
     assert detail["body_freeform"] is True
+
+
+def test_describe_marks_graphql_as_query_body() -> None:
+    """The raw GraphQL command exposes -q/--query (query_body), not a free-form -b body."""
+    result = runner.invoke(app, ["describe", "shopify", "graphql"])
+    assert result.exit_code == 0, result.output
+    detail = _data(result.stdout)
+    assert detail["body"] is True
+    assert detail["query_body"] is True
+    assert detail["body_freeform"] is False
+    assert "-q" in detail["example"]
 
 
 def test_ebay_raw_passthrough_group_exposes_request_and_trading() -> None:
@@ -253,10 +264,10 @@ def test_no_http_verb_or_agent_prefix_leaks_in_command_names() -> None:
 
 
 def test_every_body_command_documents_its_schema() -> None:
-    """Every command that takes a -b body must declare its fields (`body=`) or be marked
-    `body_freeform=True`. A bare `has_body=True` leaves `describe` blind and the body
-    unvalidated — exactly the gap that let an agent guess wrong field names. This guard keeps
-    the sweep complete: a new body command without a schema fails here.
+    """Every command that takes a -b body must declare its fields (`body=`), be marked
+    `body_freeform=True`, or be a `query_body=True` GraphQL command. A bare `has_body=True` leaves
+    `describe` blind and the body unvalidated — exactly the gap that let an agent guess wrong field
+    names. This guard keeps the sweep complete: a new body command without a schema fails here.
     """
     # Only real shipped groups (synthetic groups built by other tests also land in the global REGISTRY).
     registered = {ti.name for ti in app.registered_groups}
@@ -265,9 +276,9 @@ def test_every_body_command_documents_its_schema() -> None:
         for g in REGISTRY
         if g.name in registered
         for c in g.commands
-        if c.takes_body and not c.body and not c.body_freeform
+        if c.takes_body and not c.body and not c.body_freeform and not c.query_body
     ]
-    assert not offenders, f"body commands missing a `body=` schema or `body_freeform=True`: {offenders}"
+    assert not offenders, f"body commands missing a schema, `body_freeform`, or `query_body`: {offenders}"
 
 
 def test_ads_groups_mirror_each_other() -> None:

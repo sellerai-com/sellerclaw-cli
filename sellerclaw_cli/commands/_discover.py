@@ -99,7 +99,9 @@ def _example(group: str, cmd: Cmd) -> str:
     parts = [f"sellerclaw {group} {cmd.name}"]
     parts += [f"<{p}>" for p in positionals_of(cmd.path)]
     parts += [f"--{f.name.replace('_', '-')} <{f.name}>" for f in cmd.flags if f.required]
-    if cmd.body:
+    if cmd.query_body:
+        parts.append("-q '<graphql document>'")
+    elif cmd.body:
         parts.append("-b '" + json.dumps(_body_example(cmd), ensure_ascii=False) + "'")
     elif cmd.takes_body:
         parts.append("-b @body.json")
@@ -207,7 +209,8 @@ def describe_cmd(
             "body": cmd.takes_body,
             "body_fields": _body_repr(cmd),
             "body_strict": cmd.body_strict if cmd.body else None,
-            "body_freeform": cmd.takes_body and not cmd.body,
+            "body_freeform": cmd.takes_body and not cmd.body and not cmd.query_body,
+            "query_body": cmd.query_body,
             "example": _example(matched_group.name, cmd),
         },
         fmt=_fmt(ctx),
