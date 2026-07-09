@@ -64,6 +64,19 @@ def test_unknown_command_lists_group(monkeypatch: pytest.MonkeyPatch, capsys: py
     assert "commands --group subagent-tasks" in msg
 
 
+def test_unknown_group_suggests_close_group(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A wrong GROUP name (e.g. `shopify-products`) suggests the closest real group."""
+    code, _out, err = _run(monkeypatch, capsys, ["shopify-products", "list"])
+    assert code == 1
+    msg = _err(err)
+    assert "Did you mean group:" in msg
+    # The suggestion is drawn from real group names (closest matches, e.g. other shopify-* groups).
+    suggestion = msg.split("Did you mean group:", 1)[1]
+    assert "shopify-" in suggestion
+
+
 def test_success_exits_zero_with_json(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     code, out, _err = _run(monkeypatch, capsys, ["describe", "subagent-tasks", "request-review"])
     assert code == 0
