@@ -60,6 +60,38 @@ SPECS = (
             ),
         ),
     ),
+    Cmd(
+        "publish",
+        "POST",
+        "/agent/stores/{store_id}/collections/{collection_id}/publish",
+        summary=(
+            "Publish a collection to the Online Store — fixes a /collections/<handle> page that "
+            "404s because the collection exists but isn't published. No raw GraphQL needed."
+        ),
+        body=(
+            body_field(
+                "publication_names",
+                repeatable=True,
+                help="Publications to publish to; omit for the Online Store. List them with "
+                "`sellerclaw shopify-listings publications <store_id>`.",
+            ),
+        ),
+        body_strict=False,
+    ),
+    Cmd(
+        "unpublish",
+        "POST",
+        "/agent/stores/{store_id}/collections/{collection_id}/unpublish",
+        summary="Unpublish a collection from the Online Store (hide its page).",
+        body=(
+            body_field(
+                "publication_names",
+                repeatable=True,
+                help="Publications to unpublish from; omit for the Online Store.",
+            ),
+        ),
+        body_strict=False,
+    ),
 )
 
 app = build_group(NAME, "Shopify online-store collections.", SPECS)

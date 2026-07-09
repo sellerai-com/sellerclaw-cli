@@ -15,6 +15,12 @@ SPECS = (
         flags=(flag("limit", type=int, help="Max results."), flag("after", help="Cursor."), flag("query", help="Search query.")),
     ),
     Cmd(
+        "get",
+        "GET",
+        "/agent/stores/{store_id}/navigation/menus/{menu_id}",
+        summary="Read one navigation menu with its items (label, type, URL, linked resource).",
+    ),
+    Cmd(
         "create",
         "POST",
         "/agent/stores/{store_id}/navigation/menus",
