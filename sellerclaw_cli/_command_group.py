@@ -23,10 +23,22 @@ from typing import Any
 
 import typer
 
+from sellerclaw_cli import _task_context
+from sellerclaw_cli._agent_id import resolve_agent_id
+from sellerclaw_cli._client import Client
 from sellerclaw_cli._errors import CliError, UserInputError
 from sellerclaw_cli._runtime import BODY_OPTION_HELP, emit_error, parse_json_body, run_operation
 
 _PATH_PARAM_RE = re.compile(r"\{([^}]+)\}")
+# A short id prefix worth expanding against the task list: hex (UUID) fragments, optionally
+# dash-separated, and shorter than a full 36-char UUID. This deliberately excludes non-hex tokens
+# so a full id (used as-is) or an arbitrary string never triggers a list lookup / network call.
+_ID_PREFIX_RE = re.compile(r"^[0-9a-fA-F]{4,}(?:-[0-9a-fA-F]+)*$")
+_ACTIVE_SENTINELS = frozenset({"active", "@active", "-"})
+
+
+def _looks_like_id_prefix(value: str) -> bool:
+    return len(value) < 36 and bool(_ID_PREFIX_RE.match(value))
 
 
 @dataclass(frozen=True)
@@ -193,11 +205,31 @@ class Cmd:
     body: tuple[BodyField, ...] = ()  # documented body schema (enables describe + local validation)
     body_strict: bool = True  # with a schema, reject unknown top-level keys (off → free extras allowed)
     body_freeform: bool = False  # takes a body but has no fixed schema (e.g. raw GraphQL) — no validation
+    # A raw-GraphQL command: adds `-q/--query` (the document as plain text) and `--variables` (JSON)
+    # so the caller never has to hand-wrap the query into a `{"query": "...\n..."}` JSON string and
+    # double-escape it through the shell. `-b {"query":..., "variables":...}` still works as before.
+    query_body: bool = False
+    # "Active task" ergonomics for id-bearing task commands (see _task_context). ``active_slot`` names
+    # the per-agent memory slot; when set, the LAST path positional is that task id. ``active_write``
+    # marks the `start` command (record the id after success); when False the id may be omitted and
+    # defaults to the remembered task. ``resolve_list_path`` (a GET path) enables short-prefix
+    # expansion of that id against the caller's task list.
+    active_slot: str | None = None
+    active_write: bool = False
+    resolve_list_path: str | None = None
+
+    @property
+    def active_positional(self) -> str | None:
+        """The path positional that carries the active-task id (the last placeholder), if any."""
+        if not self.active_slot:
+            return None
+        placeholders = _PATH_PARAM_RE.findall(self.path)
+        return placeholders[-1] if placeholders else None
 
     @property
     def takes_body(self) -> bool:
         """Whether this command accepts a ``-b``/``--body`` JSON payload."""
-        return self.has_body or self.body_freeform or bool(self.body)
+        return self.has_body or self.body_freeform or bool(self.body) or self.query_body
 
 
 @dataclass(frozen=True)
@@ -223,12 +255,20 @@ def command_help(cmd: Cmd) -> str:
     if cmd.summary:
         pieces.append(cmd.summary)
     pieces.append(f"{cmd.method} {cmd.path}")
-    if cmd.takes_body:
+    if cmd.query_body:
+        pieces.append(
+            "GraphQL via -q/--query (plain text) + --variables (JSON); or -b '{\"query\":...}'"
+        )
+    elif cmd.takes_body:
         if cmd.body:
             fields = ", ".join(f.name + ("*" if f.required else "") for f in cmd.body)
             pieces.append(f"JSON body via -b/--body (fields: {fields}; * = required)")
         else:
             pieces.append("JSON body via -b/--body (run `sellerclaw describe <group> <cmd>`)")
+    if cmd.active_slot and not cmd.active_write and cmd.active_positional:
+        pieces.append(
+            f"{cmd.active_positional} is optional — defaults to your active task (set by `start`)"
+        )
     return " | ".join(pieces)
 
 
@@ -357,6 +397,82 @@ def _flag_annotation(f: Flag) -> Any:
     return f.type | None
 
 
+def _build_query_body(*, query: str | None, variables: str | None, raw_body: str | None) -> Any:
+    """Assemble the GraphQL request body for a ``query_body`` command.
+
+    Prefers ``-q/--query`` (plain-text document) so the caller avoids wrapping the query in a
+    JSON string and double-escaping it through the shell — the exact failure mode that made raw
+    ``-b '{"query":"..."}'`` calls brittle. Falls back to the literal ``-b`` body when no ``-q``.
+    """
+    if query is not None:
+        body: dict[str, Any] = {"query": query}
+        if variables is not None:
+            parsed = parse_json_body(variables)
+            if not isinstance(parsed, dict):
+                raise UserInputError("--variables must be a JSON object, e.g. '{\"id\": 1}'.")
+            body["variables"] = parsed
+        return body
+    if variables is not None:
+        raise UserInputError("--variables was given without -q/--query; pass the document too.")
+    if raw_body is not None:
+        return parse_json_body(raw_body)
+    raise UserInputError(
+        "provide the GraphQL document via -q/--query (plain text, recommended) "
+        "or a JSON body via -b '{\"query\": \"...\"}'."
+    )
+
+
+def _expand_id_prefix(cmd: Cmd, positionals: dict[str, Any], prefix: str) -> str | None:
+    """Expand a short id ``prefix`` to a full id via the command's ``resolve_list_path``.
+
+    Best-effort: returns the unique full id, errors on an ambiguous prefix, and returns None (so the
+    caller falls through to the raw value and lets the server answer) on no match or a failed list
+    call. Non-active path placeholders are substituted into the list path.
+    """
+    list_path = cmd.resolve_list_path
+    if not list_path:
+        return None
+    for name, value in positionals.items():
+        if name != cmd.active_positional:
+            list_path = list_path.replace("{" + name + "}", str(value))
+    try:
+        with Client.from_env() as client:
+            data = client.request("GET", list_path)
+    except CliError:
+        return None  # can't reach the list — leave the value as-is for the server to resolve
+    matches = sorted({i for i in _task_context.collect_ids(data) if i.startswith(prefix)})
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        emit_error(
+            UserInputError(
+                f"id prefix {prefix!r} matches {len(matches)} tasks — use more characters."
+            )
+        )
+    return None
+
+
+def _resolve_active_id(cmd: Cmd, positionals: dict[str, Any], raw: Any) -> str:
+    """Resolve the active-task positional: fall back to the remembered task, or expand a prefix."""
+    agent_id = resolve_agent_id()
+    if raw is None or (isinstance(raw, str) and raw in _ACTIVE_SENTINELS):
+        saved = _task_context.get_active(cmd.active_slot or "", agent_id)
+        if not saved:
+            emit_error(
+                UserInputError(
+                    "no active task for this agent — pass the id, or run "
+                    "`start <id>` first so later commands can omit it."
+                )
+            )
+        return saved
+    value = str(raw)
+    if cmd.resolve_list_path and _looks_like_id_prefix(value):
+        expanded = _expand_id_prefix(cmd, positionals, value)
+        if expanded:
+            return expanded
+    return value
+
+
 def _make_callback(group: str, cmd: Cmd):
     """Build a callback with a synthetic signature Typer can introspect.
 
@@ -368,14 +484,31 @@ def _make_callback(group: str, cmd: Cmd):
 
     def _callback(**kwargs: Any) -> None:
         ctx = kwargs.pop("ctx")
+        values = {name: kwargs.pop(name) for name in positionals}
+        resolved_active: str | None = None
+        if cmd.active_positional is not None:
+            resolved_active = _resolve_active_id(
+                cmd, values, values.get(cmd.active_positional)
+            )
+            values[cmd.active_positional] = resolved_active
         path = cmd.path
         for name in positionals:
-            path = path.replace("{" + name + "}", str(kwargs.pop(name)))
-        try:
-            body = parse_json_body(kwargs.pop("body")) if cmd.takes_body else None
-        except CliError as err:
-            # A malformed -b value must surface as the structured stderr contract, not a traceback.
-            emit_error(err)
+            path = path.replace("{" + name + "}", str(values[name]))
+        body: Any = None
+        if cmd.takes_body:
+            raw_body = kwargs.pop("body")
+            try:
+                if cmd.query_body:
+                    body = _build_query_body(
+                        query=kwargs.pop("query", None),
+                        variables=kwargs.pop("variables", None),
+                        raw_body=raw_body,
+                    )
+                else:
+                    body = parse_json_body(raw_body)
+            except CliError as err:
+                # A malformed body must surface as the structured stderr contract, not a traceback.
+                emit_error(err)
         # Reject a body that breaks the declared schema before spending a network round-trip.
         validate_body(group, cmd, body)
         # Map each flag to its API query key, validating constraints first; drop unset values so
@@ -387,6 +520,10 @@ def _make_callback(group: str, cmd: Cmd):
             if value is not None and value != [] and value is not False:
                 params[f.query_key] = value
         run_operation(ctx, cmd.method, path, params=params or None, json_body=body)
+        # Only reached when the call succeeded (run_operation raises typer.Exit on error): remember
+        # the task the `start` command just acted on, so follow-up commands can omit the id.
+        if cmd.active_write and cmd.active_slot and resolved_active:
+            _task_context.set_active(cmd.active_slot, resolve_agent_id(), resolved_active)
 
     parameters: list[inspect.Parameter] = [
         inspect.Parameter("ctx", inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=typer.Context),
@@ -394,15 +531,25 @@ def _make_callback(group: str, cmd: Cmd):
     annotations: dict[str, Any] = {"ctx": typer.Context, "return": type(None)}
 
     for name in positionals:
+        # The active-task positional on a read command may be omitted (defaults to the remembered
+        # task), so it is an optional argument; everything else stays required.
+        optional_active = name == cmd.active_positional and not cmd.active_write
+        if optional_active:
+            help_text = f"{name.replace('_', ' ')} (optional; defaults to your active task)"
+            default: Any = typer.Argument(None, help=help_text)
+            annotation: Any = str | None
+        else:
+            default = typer.Argument(..., help=name.replace("_", " "))
+            annotation = str
         parameters.append(
             inspect.Parameter(
                 name,
                 inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                default=typer.Argument(..., help=name.replace("_", " ")),
-                annotation=str,
+                default=default,
+                annotation=annotation,
             )
         )
-        annotations[name] = str
+        annotations[name] = annotation
 
     for f in cmd.flags:
         annotation = _flag_annotation(f)
@@ -415,6 +562,38 @@ def _make_callback(group: str, cmd: Cmd):
             )
         )
         annotations[f.name] = annotation
+
+    if cmd.query_body:
+        parameters.append(
+            inspect.Parameter(
+                "query",
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                default=typer.Option(
+                    None,
+                    "--query",
+                    "-q",
+                    help="GraphQL document (query or mutation) as plain text — no JSON wrapping "
+                    "or escaping. Preferred over -b for raw GraphQL.",
+                    metavar="GRAPHQL",
+                ),
+                annotation=str | None,
+            )
+        )
+        annotations["query"] = str | None
+        parameters.append(
+            inspect.Parameter(
+                "variables",
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                default=typer.Option(
+                    None,
+                    "--variables",
+                    help="GraphQL variables as a JSON object (literal, @file.json, or @-).",
+                    metavar="JSON",
+                ),
+                annotation=str | None,
+            )
+        )
+        annotations["variables"] = str | None
 
     if cmd.takes_body:
         body_annotation: Any = str | None
