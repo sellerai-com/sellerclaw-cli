@@ -37,7 +37,7 @@ PART ?= minor
 # release is warranted — test/CI/docs-only churn doesn't require one.
 SHIPPED_PATHS = sellerclaw_cli pyproject.toml README.md
 
-.PHONY: install lint test check build plugin mcpb web-zip plugin-bump release-check release
+.PHONY: install lint test check build plugin mcpb web-zip plugin-bump release-check release release-latest release-beta
 
 install:
 	$(UV) sync --group dev
@@ -121,6 +121,12 @@ release-check:
 # Pushing a v*.*.* tag triggers .github/workflows/release.yml, which verifies,
 # builds, and publishes to PyPI. Refuses to tag when the shipped CLI is unchanged
 # since the last v* tag (nothing to publish) — override with FORCE=1.
+#
+# Channel is decided by the version shape (see release.yml github-release job): a clean vX.Y.Z is a
+# stable "Latest" release; a PEP 440 pre-release (bN / rcN / aN, no dot) is a GitHub "Pre-release"
+# and a PyPI pre-release. PREFER the `release-latest` / `release-beta` wrappers below — they compute
+# the number for you so the format can't be wrong. `release` is the low-level target they delegate to;
+# call it directly only for an explicit one-off (make release VERSION=0.41.0rc1).
 release:
 	@set -eu; \
 	if [ -z "$${ALLOW_DIRTY:-}" ] && [ -n "$$(git status --porcelain)" ]; then \
@@ -160,4 +166,42 @@ release:
 	git push $(REMOTE) HEAD; \
 	git tag -a "$$tag" -m "Release $$tag"; \
 	git push $(REMOTE) "$$tag"; \
-	echo "Pushed $$tag — release.yml will verify, build, and publish $$tag to PyPI."
+	echo "Pushed $$tag — release.yml will verify, build, and publish $$tag to PyPI."; \
+	echo "To pin this build inside sellerclaw-agent, set runtime/edge-requirements.txt: sellerclaw-cli==$$new"
+
+# Preferred entry points — you never type a version string, so you can't get the PEP 440
+# format wrong. The number is computed from existing tags:
+#   make release-beta     # from dev  -> X.Y.ZbN  (pre-release): "Pre-release" on GitHub, PyPI pre-release
+#   make release-latest   # from main -> X.Y.Z    (stable):      "Latest" on GitHub, normal PyPI install
+#
+# Both share one "base" = the last STABLE tag bumped by PART (minor by default; PART=patch|major).
+# release-beta cuts release candidates for that base (b1, b2, …); release-latest finalizes it to the
+# clean X.Y.Z. Typical flow: `make release-beta` on dev (repeat as needed) → `make release-latest` on main.
+# `b` is the PEP 440 beta spelling, so PyPI treats the build as a pre-release and a plain
+# `pip install sellerclaw-cli` won't pick it up. Delegates to `release`, which does all the tag pushing.
+release-latest release-beta:
+	@set -eu; \
+	git fetch --tags --quiet $(REMOTE); \
+	last_stable=$$(git tag --list 'v*' --sort=v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$$' | tail -n1); \
+	if [ -z "$$last_stable" ]; then last_stable="v0.0.0"; fi; \
+	b=$${last_stable#v}; \
+	major=$$(echo "$$b" | cut -d. -f1); \
+	minor=$$(echo "$$b" | cut -d. -f2); \
+	patch=$$(echo "$$b" | cut -d. -f3); \
+	case "$(PART)" in \
+	  major) base="$$((major+1)).0.0" ;; \
+	  minor) base="$$major.$$((minor+1)).0" ;; \
+	  patch) base="$$major.$$minor.$$((patch+1))" ;; \
+	  *) echo "Unknown PART=$(PART) (use major|minor|patch)" >&2; exit 1 ;; \
+	esac; \
+	if [ "$@" = "release-beta" ]; then \
+	  n=$$(git tag --list "v$${base}b*" | sed -E 's/.*b([0-9]+)$$/\1/' | grep -E '^[0-9]+$$' | sort -n | tail -n1); \
+	  if [ -z "$$n" ]; then n=0; fi; \
+	  new="$${base}b$$((n+1))"; \
+	  echo "release-beta: base $$base (from last stable $$last_stable) -> pre-release $$new"; \
+	  $(MAKE) --no-print-directory release VERSION="$$new"; \
+	else \
+	  if git tag --list "v$${base}b*" | grep -q .; then force="FORCE=1"; else force=""; fi; \
+	  echo "release-latest: finalizing base $$base (from last stable $$last_stable) -> stable $$base"; \
+	  $(MAKE) --no-print-directory release VERSION="$$base" $$force; \
+	fi

@@ -82,6 +82,9 @@ from sellerclaw_cli.commands import (
     subagent_tasks,
     suppliers,
     team_tasks,
+    tiktok_shop_listings,
+    tiktok_shop_orders,
+    tiktok_shop_store,
     walmart,
     walmart_listings,
     walmart_orders,
@@ -220,6 +223,9 @@ _GROUPS = (
     etsy_store,
     etsy_finances,
     etsy,
+    tiktok_shop_listings,
+    tiktok_shop_orders,
+    tiktok_shop_store,
     walmart_listings,
     walmart_orders,
     walmart_store,
@@ -286,10 +292,17 @@ def _emit_usage_error(exc: click.exceptions.UsageError) -> int:
             parts.append("This command takes a free-form JSON body via -b, not --options.")
     elif command is None and "No such command" in exc.format_message():
         bad = _quoted_token(exc.format_message())
-        names = [c.name for c in next((g.commands for g in REGISTRY if g.name == group), ())]
-        near = difflib.get_close_matches(bad, names, n=2, cutoff=0.5) if bad else []
+        if group is not None:
+            # Unknown command inside a known group → suggest that group's commands.
+            names = [c.name for c in next((g.commands for g in REGISTRY if g.name == group), ())]
+        else:
+            # Unknown top-level token → it's a wrong GROUP name; suggest close group names
+            # (e.g. `shopify-products` → `shopify-listings`).
+            names = [g.name for g in REGISTRY]
+        near = difflib.get_close_matches(bad, names, n=3, cutoff=0.4) if bad else []
         if near:
-            parts.append("Did you mean: " + ", ".join(near) + "?")
+            label = "command" if group is not None else "group"
+            parts.append(f"Did you mean {label}: " + ", ".join(near) + "?")
 
     if group and command:
         parts.append(f"Run `sellerclaw describe {group} {command}` for positionals, options, and body fields.")

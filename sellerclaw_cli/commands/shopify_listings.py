@@ -180,6 +180,62 @@ SPECS = (
             ),
         ),
     ),
+    Cmd(
+        "publications",
+        "GET",
+        "/agent/stores/{store_id}/publications",
+        summary="List the store's sales-channel publications (id + name), e.g. the Online Store. "
+        "Use the names with the publish/unpublish commands.",
+    ),
+    Cmd(
+        "inventory",
+        "GET",
+        "/agent/stores/{store_id}/listings/inventory",
+        summary=(
+            "Variant-level stock + publication signals to diagnose '0 products' / 'Sold out' pages: "
+            "inventory_quantity, inventory_policy (DENY hides at 0), product.status (draft ⇒ hidden), "
+            "and published_to_online_store / online_store_url."
+        ),
+        flags=(
+            flag("status", choices=("ACTIVE", "DRAFT", "ARCHIVED"), help="Product status filter."),
+            flag("skus", repeatable=True, help="Filter by SKU (repeat for several)."),
+            flag("product_ids", repeatable=True, help="Filter by Shopify product id (repeat)."),
+            flag("variant_ids", repeatable=True, help="Filter by Shopify variant id (repeat)."),
+            flag("limit", type=int, minimum=1, maximum=250, default=100, help="Max variants."),
+        ),
+    ),
+    Cmd(
+        "set-inventory-policy",
+        "POST",
+        "/agent/stores/{store_id}/listings/inventory-policy",
+        summary=(
+            "Set whether variants keep selling out of stock. Fixes 'Sold out' despite stock: "
+            "CONTINUE = buyable (backorder), DENY = show Sold out / block at 0."
+        ),
+        body=(
+            body_field(
+                "items",
+                type=dict,
+                required=True,
+                repeatable=True,
+                help="Each: policy (DENY|CONTINUE, required) + variant_id OR sku to identify the "
+                "variant, e.g. {\"sku\": \"ABC\", \"policy\": \"CONTINUE\"}.",
+            ),
+        ),
+    ),
+    Cmd(
+        "publication-status",
+        "GET",
+        "/agent/stores/{store_id}/listings/publication-status",
+        summary=(
+            "Which publications each product is published on — is it live on the Online Store? "
+            "Needs the read_product_listings scope (older stores must reconnect to grant it)."
+        ),
+        flags=(
+            flag("skus", repeatable=True, help="Products by SKU (repeat for several)."),
+            flag("product_ids", repeatable=True, help="Products by Shopify product id (repeat)."),
+        ),
+    ),
 )
 
 app = build_group(NAME, "Shopify storefront listings (store_id is the first argument).", SPECS)

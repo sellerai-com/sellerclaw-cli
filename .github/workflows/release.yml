@@ -138,7 +138,15 @@ jobs:
         with:
           packages-dir: dist
 
-  # Cut the GitHub Release for the CLI tag (source archives + changelog) and keep it marked "Latest".
+  # Cut the GitHub Release for the CLI tag (source archives + changelog).
+  #
+  # Channel is decided by the tag/version shape (git tags aren't tied to a branch, so the
+  # pre-release status must live in the version string — same model openclaw uses):
+  #   * clean PEP 440 vX.Y.Z (cut from `main`)          → real release, marked "Latest"
+  #   * vX.Y.Z with a pre-release segment rcN/bN/aN      → "Pre-release", NOT marked "Latest"
+  #     (cut from `dev`, e.g. v0.41.0rc1). PyPI already treats these as pre-releases, so a plain
+  #     `pip install sellerclaw-cli` won't pick them up unless the user opts in with --pre / a pin.
+  #
   # The CLI installs from PyPI, so this release carries NO downloadable bundles — the Claude
   # plugin/connector artifacts are published independently by .github/workflows/publish-plugin.yml to
   # the rolling `plugin-latest` release:
@@ -152,14 +160,48 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Create the release (latest)
+      - name: Classify the tag and write release notes
+        id: channel
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          v="${tag#v}"
+          notes="$(mktemp)"
+          if [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Tag ${tag} → stable release (Latest)"
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+            echo "make_latest=true" >> "$GITHUB_OUTPUT"
+            echo "title=CLI ${tag}" >> "$GITHUB_OUTPUT"
+            {
+              echo "\`sellerclaw-cli\` ${tag} — the command-line client and MCP server for the SellerClaw Agent API."
+              echo ""
+              echo "**Install:** \`pip install sellerclaw-cli\` (or run it with \`uvx sellerclaw-cli\`). Published to PyPI: https://pypi.org/project/sellerclaw-cli/"
+              echo ""
+              echo "Looking for the **Claude plugin / connector** (Desktop \`.mcpb\` and claude-web \`.zip\`)? It ships separately — grab it from the [\`plugin-latest\`](https://github.com/sellerai-com/sellerclaw-cli/releases/tag/plugin-latest) release."
+            } > "$notes"
+          else
+            echo "Tag ${tag} → pre-release (not Latest)"
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+            echo "make_latest=false" >> "$GITHUB_OUTPUT"
+            echo "title=CLI ${tag} (pre-release)" >> "$GITHUB_OUTPUT"
+            {
+              echo "\`sellerclaw-cli\` ${tag} — **pre-release** (cut from \`dev\`). Not marked Latest; a plain \`pip install sellerclaw-cli\` won't pick it up."
+              echo ""
+              echo "**Install this pre-release explicitly:**"
+              echo "\`\`\`bash"
+              echo "pip install 'sellerclaw-cli==${v}'   # or: pip install --pre sellerclaw-cli"
+              echo "\`\`\`"
+              echo ""
+              echo "Published to PyPI as a pre-release: https://pypi.org/project/sellerclaw-cli/${v}/"
+            } > "$notes"
+          fi
+          echo "body_path=$notes" >> "$GITHUB_OUTPUT"
+
+      - name: Create the release
         uses: softprops/action-gh-release@v3
         with:
-          name: CLI ${{ github.ref_name }}
-          body: |
-            `sellerclaw-cli` ${{ github.ref_name }} — the command-line client and MCP server for the SellerClaw Agent API.
-
-            **Install:** `pip install sellerclaw-cli` (or run it with `uvx sellerclaw-cli`). Published to PyPI: https://pypi.org/project/sellerclaw-cli/
-
-            Looking for the **Claude plugin / connector** (Desktop `.mcpb` and claude-web `.zip`)? It ships separately — grab it from the [`plugin-latest`](https://github.com/sellerai-com/sellerclaw-cli/releases/tag/plugin-latest) release.
-          make_latest: true
+          name: ${{ steps.channel.outputs.title }}
+          prerelease: ${{ steps.channel.outputs.prerelease }}
+          make_latest: ${{ steps.channel.outputs.make_latest }}
+          body_path: ${{ steps.channel.outputs.body_path }}
