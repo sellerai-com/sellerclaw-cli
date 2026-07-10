@@ -52,7 +52,7 @@ SPECS = (
                 help=(
                     "Array of products to create. Each item: name*, description*, category*, "
                     "variations* (array of {supplier_variant_id, sku, name, available_quantity, "
-                    "shipping_cost, purchase_price?, sell_price?, images?, attributes?}), and "
+                    "shipping_cost, purchase_price?, images?, attributes?}), and "
                     "optional images. Supplier binding (supplier_id, supplier_product_id, "
                     "supplier_provider) must be all set together or all omitted."
                 ),
@@ -81,28 +81,24 @@ SPECS = (
         "PATCH",
         "/agent/products/{product_id}/prices",
         summary=(
-            "Set selling/purchase prices. Body: {\"sell_price\": 12.99} applies to all "
-            "variations; {\"variations\": [{\"supplier_variant_id\": ..., \"sell_price\": ...}]} "
-            "targets each."
+            "Set the purchase price (supplier cost). Body: {\"purchase_price\": 9.50} applies to "
+            "all variations; {\"variations\": [{\"supplier_variant_id\": ..., \"purchase_price\": ...}]} "
+            "targets each. The buyer-facing sell price is derived at publish time as cost x "
+            "channel markup, not set here."
         ),
         body=(
             body_field(
-                "sell_price",
-                type=float,
-                help="Broadcast selling price applied to every variation.",
-            ),
-            body_field(
                 "purchase_price",
                 type=float,
-                help="Broadcast purchase price applied to every variation.",
+                help="Broadcast purchase price (supplier cost) applied to every variation.",
             ),
             body_field(
                 "variations",
                 type=dict,
                 repeatable=True,
                 help=(
-                    "Per-variation prices: array of {supplier_variant_id*, sell_price?, "
-                    "purchase_price?}. Mutually exclusive with the broadcast prices above."
+                    "Per-variation prices: array of {supplier_variant_id*, purchase_price?}. "
+                    "Mutually exclusive with the broadcast price above."
                 ),
             ),
         ),
