@@ -83,6 +83,15 @@ SPECS = (
         ),
     ),
     Cmd(
+        "check-stock-by-product",
+        "GET",
+        "/agent/suppliers/{provider}/stock/product/{product_id}",
+        summary=(
+            "Stock for ALL variants of a product in ONE call. Prefer this over "
+            "looping check-stock / check-stock-batch per variant when you have the product id."
+        ),
+    ),
+    Cmd(
         "calculate-shipping",
         "POST",
         "/agent/suppliers/{provider}/shipping/calculate",

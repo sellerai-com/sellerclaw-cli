@@ -81,6 +81,20 @@ def test_listings_group_exposes_get_and_search() -> None:
     assert flags["--q"]["required"] is True
 
 
+def test_suppliers_expose_per_product_stock() -> None:
+    """``check-stock-by-product`` fetches stock for all variants of a product in one call."""
+    result = runner.invoke(app, ["commands", "--group", "suppliers"])
+    assert result.exit_code == 0, result.output
+    cmds = {row["command"] for row in _data(result.stdout)}
+    assert "check-stock-by-product" in cmds
+
+    detail = _data(runner.invoke(app, ["describe", "suppliers", "check-stock-by-product"]).stdout)
+    assert detail["method"] == "GET"
+    assert detail["positionals"] == ["provider", "product_id"]
+    assert detail["body"] is False
+    assert detail["example"].startswith("sellerclaw suppliers check-stock-by-product <provider> <product_id>")
+
+
 def test_catalog_and_orders_expose_search() -> None:
     """Products and orders are findable by name/number/SKU without dumping the whole list."""
     for group in ("catalog", "orders"):
