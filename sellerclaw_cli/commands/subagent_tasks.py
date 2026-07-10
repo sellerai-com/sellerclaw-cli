@@ -75,6 +75,61 @@ SPECS = (
         resolve_list_path=_LIST,
     ),
     Cmd(
+        "set-plan",
+        "POST",
+        "/agent/goals/agent-tasks/{task_id}/plan",
+        summary="Replace your task's plan — an ordered checklist you tick off and resume from.",
+        body=(
+            body_field(
+                "plan",
+                type=list,
+                required=True,
+                help=(
+                    "Ordered list of steps. Each item is an object with `text` (required) and "
+                    "optional `status` (pending|in_progress|done|skipped), `id`, and `metadata`. "
+                    "Omit `id` for a new step (the server assigns one); re-send an existing `id` "
+                    "to keep that item's history when restructuring."
+                ),
+                example=[
+                    {"text": "Search CJ for pet products"},
+                    {"text": "Pick the best candidate"},
+                    {"text": "Save chosen product to catalog"},
+                    {"text": "Publish to Shopify"},
+                ],
+            ),
+        ),
+        active_slot=_SLOT,
+        resolve_list_path=_LIST,
+    ),
+    Cmd(
+        "plan-check",
+        "POST",
+        "/agent/goals/agent-tasks/{task_id}/plan/check",
+        summary="Update one plan item: set its status and/or merge metadata into it.",
+        body=(
+            body_field(
+                "item_id",
+                required=True,
+                help="Id of the plan item to update (read it from `get`).",
+            ),
+            body_field(
+                "status",
+                choices=("pending", "in_progress", "done", "skipped"),
+                help="New status for the item.",
+            ),
+            body_field(
+                "metadata",
+                type=dict,
+                help=(
+                    "Keys to merge into the item — ids of things you created or saved so you don't "
+                    'redo them on resume (e.g. {"catalog_product_id": "prod-9"}).'
+                ),
+            ),
+        ),
+        active_slot=_SLOT,
+        resolve_list_path=_LIST,
+    ),
+    Cmd(
         "request-review",
         "POST",
         "/agent/goals/agent-tasks/{task_id}/request-review",
