@@ -19,7 +19,10 @@ SPECS = (
         "GET",
         "/agent/goals/my-tasks",
         summary="List the tasks assigned to you.",
-        flags=(flag("agent_id", help="Filter by agent id (defaults to the caller)."),),
+        flags=(
+            flag("agent_id", help="Filter by agent id (defaults to the caller)."),
+            flag("team_task_id", help="Filter to the subtasks of this team task (UUID)."),
+        ),
     ),
     Cmd(
         "get",

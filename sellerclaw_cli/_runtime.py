@@ -12,7 +12,7 @@ from sellerclaw_cli._errors import CliError, UserInputError
 from sellerclaw_cli._output import OutputFormat, print_error, print_ok
 
 BODY_OPTION_HELP = (
-    "JSON body: literal, '@-' for stdin, or '@path/to/file.json'. "
+    "JSON body: literal, '@-' or '-' for stdin, or '@path/to/file.json' (a bare path also works). "
     "'--json-body' is deprecated; use '--body' / '-b'."
 )
 
@@ -44,18 +44,19 @@ def parse_json_body(arg: str | None) -> Any:
 
     Accepted forms:
       * literal JSON (``{...}`` / ``[...]`` / ``"..."``);
-      * ``@-`` → read JSON from stdin;
+      * ``@-`` or a bare ``-`` → read JSON from stdin;
       * ``@path`` → read JSON from the file at ``path``;
       * a bare ``path`` to an existing file → read JSON from it.
 
     Why the bare-path form: agents (and humans typing the command) routinely
     pass ``-b /tmp/quote.json`` without remembering the curl-style ``@``
     prefix. Forcing the prefix made every "build a request body in a temp
-    file" workflow cost an extra retry. We now accept either spelling.
+    file" workflow cost an extra retry. We now accept either spelling. The bare
+    ``-`` stdin spelling mirrors the common Unix convention alongside ``@-``.
     """
     if arg is None:
         return None
-    if arg == "@-":
+    if arg in ("@-", "-"):
         return _decode_json(sys.stdin.read(), source="stdin")
     if arg.startswith("@"):
         path = Path(arg[1:]).expanduser()

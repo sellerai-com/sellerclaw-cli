@@ -100,23 +100,75 @@ def test_inventory_repeats_sku_query_params(
     assert route.calls.last.request.url.params.get_list("skus") == ["A", "B"]
 
 
+def test_set_inventory_policy_command_is_removed() -> None:
+    """The oversell toggle is gone — the store must never sell below zero."""
+    result = runner.invoke(app, ["shopify-listings", "set-inventory-policy", STORE_ID, "-b", "{}"])
+    assert result.exit_code != 0
+    assert "No such command" in result.stderr or "set-inventory-policy" in result.stderr
+
+
 @respx.mock
-def test_set_inventory_policy_posts_items(
+def test_publish_product_posts_full_body(
     env_pointing_at_fake_api: None,  # noqa: ARG001
     fake_api_url: str,
 ) -> None:
-    route = respx.post(f"{fake_api_url}/agent/stores/{STORE_ID}/listings/inventory-policy").mock(
+    """One-shot publish forwards product_ids + optional content to the new endpoint."""
+    route = respx.post(
+        f"{fake_api_url}/agent/stores/{STORE_ID}/draft-listings/publish-product"
+    ).mock(return_value=httpx.Response(200, json={"results": [], "errors": []}))
+    body = {
+        "product_ids": ["p1", "p2"],
+        "title": "Nice widget",
+        "tags": ["a", "b"],
+        "vendor": "Acme",
+        "sell_prices": {"SKU-1": "19.99"},
+        "compare_at_prices": {"SKU-1": "29.99"},
+        "barcodes": {"SKU-1": "0123456789012"},
+    }
+    result = runner.invoke(
+        app, ["shopify-listings", "publish-product", STORE_ID, "-b", json.dumps(body)]
+    )
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == body
+
+
+@respx.mock
+def test_create_drafts_forwards_optional_content_fields(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """create-drafts now accepts the same optional content/price fields, not just product_ids."""
+    route = respx.post(f"{fake_api_url}/agent/stores/{STORE_ID}/draft-listings").mock(
+        return_value=httpx.Response(200, json={"results": [], "errors": []})
+    )
+    body = {
+        "product_ids": ["p1"],
+        "description": "Body HTML",
+        "product_type": "Gadget",
+        "sell_prices": {"SKU-1": "9.99"},
+    }
+    result = runner.invoke(
+        app, ["shopify-listings", "create-drafts", STORE_ID, "-b", json.dumps(body)]
+    )
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == body
+
+
+@respx.mock
+def test_publish_works_without_publication_names(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """Visibility toggle needs no channel — the backend defaults to the Online Store."""
+    route = respx.post(f"{fake_api_url}/agent/stores/{STORE_ID}/listings/publish").mock(
         return_value=httpx.Response(200, json={"results": [], "errors": []})
     )
     result = runner.invoke(
         app,
-        ["shopify-listings", "set-inventory-policy", STORE_ID, "-b",
-         json.dumps({"items": [{"sku": "A", "policy": "CONTINUE"}]})],
+        ["shopify-listings", "publish", STORE_ID, "-b", json.dumps({"product_ids": ["p1"]})],
     )
     assert result.exit_code == 0, result.stderr
-    assert json.loads(route.calls.last.request.content) == {
-        "items": [{"sku": "A", "policy": "CONTINUE"}]
-    }
+    assert json.loads(route.calls.last.request.content) == {"product_ids": ["p1"]}
 
 
 @respx.mock

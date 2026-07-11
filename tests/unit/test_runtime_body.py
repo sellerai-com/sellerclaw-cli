@@ -69,6 +69,15 @@ def test_parse_json_body_stdin_dash(monkeypatch: pytest.MonkeyPatch) -> None:
     assert parse_json_body("@-") == {"from_stdin": True}
 
 
+def test_parse_json_body_bare_dash_reads_stdin(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A bare ``-`` reads stdin too (Unix convention), alongside ``@-``."""
+    import io
+    import sys as _sys
+
+    monkeypatch.setattr(_sys, "stdin", io.StringIO('{"from_stdin": true}'))
+    assert parse_json_body("-") == {"from_stdin": True}
+
+
 def test_parse_json_body_literal_wins_over_coincidental_path(tmp_path: Path) -> None:
     """A literal JSON value (object/array/string) is never re-interpreted as a path,
     even when a file at the same string happens to exist."""
