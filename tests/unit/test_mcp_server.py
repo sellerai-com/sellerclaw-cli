@@ -130,6 +130,25 @@ def test_describe_command_surfaces_flag_choices_and_ranges() -> None:
     assert flags["limit"]["maximum"] == 500
 
 
+def test_describe_a_whole_group_without_naming_a_command() -> None:
+    """Omitting the command describes every command in the group at once — one call, not N."""
+    detail = describe_command("listings")
+    assert detail["group"] == "listings"
+    described = {cmd["command"] for cmd in detail["commands"]}
+    assert described == {"get", "search"}
+    search = next(cmd for cmd in detail["commands"] if cmd["command"] == "search")
+    assert {f["name"] for f in search["flags"]} >= {"q", "product_id", "store_id", "sku"}
+
+
+def test_describe_surfaces_the_alternative_spellings_of_the_search_flag() -> None:
+    """The caller's first guess at the search flag must be accepted, so the schema advertises the
+    other spellings — the API names it --q here and --search there."""
+    detail = describe_command("listings", "search")
+    q_flag = next(f for f in detail["flags"] if f["name"] == "q")
+    assert "query" in q_flag["also_accepted_as"]
+    assert "search" in q_flag["also_accepted_as"]
+
+
 def test_describe_command_unknown_group_raises() -> None:
     with pytest.raises(UserInputError, match="unknown group 'does-not-exist'"):
         describe_command("does-not-exist", "list")
@@ -138,6 +157,13 @@ def test_describe_command_unknown_group_raises() -> None:
 def test_describe_command_unknown_command_raises() -> None:
     with pytest.raises(UserInputError, match="unknown command 'nope' in group 'orders'"):
         describe_command("orders", "nope")
+
+
+def test_reading_a_listing_by_id_redirects_to_the_channel_agnostic_group() -> None:
+    """`shopify-listings get` is the natural guess but a SellerClaw id is not channel-scoped, so
+    the verb only exists in the cross-channel group — the error has to say where it went."""
+    with pytest.raises(UserInputError, match="group='listings'"):
+        describe_command("shopify-listings", "get")
 
 
 # --------------------------------------------------------------------------- run

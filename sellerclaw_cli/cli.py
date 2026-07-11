@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import difflib
+import sys
 
 import click
 import typer
@@ -269,12 +270,48 @@ def _quoted_token(message: str) -> str | None:
     return message[start + 1 : end] if 0 <= start < end else None
 
 
+def _commands_in(group: str) -> list[str]:
+    """Command names of a registered group (empty when the group is unknown)."""
+    return [c.name for c in next((g.commands for g in REGISTRY if g.name == group), ())]
+
+
+def _sibling_group_hint(group: str, wanted: str) -> str | None:
+    """Redirect a channel group to the channel-agnostic group that actually owns the verb.
+
+    Marketplace groups are named ``<channel>-<entity>`` (``shopify-listings``, ``walmart-orders``)
+    and carry only the channel-specific verbs; reading one row by its SellerClaw id lives in the
+    cross-channel ``listings`` / ``orders`` group, because the id is not channel-scoped. Derived from
+    the registry rather than a hand-kept table, so every channel added later is covered for free.
+    """
+    if "-" not in group:
+        return None
+    entity = group.rsplit("-", 1)[-1]
+    if entity == group or wanted not in _commands_in(entity):
+        return None
+    return (
+        f"`{wanted}` is not a {group} command — it lives in the channel-agnostic group: "
+        f"`sellerclaw {entity} {wanted} ...` (works for every store)."
+    )
+
+
+def _extra_word_hint(group: str, bad: str, argv: list[str]) -> str | None:
+    """Catch an entity noun wedged in front of the real command (``catalog products get <id>``)."""
+    if bad not in argv:
+        return None
+    index = argv.index(bad)
+    following = argv[index + 1] if index + 1 < len(argv) else None
+    if following is None or following not in _commands_in(group):
+        return None
+    return f"`{bad}` is not a command — drop it: `sellerclaw {group} {following} ...`."
+
+
 def _emit_usage_error(exc: click.exceptions.UsageError) -> int:
     """Re-emit a Click usage error in our structured stderr contract with a fix to try.
 
-    Click's default "No such option/command" is terse and exits 2; an agent then guesses. We add the
-    closest match, flag the two confusions that bite most (a `--flag` on a body command, a `--flag`
-    that is really a positional), and point at `describe` — so the next attempt is informed.
+    Click's default "No such option/command" is terse and exits 2; an agent then guesses. We name the
+    real alternatives (always listing the group's actual commands rather than only a fuzzy guess),
+    redirect a channel group to the cross-channel group that owns the verb, and flag the two
+    confusions that bite most — a `--flag` on a body command, a `--flag` that is really a positional.
     """
     ctx = getattr(exc, "ctx", None)
     group, command = _group_and_command(ctx)
@@ -290,26 +327,35 @@ def _emit_usage_error(exc: click.exceptions.UsageError) -> int:
             parts.append(f"This command takes a JSON body via -b, not --options (fields: {fields}).")
         elif spec is not None and (spec.body_freeform or spec.has_body):
             parts.append("This command takes a free-form JSON body via -b, not --options.")
+        elif spec is not None and spec.flags:
+            options = ", ".join(f.primary_option for f in spec.flags)
+            parts.append(f"Accepted options: {options}.")
     elif command is None and "No such command" in exc.format_message():
-        bad = _quoted_token(exc.format_message())
+        bad = _quoted_token(exc.format_message()) or ""
         if group is not None:
-            # Unknown command inside a known group → suggest that group's commands.
-            names = [c.name for c in next((g.commands for g in REGISTRY if g.name == group), ())]
+            # Unknown command inside a known group. A fuzzy guess alone is a coin flip, so show the
+            # real command list, and check whether the verb simply lives in another group.
+            names = _commands_in(group)
+            for hint in (
+                _extra_word_hint(group, bad, sys.argv[1:]),
+                _sibling_group_hint(group, bad),
+            ):
+                if hint:
+                    parts.append(hint)
+            parts.append(f"Commands in `{group}`: {', '.join(names)}.")
         else:
-            # Unknown top-level token → it's a wrong GROUP name; suggest close group names
-            # (e.g. `shopify-products` → `shopify-listings`).
+            # Unknown top-level token → a wrong GROUP name (e.g. `shopify-products`).
             names = [g.name for g in REGISTRY]
-        near = difflib.get_close_matches(bad, names, n=3, cutoff=0.4) if bad else []
-        if near:
-            label = "command" if group is not None else "group"
-            parts.append(f"Did you mean {label}: " + ", ".join(near) + "?")
+            near = difflib.get_close_matches(bad, names, n=3, cutoff=0.6) if bad else []
+            if near:
+                parts.append("Did you mean group: " + ", ".join(near) + "?")
 
     if group and command:
         parts.append(f"Run `sellerclaw describe {group} {command}` for positionals, options, and body fields.")
     elif group:
-        parts.append(f"Run `sellerclaw commands --group {group}` to list its commands.")
+        parts.append(f"Run `sellerclaw describe {group}` to see every command in the group with its options.")
     else:
-        parts.append("Run `sellerclaw groups` to list command groups.")
+        parts.append("Run `sellerclaw guide` for the whole command surface.")
 
     print_error(UserInputError(" ".join(parts)))
     return UserInputError.exit_code

@@ -27,12 +27,46 @@ def _err(stderr: str) -> str:
 
 def test_unknown_option_suggests_closest(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     """A near-miss flag name surfaces Click's 'did you mean' plus a describe pointer — structured."""
-    code, _out, err = _run(monkeypatch, capsys, ["research-trends", "interest-over-time", "--keyword", "x"])
+    code, _out, err = _run(monkeypatch, capsys, ["research-trends", "interest-over-time", "--timeframes", "x"])
     assert code == 1
     msg = _err(err)
-    assert "No such option: --keyword" in msg
-    assert "--keywords" in msg  # Click's own suggestion
+    assert "No such option: --timeframes" in msg
+    assert "--timeframe" in msg  # Click's own suggestion
     assert "describe research-trends interest-over-time" in msg
+
+
+def test_unknown_option_lists_the_accepted_ones(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """When nothing is close enough to guess, the error still names every option the command takes."""
+    code, _out, err = _run(monkeypatch, capsys, ["listings", "search", "--name", "apron"])
+    assert code == 1
+    msg = _err(err)
+    assert "Accepted options:" in msg
+    assert "--product-id" in msg
+
+
+@pytest.mark.parametrize(
+    "spelling",
+    [
+        pytest.param("--q", id="canonical"),
+        pytest.param("--query", id="query"),
+        pytest.param("--search", id="search"),
+        pytest.param("--text", id="text"),
+    ],
+)
+def test_every_spelling_of_the_search_flag_is_accepted(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    spelling: str,
+) -> None:
+    """Free-text search is spelled --q here and --search there across the API's groups. Whichever
+    one the caller reaches for, the command must accept it — a rejected guess costs a whole turn."""
+    monkeypatch.delenv("SELLERCLAW_TOKEN", raising=False)
+    code, _out, err = _run(monkeypatch, capsys, ["listings", "search", spelling, "apron"])
+    # No token in the environment, so the call stops at auth (exit 3) — the point is that it got
+    # past option parsing (exit 1 = "No such option") and was recognised as the search flag.
+    assert code != 1, _err(err)
 
 
 def test_flag_on_body_command_points_to_body(
@@ -57,11 +91,45 @@ def test_positional_passed_as_flag_is_explained(
 
 
 def test_unknown_command_lists_group(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    """An unknown command names the group's real commands — a fuzzy guess alone is a coin flip."""
     code, _out, err = _run(monkeypatch, capsys, ["subagent-tasks", "progress", "X"])
     assert code == 1
     msg = _err(err)
     assert "No such command 'progress'" in msg
-    assert "commands --group subagent-tasks" in msg
+    assert "Commands in `subagent-tasks`:" in msg
+    assert "add-note" in msg
+
+
+@pytest.mark.parametrize(
+    ("group", "sibling"),
+    [
+        pytest.param("shopify-listings", "listings", id="shopify-listings"),
+        pytest.param("walmart-orders", "orders", id="walmart-orders"),
+        pytest.param("ebay-listings", "listings", id="ebay-listings"),
+    ],
+)
+def test_reading_by_id_redirects_to_the_channel_agnostic_group(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    group: str,
+    sibling: str,
+) -> None:
+    """A SellerClaw id is not channel-scoped, so `get` lives only in the cross-channel group. The
+    error must say so for every channel — the natural guess is `<channel>-listings get`."""
+    code, _out, err = _run(monkeypatch, capsys, [group, "get", "some-id"])
+    assert code == 1
+    msg = _err(err)
+    assert f"`sellerclaw {sibling} get ...`" in msg
+
+
+def test_a_redundant_noun_before_the_command_is_named(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`catalog products get <id>` — the entity noun is already the group; say exactly that."""
+    code, _out, err = _run(monkeypatch, capsys, ["catalog", "products", "get", "some-id"])
+    assert code == 1
+    msg = _err(err)
+    assert "drop it: `sellerclaw catalog get ...`" in msg
 
 
 def test_unknown_group_suggests_close_group(

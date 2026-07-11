@@ -9,6 +9,7 @@ Replaces the old spec-based `_generic.py`. Commands:
 
 from __future__ import annotations
 
+import difflib
 import json
 
 import typer
@@ -24,13 +25,16 @@ def register(app: typer.Typer) -> None:
     app.command("guide", help="Onboarding for AI agents: conventions, group list, how to call commands.")(
         guide_cmd
     )
-    app.command("groups", help="List every command group with a one-line summary and command count.")(
+    app.command("groups", help="List every command group with a one-line summary and its commands.")(
         groups_cmd
     )
     app.command("commands", help="List commands; filter to one group with --group.")(commands_cmd)
     app.command(
         "describe",
-        help="Show full detail for one command: positional args, flags, body, and an example.",
+        help=(
+            "Show full detail — positionals, flags, body, example — for one command, or for every "
+            "command in a group when the command is omitted."
+        ),
     )(describe_cmd)
 
 
@@ -126,18 +130,33 @@ def guide_cmd(ctx: typer.Context) -> None:
             "Most groups have an `overview` command for a one-call summary.",
         ],
         "discovery": [
-            "`sellerclaw groups` — all groups.",
-            "`sellerclaw commands --group <group>` — commands in a group.",
-            "`sellerclaw describe <group> <command>` — positionals, flags, body fields, example.",
-            "`sellerclaw <group> --help` — the same via Typer help.",
+            "`sellerclaw describe <group>` — every command in the group with its positionals, "
+            "flags, body fields and a ready example. One call; prefer it over the ladder below.",
+            "`sellerclaw describe <group> <command>` — the same for a single command.",
+            "`sellerclaw groups` — every group with its command names (this payload has them too).",
+            "`sellerclaw commands --group <group>` — a flat command list.",
+        ],
+        "finding_things": [
+            "By SellerClaw id: `listings get <listing_id>`, `orders get <order_id>`, "
+            "`catalog get <product_id>` — these work across every store; the per-channel groups "
+            "(`shopify-listings`, `ebay-orders`, …) do not read a row by id.",
+            "Listings of a catalog product (a multi-variant publish makes one listing per variant): "
+            "`listings search --product-id <product_id>`. Also `--store-id`, `--sku`, `--remote-id`, "
+            "`--platform`, `--status`.",
+            "Catalog product by name/SKU/supplier item: `catalog search --q <text>`, "
+            "`catalog list --sku <sku>`, `catalog list --supplier-provider cj "
+            "--supplier-product-id <id>` (the 'do I already have this?' check).",
+            "Orders: `orders search --q <text>` (order number, marketplace id, customer, line-item "
+            "SKU/title) or `orders list --product-id <product_id>` (who bought this).",
+            "Free-text search accepts any spelling of the flag: --q / --query / --search / --text.",
         ],
         "fixing_errors": [
             "Errors are JSON on stderr: read `error.message` — it names the exact problem and the fix.",
             "Bad `-b` body? The CLI checks it locally first and lists the allowed fields plus the "
             "closest match (e.g. unknown 'note' (did you mean 'message'?)). Run "
             "`sellerclaw describe <group> <command>` and resend with the listed `body_fields`.",
-            "`No such command` / `No such option`? The message suggests the closest name — or run "
-            "`sellerclaw commands --group <group>` / `sellerclaw <group> --help`.",
+            "`No such command`? The message lists the group's real commands, and says so when the "
+            "verb belongs to another group (`shopify-listings get` -> `listings get`).",
         ],
         "auth": {
             "env": ["SELLERCLAW_TOKEN", "SELLERCLAW_API_URL"],
@@ -156,8 +175,14 @@ def guide_cmd(ctx: typer.Context) -> None:
 
 
 def groups_cmd(ctx: typer.Context) -> None:
+    # Carry the command names, not just a count: a count tells the caller nothing and forces a
+    # second call to find out whether the verb they want even exists here.
     data = [
-        {"group": g.name, "summary": g.help, "command_count": len(g.commands)}
+        {
+            "group": g.name,
+            "summary": g.help,
+            "commands": [c.name for c in g.commands],
+        }
         for g in sorted(REGISTRY, key=lambda x: x.name)
     ]
     print_ok(data, fmt=_fmt(ctx))
@@ -179,39 +204,66 @@ def commands_cmd(
     print_ok(data, fmt=_fmt(ctx))
 
 
+def _command_detail(group: str, cmd: Cmd) -> dict[str, object]:
+    """Everything needed to call one command correctly, without a second lookup."""
+    return {
+        "group": group,
+        "command": cmd.name,
+        "method": cmd.method,
+        "path": cmd.path,
+        "summary": cmd.summary,
+        "positionals": positionals_of(cmd.path),
+        "flags": _flag_repr(group, cmd),
+        "body": cmd.takes_body,
+        "body_fields": _body_repr(cmd),
+        "body_strict": cmd.body_strict if cmd.body else None,
+        "body_freeform": cmd.takes_body and not cmd.body and not cmd.query_body,
+        "query_body": cmd.query_body,
+        "example": _example(group, cmd),
+    }
+
+
 def describe_cmd(
     ctx: typer.Context,
     group: str = typer.Argument(..., help="Group name (see `sellerclaw groups`)."),
-    command: str = typer.Argument(..., help="Command name (see `sellerclaw commands --group <group>`)."),
+    command: str | None = typer.Argument(
+        None,
+        help="Command name. Omit it to describe every command in the group in one call.",
+    ),
 ) -> None:
+    """Describe one command, or — with no command — the whole group at once.
+
+    Describing a whole group is the cheap path: one call returns every command's positionals, flags,
+    body fields and a ready example, so nothing else has to be guessed or looked up.
+    """
     matched_group = next((g for g in REGISTRY if g.name == group), None)
     if matched_group is None:
-        emit_error(UserInputError(f"unknown group: {group!r}. Run `sellerclaw groups`."))
+        near = difflib.get_close_matches(group, [g.name for g in REGISTRY], n=3, cutoff=0.6)
+        suggestion = f" Did you mean: {', '.join(near)}?" if near else ""
+        emit_error(
+            UserInputError(f"unknown group: {group!r}.{suggestion} Run `sellerclaw groups`.")
+        )
+        return
+    if command is None:
+        print_ok(
+            {
+                "group": matched_group.name,
+                "summary": matched_group.help,
+                "commands": [
+                    _command_detail(matched_group.name, cmd) for cmd in matched_group.commands
+                ],
+            },
+            fmt=_fmt(ctx),
+        )
         return
     cmd = next((c for c in matched_group.commands if c.name == command), None)
     if cmd is None:
+        names = [c.name for c in matched_group.commands]
         emit_error(
             UserInputError(
                 f"unknown command {command!r} in group {group!r}. "
-                f"Run `sellerclaw commands --group {group}`."
+                f"Commands in `{group}`: {', '.join(names)}."
             )
         )
         return
-    print_ok(
-        {
-            "group": matched_group.name,
-            "command": cmd.name,
-            "method": cmd.method,
-            "path": cmd.path,
-            "summary": cmd.summary,
-            "positionals": positionals_of(cmd.path),
-            "flags": _flag_repr(matched_group.name, cmd),
-            "body": cmd.takes_body,
-            "body_fields": _body_repr(cmd),
-            "body_strict": cmd.body_strict if cmd.body else None,
-            "body_freeform": cmd.takes_body and not cmd.body and not cmd.query_body,
-            "query_body": cmd.query_body,
-            "example": _example(matched_group.name, cmd),
-        },
-        fmt=_fmt(ctx),
-    )
+    print_ok(_command_detail(matched_group.name, cmd), fmt=_fmt(ctx))

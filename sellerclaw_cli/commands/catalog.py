@@ -17,10 +17,30 @@ SPECS = (
         "list",
         "GET",
         "/agent/products",
-        summary="List catalog products.",
+        summary=(
+            "List catalog products, optionally narrowed by any mix of criteria (all AND-combined). "
+            "With no criteria and no --limit it returns the whole catalog; 'total' always carries "
+            "the full match count, so a truncated page is visible."
+        ),
         flags=(
-            flag("status", help="Filter by status (sourced, active, archived)."),
-            flag("supplier_provider", help="Filter by supplier provider code."),
+            flag(
+                "status",
+                help="Filter by catalog status.",
+                choices=("sourced", "active", "archived"),
+            ),
+            flag("supplier_provider", help="Filter by supplier provider code, e.g. 'cj'."),
+            flag(
+                "supplier_product_id",
+                help=(
+                    "Supplier-side product id: finds the catalog row sourced from that supplier "
+                    "item. This is the 'do I already have this product?' check — run it before "
+                    "sourcing a product a second time. Pair with --supplier-provider."
+                ),
+            ),
+            flag("sku", help="Exact SKU of any variation (finds the product it belongs to)."),
+            flag("q", help="Free text: substring of the name or any variation SKU."),
+            flag("limit", type=int, minimum=1, maximum=500, help="Max results (default: no cap)."),
+            flag("offset", type=int, minimum=0, default=0, help="Results to skip (paging)."),
         ),
     ),
     Cmd("get", "GET", "/agent/products/{product_id}", summary="Get one product by id."),
@@ -30,12 +50,17 @@ SPECS = (
         "/agent/products",
         summary=(
             "Find catalog products by name or SKU (case-insensitive substring). Returns the "
-            "matching products, each with its id for a 'get' follow-up."
+            "matching products, each with its id for a 'get' follow-up. For an exact SKU or a "
+            "supplier-item lookup use `catalog list --sku` / `--supplier-product-id`."
         ),
         flags=(
             flag("q", required=True, help="Search text (matched as a substring of the name or any variation SKU)."),
             flag("limit", type=int, minimum=1, maximum=500, default=100, help="Max results."),
-            flag("status", help="Also filter by status (sourced, active, archived)."),
+            flag(
+                "status",
+                help="Also filter by status.",
+                choices=("sourced", "active", "archived"),
+            ),
         ),
     ),
     Cmd(

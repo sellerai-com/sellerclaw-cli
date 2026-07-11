@@ -18,7 +18,7 @@ import difflib
 import inspect
 import re
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 import typer
@@ -616,12 +616,46 @@ def _make_callback(group: str, cmd: Cmd):
     return _callback
 
 
+# Free-text search grew a different name in almost every group the API accreted: `--q` here,
+# `--search` there, `--query` / `--keyword` elsewhere. The caller can't know which, and a guessed
+# spelling used to cost a whole turn to "No such option". So whichever name a command declares, all
+# of them are accepted — the canonical name still leads in `--help` and `describe`.
+SEARCH_FLAG_SPELLINGS: tuple[str, ...] = (
+    "--q",
+    "--query",
+    "--search",
+    "--text",
+    "--keyword",
+    "--keywords",
+)
+_SEARCH_FLAG_NAMES = frozenset({"q", "query", "search", "text", "keyword", "keywords"})
+
+
+def _with_search_aliases(cmd: Cmd) -> Cmd:
+    """Let a command's free-text search flag answer to every spelling of it."""
+    if not any(f.name in _SEARCH_FLAG_NAMES for f in cmd.flags):
+        return cmd
+    # Never shadow another flag on the same command, nor `-q/--query` on a raw-GraphQL command
+    # (there it carries the document itself).
+    taken = {option for f in cmd.flags for option in f.option_names}
+    if cmd.query_body:
+        taken.add("--query")
+    flags = tuple(
+        replace(f, aliases=(*f.aliases, *(s for s in SEARCH_FLAG_SPELLINGS if s not in taken)))
+        if f.name in _SEARCH_FLAG_NAMES
+        else f
+        for f in cmd.flags
+    )
+    return replace(cmd, flags=flags)
+
+
 def build_group(name: str, help: str, commands: Sequence[Cmd]) -> typer.Typer:
     """Create a Typer sub-app for a group and record it in ``REGISTRY``."""
+    resolved = tuple(_with_search_aliases(cmd) for cmd in commands)
     app = typer.Typer(name=name, help=help, no_args_is_help=True)
-    for cmd in commands:
+    for cmd in resolved:
         app.command(cmd.name, help=command_help(cmd))(_make_callback(name, cmd))
     # Idempotent on re-import / re-build under the same name.
     REGISTRY[:] = [g for g in REGISTRY if g.name != name]
-    REGISTRY.append(GroupSpec(name=name, help=help, commands=tuple(commands)))
+    REGISTRY.append(GroupSpec(name=name, help=help, commands=resolved))
     return app
