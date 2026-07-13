@@ -85,9 +85,13 @@ SPECS = (
         "POST",
         "/agent/walmart/stores/{store_id}/listings/draft",
         summary=(
-            "Create local DRAFT listings from catalog products before publishing "
-            '(body: {"product_ids": ["<uuid>", ...], "product_type": "Office Supplies"}). '
-            "A Walmart productType is required (each category has its own attribute spec)."
+            "Create local DRAFT listings from catalog products before publishing. A Walmart "
+            "productType is required (each category has its own attribute spec), and every "
+            "variation needs its own product identifier (GTIN/UPC) — Walmart lists each variation "
+            "as a separate item. Variations of one product are tied into one page by "
+            "variant_attribute_names (up to 3, e.g. color+size); without it each variation becomes "
+            "a separate Walmart page. Re-running for a product that gained a variation drafts just "
+            "that one, into the same group."
         ),
         body=(
             body_field(
@@ -99,6 +103,42 @@ SPECS = (
             body_field(
                 "product_type",
                 help="Walmart productType applied to every draft, e.g. 'Office Supplies'.",
+            ),
+            body_field("brand", help="Brand name applied to every variation."),
+            body_field(
+                "attributes",
+                type=dict,
+                help=(
+                    "Category attributes shared by every variation, e.g. {\"material\": \"Cotton\"}. "
+                    "Passed to Walmart as-is."
+                ),
+            ),
+            body_field(
+                "orderable",
+                type=dict,
+                help=(
+                    "Extra Walmart Orderable attributes (country of origin, shipping weight, "
+                    "package dimensions). Passed as-is."
+                ),
+            ),
+            body_field(
+                "variant_attribute_names",
+                repeatable=True,
+                help='Attributes the variations differ by, max 3, e.g. "color" "size".',
+            ),
+            body_field(
+                "variant_group_id",
+                help="Optional group id (max 20 chars); derived from the product and store if omitted.",
+            ),
+            body_field(
+                "variants",
+                type=dict,
+                repeatable=True,
+                help=(
+                    "Per-variation fields: {sku, product_id, product_id_type?, attributes: "
+                    '{color: "Red"}, is_primary?, swatch_image_url?}. One variation should be '
+                    "is_primary (it opens by default); the first one is used otherwise."
+                ),
             ),
         ),
     ),
@@ -135,7 +175,9 @@ SPECS = (
         "/agent/walmart/stores/{store_id}/listings/withdraw",
         summary=(
             "Retire published Walmart listings from the catalog "
-            '(body: {"listing_ids": ["<uuid>", ...]}). The rows are kept for history.'
+            '(body: {"listing_ids": ["<uuid>", ...]}). Pass "skus" to retire only those variations '
+            "of the group; if the default variation leaves, another one takes its place. The rows "
+            "are kept for history."
         ),
         body=(
             body_field(
@@ -144,6 +186,11 @@ SPECS = (
                 required=True,
                 help="Listing UUIDs to withdraw from the store.",
             ),
+            body_field(
+                "skus",
+                repeatable=True,
+                help="Retire only these variations of the group; omit to retire the whole group.",
+            ),
         ),
     ),
     Cmd(
@@ -151,8 +198,11 @@ SPECS = (
         "PATCH",
         "/agent/walmart/stores/{store_id}/listings/{listing_id}",
         summary=(
-            "Edit a Walmart listing group; price/stock are pushed to Walmart when PUBLISHED "
-            '(body: {"title"?, "description"?, "sell_prices"?: {sku: price}, "quantities"?: {sku: qty}}).'
+            "Edit a Walmart listing group. Price/stock are pushed to Walmart when PUBLISHED "
+            '(body: {"title"?, "description"?, "sell_prices"?: {sku: price}, "quantities"?: {sku: qty}}). '
+            'A "spec" patch (product type, brand, attributes, identifiers, variant grouping, '
+            "primary variation) changes the catalogue item, which Walmart only accepts as a new "
+            "item feed for the whole group — poll publish-status afterwards."
         ),
         body=(
             body_field("title", help="New product title."),
@@ -166,6 +216,15 @@ SPECS = (
                 "quantities",
                 type=dict,
                 help="New stock quantities keyed by listing SKU, e.g. {\"SKU-1\": 5}.",
+            ),
+            body_field(
+                "spec",
+                type=dict,
+                help=(
+                    "Catalogue patch: {product_type?, brand?, attributes?, orderable?, "
+                    "variant_attribute_names?, variants?: [{sku, product_id?, attributes?, "
+                    "is_primary?}]}. Omitted fields are left as they are."
+                ),
             ),
         ),
     ),

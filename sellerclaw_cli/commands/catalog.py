@@ -77,9 +77,11 @@ SPECS = (
                 help=(
                     "Array of products to create. Each item: name*, description*, category*, "
                     "variations* (array of {supplier_variant_id, sku, name, available_quantity, "
-                    "shipping_cost, purchase_price?, images?, attributes?}), and "
-                    "optional images. Supplier binding (supplier_id, supplier_product_id, "
-                    "supplier_provider) must be all set together or all omitted."
+                    "shipping_cost, purchase_price?, images?, attributes?, barcode?}), and "
+                    "optional images. barcode is the variation's GTIN/UPC/EAN — marketplaces "
+                    "identify the item by it and Walmart refuses a listing without one. Supplier "
+                    "binding (supplier_id, supplier_product_id, supplier_provider) must be all set "
+                    "together or all omitted."
                 ),
             ),
         ),
