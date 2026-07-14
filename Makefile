@@ -7,11 +7,12 @@
 #   make check          lint + test
 #   make build          Build wheel + sdist into dist/
 #   make plugin         Build the Claude plugin variants from plugin/ (TARGET=claude-code for one)
+#   make plugin-check   Verify the committed plugins/ tree still matches plugin/ (writes nothing)
 #   make mcpb           Build the Claude Desktop extension bundle (dist/sellerclaw.mcpb)
 #   make web-zip        Pack the claude-web plugin for manual upload to claude.ai (dist/sellerclaw-claude-web.zip)
 #   make plugin-bump    Bump plugin/VERSION + rebuild committed plugin (publish on push, no CLI release)
 #   make release-check  Report whether a new release is needed
-#   make release        Bump version, tag vX.Y.Z, push -> CI publishes to PyPI
+#   make release        Bump version, tag vX.Y.Z, push -> CI publishes to PyPI (runs `check` first)
 #
 # Plugin vs CLI versioning:
 #   The Claude plugin/connector is versioned independently of the CLI via plugin/VERSION (build_plugin.py
@@ -26,7 +27,8 @@
 #   make release VERSION=1.2.3   # tag an exact version
 #   make release ALLOW_DIRTY=1   # skip the clean-working-tree check
 #   make release FORCE=1         # tag even if shipped files are unchanged
-# REMOTE defaults to origin.
+#   make release SKIP_CHECKS=1   # skip the lint + unit-test gate (emergencies only)
+# Every release path runs `make check` first — see release-preflight. REMOTE defaults to origin.
 
 UV ?= uv
 REMOTE ?= origin
@@ -37,7 +39,7 @@ PART ?= minor
 # release is warranted — test/CI/docs-only churn doesn't require one.
 SHIPPED_PATHS = sellerclaw_cli pyproject.toml README.md
 
-.PHONY: install lint test check build plugin mcpb web-zip plugin-bump release-check release release-latest release-beta
+.PHONY: install lint test check build plugin plugin-check mcpb web-zip plugin-bump release-check release-preflight release release-latest release-beta
 
 install:
 	$(UV) sync --group dev
@@ -59,6 +61,12 @@ build:
 # the rest are artifacts under dist/. Build just one with `make plugin TARGET=claude-code`.
 plugin:
 	$(UV) run python scripts/build_plugin.py $(if $(TARGET),--target $(TARGET),)
+
+# Is the committed plugins/ tree still what plugin/ produces? Nothing rebuilds it automatically, so
+# an edit to plugin/ that was never followed by `make plugin` ships stale skills to every marketplace
+# install — silently, with a green test suite. Rebuilds into a temp dir and diffs; writes nothing.
+plugin-check:
+	$(UV) run python scripts/build_plugin.py --check
 
 # Build the Claude Desktop Extension bundle (.mcpb). Assembles the desktop target from plugin/
 # (stamps the version into manifest.json), then packs it -> dist/sellerclaw.mcpb. The bundle launches
@@ -117,6 +125,26 @@ release-check:
 	  git diff --stat "$$last" -- $(SHIPPED_PATHS); \
 	fi
 
+# Everything CI can fail a release on, run BEFORE the tag exists (~25s):
+#   * check       — ruff + pyright + unit tests, the same gate release.yml puts in front of PyPI.
+#   * plugin-check — the committed plugins/ tree still matches plugin/. Not a test, and no test
+#     covers it: `release` pushes the branch first, and a push to main both republishes the
+#     marketplace plugin from that tree AND reddens ci.yml's drift job. Catching it here turns
+#     "released, CI red, users on stale skills" into "run `make plugin` and commit".
+# It is a *prerequisite* of `release`, so it runs before anything is tagged or pushed and a failure
+# leaves no tag behind. (Prerequisite, not an in-recipe `$(MAKE)` call: make executes recipe lines
+# that mention $(MAKE) even under `-n`, which would turn a dry-run `make -n release` into a real one.)
+# Escape hatch: SKIP_CHECKS=1 (emergencies only — you are shipping unverified code).
+release-preflight:
+	@set -e; \
+	if [ -n "$${SKIP_CHECKS:-}" ]; then \
+	  echo "release-preflight: SKIP_CHECKS=1 — skipping lint, unit tests and the plugin drift check. Shipping unverified."; \
+	else \
+	  echo "release-preflight: lint + unit tests + plugin drift check must pass before tagging..."; \
+	  $(MAKE) --no-print-directory check plugin-check; \
+	  echo "release-preflight: OK."; \
+	fi
+
 # Bump the version, create an annotated tag vX.Y.Z, push the branch and the tag.
 # Pushing a v*.*.* tag triggers .github/workflows/release.yml, which verifies,
 # builds, and publishes to PyPI. Refuses to tag when the shipped CLI is unchanged
@@ -127,7 +155,7 @@ release-check:
 # and a PyPI pre-release. PREFER the `release-latest` / `release-beta` wrappers below — they compute
 # the number for you so the format can't be wrong. `release` is the low-level target they delegate to;
 # call it directly only for an explicit one-off (make release VERSION=0.41.0rc1).
-release:
+release: release-preflight
 	@set -eu; \
 	if [ -z "$${ALLOW_DIRTY:-}" ] && [ -n "$$(git status --porcelain)" ]; then \
 	  echo "Working tree is dirty. Commit your changes or rerun with ALLOW_DIRTY=1." >&2; \

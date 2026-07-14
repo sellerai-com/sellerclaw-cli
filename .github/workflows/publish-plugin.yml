@@ -55,14 +55,7 @@ jobs:
       # The committed marketplace plugin is generated from plugin/ — refuse to publish if it drifts,
       # so the marketplace and the bundles always ship the same version.
       - name: Verify committed marketplace plugin is up to date
-        run: |
-          set -euo pipefail
-          python3 scripts/build_plugin.py --target claude-code
-          if ! git diff --quiet -- plugins/; then
-            echo "::error::plugins/claude-code is stale — run 'make plugin' and commit before publishing." >&2
-            git diff --stat -- plugins/
-            exit 1
-          fi
+        run: python3 scripts/build_plugin.py --check
 
       - name: Build Desktop .mcpb bundle
         run: |

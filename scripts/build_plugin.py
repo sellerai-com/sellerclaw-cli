@@ -13,6 +13,11 @@ package version from ``pyproject.toml`` is stamped into the plugin/desktop manif
 
 ``claude-code`` lands in the committed ``plugins/`` tree (the marketplace references it by path); the
 rest are throwaway artifacts under ``dist/``.
+
+Nothing rebuilds the committed tree on its own, so an edit to ``plugin/`` that was never followed by
+``make plugin`` ships stale skills to everyone installing from the marketplace — silently, with a
+green test suite. ``--check`` is the guard: it rebuilds into a temp dir and diffs against the
+committed tree, writing nothing. CI and the release gate both run it.
 """
 
 from __future__ import annotations
@@ -21,6 +26,7 @@ import argparse
 import json
 import shutil
 import sys
+import tempfile
 import tomllib
 from pathlib import Path
 from typing import NamedTuple
@@ -134,6 +140,54 @@ def available_targets(repo_root: Path) -> list[str]:
     return [n for n in TARGETS if (repo_root / "plugin" / "targets" / n).is_dir()]
 
 
+def is_committed(name: str) -> bool:
+    """Is this target's output committed to the repo (rather than a throwaway dist/ artifact)?
+
+    Committed output is what the marketplace serves straight from ``main``, so it is the only output
+    that can silently drift from ``plugin/`` — nothing rebuilds it on install, push or release.
+    """
+    return not TARGETS[name].out.startswith("dist/")
+
+
+def committed_targets(repo_root: Path) -> list[str]:
+    return [n for n in available_targets(repo_root) if is_committed(n)]
+
+
+def _snapshot(root: Path) -> dict[str, tuple[bytes, bool]]:
+    """Every file under ``root`` as content + executable bit, keyed by its relative path."""
+    return {
+        p.relative_to(root).as_posix(): (p.read_bytes(), bool(p.stat().st_mode & 0o111))
+        for p in root.rglob("*")
+        if p.is_file()
+    }
+
+
+def check_target(name: str, repo_root: Path, version: str | None = None) -> list[str]:
+    """Compare a target's committed output against a fresh build. Returns drift; empty when in sync.
+
+    Read-only: the fresh build lands in a temp dir, so this never writes to the working tree and can
+    run inside the release gate — which demands a clean tree — without dirtying the very tree the
+    release is about to tag.
+    """
+    spec = TARGETS[name]
+    version = version or read_version(repo_root)
+    with tempfile.TemporaryDirectory() as tmp:
+        fresh = assemble(name, repo_root / "plugin", Path(tmp) / name, version, spec.layers)
+        want = _snapshot(fresh)
+    committed = repo_root / spec.out
+    have = _snapshot(committed) if committed.is_dir() else {}
+
+    drift: list[str] = []
+    for rel in sorted(want.keys() | have.keys()):
+        if rel not in have:
+            drift.append(f"never committed: {spec.out}/{rel}")
+        elif rel not in want:
+            drift.append(f"stale leftover, plugin/ no longer produces it: {spec.out}/{rel}")
+        elif have[rel] != want[rel]:
+            drift.append(f"out of date: {spec.out}/{rel}")
+    return drift
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Build SellerClaw Claude plugin variants from plugin/.")
     parser.add_argument("--target", choices=sorted(TARGETS), help="Build one target (default: all available).")
@@ -153,12 +207,38 @@ def main(argv: list[str] | None = None) -> int:
         help="After building, pack the target's output into this .zip (one folder, for manual upload "
         "to claude.ai's Upload plugin dialog). Requires --target.",
     )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Write nothing: verify the committed plugin output still matches what plugin/ produces, "
+        "and exit 1 listing the offending files if it does not. Used by CI and the release gate.",
+    )
     args = parser.parse_args(argv)
     repo_root = args.repo_root.resolve()
     version = args.version or read_version(repo_root)
     if args.zip and not args.target:
         print("--zip requires --target", file=sys.stderr)
         return 1
+    if args.check:
+        if args.zip:
+            print("--zip cannot be combined with --check", file=sys.stderr)
+            return 1
+        if args.target and not is_committed(args.target):
+            print(
+                f"--check: {args.target} is a throwaway dist/ artifact — nothing is committed to check",
+                file=sys.stderr,
+            )
+            return 1
+        names = [args.target] if args.target else committed_targets(repo_root)
+        drift = [line for name in names for line in check_target(name, repo_root, version)]
+        if drift:
+            print("the committed plugin no longer matches plugin/:", file=sys.stderr)
+            for line in drift:
+                print(f"  {line}", file=sys.stderr)
+            print("\nrun 'make plugin' and commit the result.", file=sys.stderr)
+            return 1
+        print(f"committed plugin is up to date with plugin/ (v{version}): {', '.join(names)}")
+        return 0
     names = [args.target] if args.target else available_targets(repo_root)
     if not names:
         print("no plugin targets found under plugin/targets/", file=sys.stderr)
