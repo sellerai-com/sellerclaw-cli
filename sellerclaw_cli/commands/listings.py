@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typer
 
-from sellerclaw_cli._command_group import Cmd, build_group, flag
+from sellerclaw_cli._command_group import Cmd, body_field, build_group, flag
 
 NAME = "listings"
 
@@ -67,6 +67,166 @@ SPECS = (
             ),
             flag("limit", type=int, minimum=1, maximum=200, default=25, help="Max results per page."),
             flag("offset", type=int, minimum=0, default=0, help="Results to skip (paging)."),
+        ),
+    ),
+    # --- Bulk draft workflow: see drafts -> check readiness -> bulk-fix -> bulk publish ---
+    Cmd(
+        "drafts",
+        "GET",
+        "/agent/listings/drafts",
+        summary=(
+            "List one store's draft listings — the ones prepared locally but not yet published. Each "
+            "row carries a quick 'ready' flag plus 'issue_count' and 'blocking_fields', so you can see "
+            "which drafts still need work before a bulk publish. Scoped to one store (--store-id is "
+            "required): you work a store at a time, and a store already fixes the channel. For the "
+            "full, product-group-aware readiness (the same one a publish enforces) use "
+            "'listings readiness'."
+        ),
+        flags=(
+            flag(
+                "store_id",
+                required=True,
+                help="The store to list drafts for (sales channel id, see `channels list`).",
+            ),
+            flag("limit", type=int, minimum=1, maximum=200, default=50, help="Max results per page."),
+            flag("offset", type=int, minimum=0, default=0, help="Results to skip (paging)."),
+        ),
+    ),
+    Cmd(
+        "readiness",
+        "POST",
+        "/agent/listings/readiness",
+        summary=(
+            "Dry-run publish readiness for a set of listings — no marketplace call, no changes. For "
+            "each id: 'ready' plus the blocking 'issues' that would stop a publish (the same checks "
+            "the real publish runs, so the answer can't drift) and soft 'hints' worth fixing first "
+            "(e.g. no image). Product-group-aware: one broken variant marks the whole product "
+            "not-ready. Run this before a bulk publish to see exactly what to fix."
+        ),
+        body=(
+            body_field(
+                "listing_ids",
+                repeatable=True,
+                required=True,
+                help="SellerClaw listing ids to check.",
+            ),
+        ),
+    ),
+    Cmd(
+        "check",
+        "POST",
+        "/agent/listings/consistency-check",
+        summary=(
+            "Flag the odd-one-out in a batch before publishing: a price far from the batch median "
+            "(a likely typo), or the only listing missing an image or a description when the others "
+            "have them. Advisory only — nothing here blocks a publish. Set 'group_by_category' to "
+            "compare each listing only against others in its own marketplace category."
+        ),
+        body=(
+            body_field(
+                "listing_ids",
+                repeatable=True,
+                required=True,
+                help="SellerClaw listing ids to compare.",
+            ),
+            body_field(
+                "group_by_category",
+                type=bool,
+                help="Compare each listing only against others in its marketplace category.",
+            ),
+        ),
+    ),
+    Cmd(
+        "bulk-update",
+        "POST",
+        "/agent/listings/bulk-update",
+        summary=(
+            "Apply per-listing changes to many DRAFT listings at once and get each draft's fresh "
+            "readiness back in the same call. Body: 'items' is a list of "
+            "{listing_id, patch:{title?, description?, sell_prices?, quantities?}} — sell_prices / "
+            "quantities are keyed by SKU. eBay takes title/description only here; Amazon takes "
+            "price/stock only. One failing item does not sink the rest."
+        ),
+        body=(
+            body_field(
+                "items",
+                type=list,
+                required=True,
+                help=(
+                    "List of {listing_id, patch}. patch keys: title, description, sell_prices "
+                    "(SKU->price), quantities (SKU->qty)."
+                ),
+                example=[
+                    {"listing_id": "<uuid>", "patch": {"title": "New title"}},
+                ],
+            ),
+        ),
+    ),
+    Cmd(
+        "delete-drafts",
+        "POST",
+        "/agent/listings/delete-drafts",
+        summary=(
+            "Delete draft listings — draft-only, and purely local. A draft was never pushed to a "
+            "marketplace, so this removes only the local row and calls no marketplace. Anything that "
+            "is not a draft is left untouched and reported with the reason, so a live listing is never "
+            "torn down here by mistake — remove a published listing through its own store's listings "
+            "command. Ids that aren't yours come back in 'unknown_ids'."
+        ),
+        body=(
+            body_field(
+                "listing_ids",
+                repeatable=True,
+                required=True,
+                help="SellerClaw listing ids of the drafts to delete.",
+            ),
+        ),
+    ),
+    Cmd(
+        "bulk-publish",
+        "POST",
+        "/agent/stores/{store_id}/bulk-listing-jobs",
+        summary=(
+            "Publish or withdraw many listings on one store in the background, resumably. Body: "
+            "'kind' (publish/withdraw), 'listing_ids', and 'only_ready' (default true) which, on a "
+            "publish, skips listings that would be rejected — they are recorded as failed up front "
+            "with their readiness issues and never sent, so the ready ones still go out. Returns the "
+            "job immediately; poll 'listings bulk-job' for per-listing progress. Re-running a job "
+            "skips items already done."
+        ),
+        body=(
+            body_field(
+                "kind",
+                required=True,
+                choices=("publish", "withdraw"),
+                help="publish drafts, or withdraw live listings.",
+            ),
+            body_field(
+                "listing_ids",
+                repeatable=True,
+                required=True,
+                help="SellerClaw listing ids to publish/withdraw.",
+            ),
+            body_field(
+                "only_ready",
+                type=bool,
+                help="On publish: skip (and report) listings that aren't publishable. Default true.",
+            ),
+        ),
+    ),
+    Cmd(
+        "bulk-jobs",
+        "GET",
+        "/agent/stores/{store_id}/bulk-listing-jobs",
+        summary="List recent bulk publish/withdraw jobs for a store.",
+    ),
+    Cmd(
+        "bulk-job",
+        "GET",
+        "/agent/stores/{store_id}/bulk-listing-jobs/{job_id}",
+        summary=(
+            "Get one bulk job's status and per-listing outcomes (succeeded / failed with the "
+            "reason, still pending). Poll this after 'bulk-publish' until nothing is pending."
         ),
     ),
 )
