@@ -64,13 +64,28 @@ def test_files_group_discoverable() -> None:
     assert flags["--url"]["required"] is True
 
 
+_LISTINGS_COMMANDS = [
+    "get",
+    "search",
+    "drafts",
+    "readiness",
+    "check",
+    "bulk-update",
+    "delete-drafts",
+    "bulk-publish",
+    "bulk-jobs",
+    "bulk-job",
+]
+
+
 def test_listings_group_exposes_get_and_search() -> None:
-    """The channel-agnostic 'listings' group resolves a listing by id and finds listings by any of
-    the handles the caller may hold — text, catalog product, store, SKU, marketplace id."""
+    """The channel-agnostic 'listings' group resolves a listing by id, finds listings by any of
+    the handles the caller may hold, and runs the bulk draft workflow (drafts → readiness → fix →
+    publish)."""
     result = runner.invoke(app, ["commands", "--group", "listings"])
     assert result.exit_code == 0, result.output
     cmds = {row["command"] for row in _data(result.stdout)}
-    assert cmds == {"get", "search"}
+    assert cmds == set(_LISTINGS_COMMANDS)
 
     get_detail = _data(runner.invoke(app, ["describe", "listings", "get"]).stdout)
     assert get_detail["method"] == "GET"
@@ -126,7 +141,7 @@ def test_groups_carry_their_command_names() -> None:
     whether the verb you want even exists there."""
     payload = _data(runner.invoke(app, ["groups"]).stdout)
     listings = next(row for row in payload if row["group"] == "listings")
-    assert listings["commands"] == ["get", "search"]
+    assert listings["commands"] == _LISTINGS_COMMANDS
 
 
 def test_suppliers_expose_per_product_stock() -> None:

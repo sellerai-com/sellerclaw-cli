@@ -130,12 +130,26 @@ def test_describe_command_surfaces_flag_choices_and_ranges() -> None:
     assert flags["limit"]["maximum"] == 500
 
 
+_LISTINGS_COMMANDS = {
+    "get",
+    "search",
+    "drafts",
+    "readiness",
+    "check",
+    "bulk-update",
+    "delete-drafts",
+    "bulk-publish",
+    "bulk-jobs",
+    "bulk-job",
+}
+
+
 def test_describe_a_whole_group_without_naming_a_command() -> None:
     """Omitting the command describes every command in the group at once — one call, not N."""
     detail = describe_command("listings")
     assert detail["group"] == "listings"
     described = {cmd["command"] for cmd in detail["commands"]}
-    assert described == {"get", "search"}
+    assert described == _LISTINGS_COMMANDS
     search = next(cmd for cmd in detail["commands"] if cmd["command"] == "search")
     assert {f["name"] for f in search["flags"]} >= {"q", "product_id", "store_id", "sku"}
 

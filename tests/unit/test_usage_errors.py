@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 
+import httpx
 import pytest
+import respx
 
 from sellerclaw_cli import cli
 
@@ -46,6 +48,7 @@ def test_unknown_option_lists_the_accepted_ones(
     assert "--product-id" in msg
 
 
+@respx.mock
 @pytest.mark.parametrize(
     "spelling",
     [
@@ -58,15 +61,19 @@ def test_unknown_option_lists_the_accepted_ones(
 def test_every_spelling_of_the_search_flag_is_accepted(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    fake_api_url: str,
     spelling: str,
 ) -> None:
     """Free-text search is spelled --q here and --search there across the API's groups. Whichever
     one the caller reaches for, the command must accept it — a rejected guess costs a whole turn."""
+    monkeypatch.setenv("SELLERCLAW_API_URL", fake_api_url)
     monkeypatch.delenv("SELLERCLAW_TOKEN", raising=False)
+    respx.get(f"{fake_api_url}/agent/listings/search").mock(
+        return_value=httpx.Response(401, json={"detail": "Missing bearer token"})
+    )
     code, _out, err = _run(monkeypatch, capsys, ["listings", "search", spelling, "apron"])
-    # No token in the environment, so the call stops at auth (exit 3) — the point is that it got
-    # past option parsing (exit 1 = "No such option") and was recognised as the search flag.
-    assert code != 1, _err(err)
+    # Past option parsing (exit 1 = "No such option"); auth stops the call before any real network.
+    assert code == 3, _err(err)
 
 
 def test_flag_on_body_command_points_to_body(
