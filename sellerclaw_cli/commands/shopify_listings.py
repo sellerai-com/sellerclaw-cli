@@ -49,6 +49,25 @@ SPECS = (
         ),
     ),
     Cmd(
+        "products",
+        "GET",
+        "/agent/stores/{store_id}/listings/products",
+        summary=(
+            "List the store's catalog one row per Shopify PRODUCT (not per variant). Each row "
+            "carries the remote_product_id that `update` and `delete` take, already deduplicated, "
+            "plus the product's title, category, variant count, stock and price range. Use this "
+            "for anything product-level — reviewing categories, finding uncategorized products, "
+            "picking what to delete — instead of `list` plus grouping the variant rows yourself."
+        ),
+        flags=(
+            flag(
+                "status",
+                choices=("active", "published", "draft", "withdrawn"),
+                help="Mirror status to filter the underlying rows by; omit for all live listings.",
+            ),
+        ),
+    ),
+    Cmd(
         "summary",
         "GET",
         "/agent/stores/{store_id}/listings/summary",
