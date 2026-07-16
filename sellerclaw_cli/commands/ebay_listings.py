@@ -9,6 +9,41 @@ NAME = "ebay-listings"
 # Listing READS come from the unified SellerClaw mirror (/agent/stores/{store_id}/listings),
 # warmed on connect + refreshed periodically; pass --live on search to hit eBay directly. The
 # draft/publish ops stay under the store resource (/agent/stores/{store_id}/ebay-*).
+
+# The "lazy" draft body: only product_ids is required — the server places the category and fills the
+# item specifics when they are omitted. Shared by preview-drafts and publish-product.
+_LAZY_DRAFT_BODY = (
+    body_field(
+        "product_ids",
+        required=True,
+        repeatable=True,
+        help="Catalog product ids (UUIDs); one draft per product.",
+    ),
+    body_field("category_id", help="eBay category id — omit to let the system place each product."),
+    body_field("title", help="Listing title (max 80 chars); defaults to the product name."),
+    body_field(
+        "condition",
+        choices=("NEW", "USED", "REFURBISHED"),
+        help="Item condition (defaults to NEW).",
+    ),
+    body_field(
+        "merchant_location_key",
+        help="Inventory location key (resolved from your eBay account if omitted).",
+    ),
+    body_field("description", help="Listing description (HTML allowed)."),
+    body_field(
+        "api_kind",
+        choices=("trading", "inventory"),
+        help="Which eBay API to publish with (defaults to trading).",
+    ),
+    body_field("fulfillment_policy_id", help="eBay fulfillment business policy id."),
+    body_field("payment_policy_id", help="eBay payment business policy id."),
+    body_field("return_policy_id", help="eBay return business policy id."),
+    body_field("images", repeatable=True, help="List of image URLs (max 24)."),
+    body_field("aspects", type=dict, help="Item specifics; omit to auto-fill from the product."),
+    body_field("sell_prices", type=dict, help="Override sell prices keyed by SKU/variant."),
+)
+
 SPECS = (
     Cmd(
         "list",
@@ -215,6 +250,20 @@ SPECS = (
             body_field("aspects", type=dict, help="Item specifics, e.g. {\"Color\": [\"Black\"]}."),
             body_field("sell_prices", type=dict, help="Override sell prices keyed by SKU/variant."),
         ),
+    ),
+    Cmd(
+        "preview-drafts",
+        "POST",
+        "/agent/stores/{store_id}/ebay-draft-listings/preview",
+        summary="Preview what drafting products would set (category + item specifics) — creates nothing.",
+        body=_LAZY_DRAFT_BODY,
+    ),
+    Cmd(
+        "publish-product",
+        "POST",
+        "/agent/stores/{store_id}/ebay-draft-listings/publish-product",
+        summary="One shot: draft products (auto category + specifics) and publish the ready ones.",
+        body=_LAZY_DRAFT_BODY,
     ),
     Cmd("get-draft", "GET", "/agent/stores/{store_id}/ebay-draft-listings/{listing_id}", summary="Get one eBay draft listing."),
     Cmd(
