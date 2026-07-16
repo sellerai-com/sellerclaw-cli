@@ -220,36 +220,12 @@ SPECS = (
         "create-drafts",
         "POST",
         "/agent/stores/{store_id}/ebay-draft-listings",
-        summary="Create eBay draft listings.",
-        body=(
-            body_field(
-                "product_ids",
-                required=True,
-                repeatable=True,
-                help="Catalog product ids (UUIDs) to create one draft per product.",
-            ),
-            body_field("title", required=True, help="Listing title (max 80 chars)."),
-            body_field("category_id", required=True, help="eBay category id."),
-            body_field(
-                "condition",
-                required=True,
-                choices=("NEW", "USED", "REFURBISHED"),
-                help="Item condition.",
-            ),
-            body_field("merchant_location_key", required=True, help="Inventory location key."),
-            body_field("description", help="Listing description (HTML allowed)."),
-            body_field(
-                "api_kind",
-                choices=("trading", "inventory"),
-                help="Which eBay API to publish with (defaults to trading).",
-            ),
-            body_field("fulfillment_policy_id", help="eBay fulfillment business policy id (resolved at publish if omitted)."),
-            body_field("payment_policy_id", help="eBay payment business policy id (resolved at publish if omitted)."),
-            body_field("return_policy_id", help="eBay return business policy id (resolved at publish if omitted)."),
-            body_field("images", repeatable=True, help="List of image URLs (max 24)."),
-            body_field("aspects", type=dict, help="Item specifics, e.g. {\"Color\": [\"Black\"]}."),
-            body_field("sell_prices", type=dict, help="Override sell prices keyed by SKU/variant."),
-        ),
+        summary="Create eBay draft listings (category and item specifics are filled for you).",
+        # Only product_ids is required, matching every other channel's draft command and the server,
+        # which fills the rest: it places the category, resolves the item specifics off the product,
+        # takes the title from the catalog, defaults the condition and reads the location from the
+        # eBay account. Requiring them here used to reject the very body the server wants.
+        body=_LAZY_DRAFT_BODY,
     ),
     Cmd(
         "preview-drafts",
