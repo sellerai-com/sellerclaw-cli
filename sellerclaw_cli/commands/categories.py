@@ -13,6 +13,10 @@ NAME = "categories"
 # The other commands are for the case where the OWNER names a category ("put it under Running
 # Shoes") — not for routine publishing. Never type a category id from memory: it will be wrong, and
 # you will only find out when the marketplace rejects the listing.
+#
+# `refresh` is for one situation only: the owner says they *just* made a category on their own store
+# (WooCommerce, Wix, BigCommerce) and wants it used now. Drafting reads our copy of their store, which
+# updates itself daily, so every other time it is a wasted call.
 SPECS = (
     Cmd(
         "suggest",
@@ -91,6 +95,19 @@ SPECS = (
         "/agent/categories/trees",
         summary="Which category trees serve this store, and when they were last refreshed.",
         flags=(flag("store_id", required=True, help="Store to inspect."),),
+    ),
+    Cmd(
+        "refresh",
+        "POST",
+        "/agent/categories/refresh",
+        summary="Owner just made a category and wants it used now? Re-read the store's categories.",
+        body=(
+            body_field(
+                "store_id",
+                required=True,
+                help="The store whose own categories to re-read (from `channels list`).",
+            ),
+        ),
     ),
 )
 
