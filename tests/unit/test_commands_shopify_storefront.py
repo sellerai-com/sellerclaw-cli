@@ -160,7 +160,7 @@ def test_publish_works_without_publication_names(
     fake_api_url: str,
 ) -> None:
     """Visibility toggle needs no channel — the backend defaults to the Online Store."""
-    route = respx.post(f"{fake_api_url}/agent/stores/{STORE_ID}/listings/publish").mock(
+    route = respx.post(f"{fake_api_url}/agent/stores/{STORE_ID}/shopify-listings/publish").mock(
         return_value=httpx.Response(200, json={"results": [], "errors": []})
     )
     result = runner.invoke(

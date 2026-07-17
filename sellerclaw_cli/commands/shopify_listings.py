@@ -110,7 +110,10 @@ SPECS = (
         "create",
         "POST",
         "/agent/stores/{store_id}/listings",
-        summary="Publish products as Shopify listings.",
+        summary="Create products directly on Shopify from scratch (not from the catalog). Use this "
+        "only for products you are NOT sourcing through SellerClaw — for catalog products use "
+        "'publish-product', which creates them as tracked listings the catalog stays in step with. "
+        "A product made here is not tracked until the store's listings are next downloaded.",
         body=(
             body_field(
                 "items",
