@@ -31,6 +31,15 @@ SPECS = (
         resolve_list_path=_LIST,
     ),
     Cmd(
+        "reports",
+        "GET",
+        "/agent/goals/reports/team_task/{task_id}",
+        summary="Report history: every result submitted across the team task's re-runs, with review verdicts. "
+        "Read this before re-running a returned task to see what earlier attempts already covered.",
+        active_slot=_SLOT,
+        resolve_list_path=_LIST,
+    ),
+    Cmd(
         "create",
         "POST",
         "/agent/goals/team-tasks",
@@ -76,11 +85,77 @@ SPECS = (
         resolve_list_path=_LIST,
     ),
     Cmd(
+        "set-plan",
+        "POST",
+        "/agent/goals/team-tasks/{task_id}/plan",
+        summary="Replace the team task's plan — your ordered list of the phases the job takes.",
+        body=(
+            body_field(
+                "plan",
+                type=list,
+                required=True,
+                help=(
+                    "Ordered list of phases. Each item is an object with `text` (required) and "
+                    "optional `status` (pending|in_progress|done|skipped), `id`, and `metadata`. "
+                    "Omit `id` for a new phase (the server assigns one); re-send an existing `id` "
+                    "to keep its history. Lay out every phase up front, including ones whose agent "
+                    "task you can't create yet (they depend on an earlier phase's output)."
+                ),
+                example=[
+                    {"text": "Source a pet product from the supplier"},
+                    {"text": "Publish the chosen product to Shopify"},
+                ],
+            ),
+        ),
+        active_slot=_SLOT,
+        resolve_list_path=_LIST,
+    ),
+    Cmd(
+        "plan-check",
+        "POST",
+        "/agent/goals/team-tasks/{task_id}/plan/check",
+        summary="Update one plan item: set its status and/or merge metadata into it.",
+        body=(
+            body_field(
+                "item_id",
+                required=True,
+                help="Id of the plan item to update (read it from `get`).",
+            ),
+            body_field(
+                "status",
+                choices=("pending", "in_progress", "done", "skipped"),
+                help="New status for the phase.",
+            ),
+            body_field(
+                "metadata",
+                type=dict,
+                help=(
+                    "Keys to merge into the item — e.g. the fulfilling agent task id: "
+                    '{"agent_task_id": "<id>"}.'
+                ),
+            ),
+        ),
+        active_slot=_SLOT,
+        resolve_list_path=_LIST,
+    ),
+    Cmd(
         "request-review",
         "POST",
         "/agent/goals/team-tasks/{task_id}/request-review",
         summary="Submit a team task for review.",
-        body=(body_field("outcome", required=True, help="The result as a Markdown report; the owner reads only this."),),
+        body=(
+            body_field("outcome", required=True, help="The result as a Markdown report; the owner reads only this."),
+            body_field(
+                "attachments",
+                type=dict,
+                repeatable=True,
+                help="Optional media for the report — an array of objects, each "
+                '{"kind": "image"|"file"|"link", "url": "...", "title"?: "...", '
+                '"file_id"?: "<id from `sellerclaw files upload`>"}. '
+                "Use for screenshots, generated files, or reference links; do not paste these into `outcome`.",
+                example=[{"kind": "link", "url": "https://example.com/dashboard", "title": "Live dashboard"}],
+            ),
+        ),
         active_slot=_SLOT,
         resolve_list_path=_LIST,
     ),

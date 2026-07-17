@@ -101,8 +101,8 @@ SPECS = (
         "POST",
         "/agent/categories/refresh",
         summary="Owner just made a category and wants it used now? Re-read the store's categories.",
-        body=(
-            body_field(
+        flags=(
+            flag(
                 "store_id",
                 required=True,
                 help="The store whose own categories to re-read (from `channels list`).",

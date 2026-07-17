@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-
 import httpx
 import pytest
 import respx
@@ -49,11 +47,12 @@ def test_refresh_posts_the_store(
         )
     )
 
-    result = runner.invoke(app, ["categories", "refresh", "-b", json.dumps({"store_id": STORE_ID})])
+    result = runner.invoke(app, ["categories", "refresh", "--store-id", STORE_ID])
 
     assert result.exit_code == 0, result.stderr
     assert route.call_count == 1
-    assert json.loads(route.calls.last.request.content) == {"store_id": STORE_ID}
+    assert route.calls.last.request.url.params["store_id"] == STORE_ID
+    assert route.calls.last.request.content in (b"", None)
     # node_count is why the caller ran this at all: it says whether the new category arrived.
     assert "7" in result.stdout
 
@@ -67,7 +66,7 @@ def test_refresh_without_a_store_never_reaches_the_server(
         return_value=httpx.Response(200, json=[])
     )
 
-    result = runner.invoke(app, ["categories", "refresh", "-b", json.dumps({})])
+    result = runner.invoke(app, ["categories", "refresh"])
 
     assert result.exit_code != 0
     assert route.call_count == 0
