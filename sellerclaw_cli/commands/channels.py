@@ -61,6 +61,31 @@ SPECS = (
             ),
         ),
     ),
+    Cmd(
+        "set-default-policies",
+        "PATCH",
+        "/agent/sales-channels/{sales_channel_id}",
+        summary=(
+            "Pin the marketplace policy a draft should use when none is named — eBay and Etsy only. "
+            "This is the owner's standing answer, so ask before setting it: different goods "
+            "legitimately ship under different policies, and a one-off choice must not become the "
+            "store's rule. Once pinned, drafts stop coming back with `needs_policies`. Keys are the "
+            "platform's own (eBay: default_fulfillment_policy_id, default_payment_policy_id, "
+            "default_return_policy_id; Etsy: default_shipping_profile_id, default_return_policy_id); "
+            "an empty value removes the pin and the store goes back to asking. A key the store's "
+            "marketplace does not have is refused, not stored. Read the current pins from "
+            "`channels get` (`specifics`)."
+        ),
+        body=(
+            body_field(
+                "default_policies",
+                type=dict,
+                required=True,
+                help="Policy ids keyed by the platform's own default_* key; empty value unpins.",
+                example={"default_fulfillment_policy_id": "6001234567890"},
+            ),
+        ),
+    ),
 )
 
 app = build_group(NAME, "Connected sales channels (stores).", SPECS)

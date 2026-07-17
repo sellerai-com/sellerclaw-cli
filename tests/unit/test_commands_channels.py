@@ -102,3 +102,65 @@ def test_set_margin_patches_body(
     assert result.exit_code == 0, result.stderr
     sent = json.loads(route.calls.last.request.content)
     assert sent == {"margin": 1.3}
+
+
+@respx.mock
+def test_set_default_policies_patches_the_owners_standing_answer(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """Pinning a default is what stops the store being asked on every draft."""
+    route = respx.patch(f"{fake_api_url}/agent/sales-channels/{STORE_ID}").mock(
+        return_value=httpx.Response(200, json=_CHANNEL_JSON)
+    )
+    result = runner.invoke(
+        app,
+        [
+            "channels",
+            "set-default-policies",
+            STORE_ID,
+            "-b",
+            json.dumps({"default_policies": {"default_shipping_profile_id": "123456789"}}),
+        ],
+    )
+    assert result.exit_code == 0, result.stderr
+    assert route.call_count == 1
+    sent = json.loads(route.calls.last.request.content)
+    assert sent == {"default_policies": {"default_shipping_profile_id": "123456789"}}
+
+
+@respx.mock
+def test_set_default_policies_requires_the_field_locally(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.patch(f"{fake_api_url}/agent/sales-channels/{STORE_ID}").mock(
+        return_value=httpx.Response(200, json=_CHANNEL_JSON)
+    )
+    result = runner.invoke(app, ["channels", "set-default-policies", STORE_ID, "-b", "{}"])
+    assert result.exit_code != 0
+    assert route.call_count == 0  # missing required field caught before the network call
+
+
+@respx.mock
+def test_set_default_policies_rejects_a_flattened_policy_key_locally(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """The ids go inside `default_policies`; flattened, they would be silently ignored server-side."""
+    route = respx.patch(f"{fake_api_url}/agent/sales-channels/{STORE_ID}").mock(
+        return_value=httpx.Response(200, json=_CHANNEL_JSON)
+    )
+    result = runner.invoke(
+        app,
+        [
+            "channels",
+            "set-default-policies",
+            STORE_ID,
+            "-b",
+            json.dumps({"default_shipping_profile_id": "123456789"}),
+        ],
+    )
+    assert result.exit_code != 0
+    assert route.call_count == 0
+    assert "default_policies" in result.stderr
