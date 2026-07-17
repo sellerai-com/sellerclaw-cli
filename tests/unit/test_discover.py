@@ -67,6 +67,7 @@ def test_files_group_discoverable() -> None:
 _LISTINGS_COMMANDS = [
     "get",
     "search",
+    "sync",
     "drafts",
     "readiness",
     "check",

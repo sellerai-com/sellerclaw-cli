@@ -69,6 +69,18 @@ SPECS = (
             flag("offset", type=int, minimum=0, default=0, help="Results to skip (paging)."),
         ),
     ),
+    Cmd(
+        "sync",
+        "POST",
+        "/agent/stores/{store_id}/listings/sync",
+        summary=(
+            "Re-read one store's catalog from its marketplace into the SellerClaw mirror. Reads "
+            "otherwise come from the mirror, which refreshes on a schedule and can be hours or days "
+            "behind. Queues the job and returns the mirror's current synced_at: poll the store's "
+            "listings until synced_at moves past it. Use before an irreversible step, or after a "
+            "change made outside SellerClaw that should be reflected back."
+        ),
+    ),
     # --- Bulk draft workflow: see drafts -> check readiness -> bulk-fix -> bulk publish ---
     Cmd(
         "drafts",

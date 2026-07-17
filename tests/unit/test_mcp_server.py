@@ -133,6 +133,7 @@ def test_describe_command_surfaces_flag_choices_and_ranges() -> None:
 _LISTINGS_COMMANDS = {
     "get",
     "search",
+    "sync",
     "drafts",
     "readiness",
     "check",
