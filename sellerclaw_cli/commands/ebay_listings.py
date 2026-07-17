@@ -36,9 +36,21 @@ _LAZY_DRAFT_BODY = (
         choices=("trading", "inventory"),
         help="Which eBay API to publish with (defaults to trading).",
     ),
-    body_field("fulfillment_policy_id", help="eBay fulfillment business policy id."),
-    body_field("payment_policy_id", help="eBay payment business policy id."),
-    body_field("return_policy_id", help="eBay return business policy id."),
+    # Omitting a policy is the normal case: the server settles it from the store's pinned default,
+    # or from the account's only policy of that type. Ambiguous and unpinned, it does not guess —
+    # the drafts are still created and the question comes back in `needs_policies`.
+    body_field(
+        "fulfillment_policy_id",
+        help="eBay fulfillment business policy id — omit to let the store settle it.",
+    ),
+    body_field(
+        "payment_policy_id",
+        help="eBay payment business policy id — omit to let the store settle it.",
+    ),
+    body_field(
+        "return_policy_id",
+        help="eBay return business policy id — omit to let the store settle it.",
+    ),
     body_field("images", repeatable=True, help="List of image URLs (max 24)."),
     body_field("aspects", type=dict, help="Item specifics; omit to auto-fill from the product."),
     body_field("sell_prices", type=dict, help="Override sell prices keyed by SKU/variant."),
@@ -240,6 +252,39 @@ SPECS = (
         "/agent/stores/{store_id}/ebay-draft-listings/publish-product",
         summary="One shot: draft products (auto category + specifics) and publish the ready ones.",
         body=_LAZY_DRAFT_BODY,
+    ),
+    Cmd(
+        "set-policies",
+        "POST",
+        "/agent/stores/{store_id}/ebay-draft-listings/set-policies",
+        summary=(
+            "Point many drafts at the same business policies in one call — the answer to a "
+            '`needs_policies` question (body: {"listing_ids": ["<uuid>", ...], '
+            '"fulfillment_policy_id": "..."}). One policy set for the whole list: a policy belongs '
+            "to the eBay account, not the listing. Take the ids from `needs_policies[].options`; an "
+            "omitted policy is left as it is. Drafts only — a published listing is refused (use "
+            "`update`, which tells eBay). Returns the patched rows with fresh readiness."
+        ),
+        body=(
+            body_field(
+                "listing_ids",
+                required=True,
+                repeatable=True,
+                help="Draft listing ids (UUIDs) to point at these policies.",
+            ),
+            body_field(
+                "fulfillment_policy_id",
+                help="eBay fulfillment business policy id; omit to leave it as it is.",
+            ),
+            body_field(
+                "payment_policy_id",
+                help="eBay payment business policy id; omit to leave it as it is.",
+            ),
+            body_field(
+                "return_policy_id",
+                help="eBay return business policy id; omit to leave it as it is.",
+            ),
+        ),
     ),
     Cmd("get-draft", "GET", "/agent/stores/{store_id}/ebay-draft-listings/{listing_id}", summary="Get one eBay draft listing."),
     Cmd(
