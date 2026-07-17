@@ -125,56 +125,78 @@ SPECS = (
     Cmd(
         "update",
         "PUT",
-        "/agent/stores/{store_id}/listings",
-        summary="Update Shopify listings.",
+        "/agent/stores/{store_id}/shopify-listings",
+        summary="Update Shopify listings, keeping the SellerClaw catalog in step. Target each item by "
+        "listing_id (SellerClaw UUID) or product_id (Shopify id) — a tracked listing changes on "
+        "Shopify and locally together; one we don't track changes on Shopify directly.",
         body=(
             body_field(
                 "items",
                 type=dict,
                 repeatable=True,
-                help="Products to update. Each: product_id (required), plus any of title, body_html, "
-                "vendor, product_type, tags, status, images, variants.",
+                help="Products to update. Each: listing_id OR product_id (one required), plus any of "
+                "title, description, product_type, vendor, tags, status, sell_prices ({SKU: price}), "
+                "quantities ({SKU: qty}).",
             ),
         ),
     ),
     Cmd(
         "delete",
-        "DELETE",
-        "/agent/stores/{store_id}/listings",
-        summary="Delete Shopify listings.",
+        "POST",
+        "/agent/stores/{store_id}/shopify-listings/delete",
+        summary="Permanently delete Shopify products (irreversible). Target by listing_id (SellerClaw "
+        "UUID) or product_id (Shopify id). Tracked listings are kept as REMOVED for history and the "
+        "catalog stays in step; to take a listing off sale reversibly use 'withdraw' instead.",
         body=(
-            body_field("product_ids", repeatable=True, help="Shopify product ids to delete."),
+            body_field(
+                "listing_ids", repeatable=True, help="SellerClaw listing UUIDs to delete."
+            ),
+            body_field(
+                "product_ids", repeatable=True, help="Shopify product ids to delete."
+            ),
         ),
     ),
     Cmd(
         "publish",
         "POST",
-        "/agent/stores/{store_id}/listings/publish",
-        summary="Make listings visible on the storefront. Defaults to the Online Store — you do not "
-        "need to name a channel.",
+        "/agent/stores/{store_id}/shopify-listings/publish",
+        summary="Put listings (back) on the storefront, keeping the catalog in step. Target by "
+        "listing_id (SellerClaw UUID) or product_id (Shopify id). A tracked listing returns at its "
+        "existing product/URL (never re-created). Defaults to the Online Store.",
         body=(
-            body_field("product_ids", repeatable=True, help="Shopify product ids to publish."),
+            body_field(
+                "listing_ids", repeatable=True, help="SellerClaw listing UUIDs to publish."
+            ),
+            body_field(
+                "product_ids", repeatable=True, help="Shopify product ids to publish."
+            ),
             body_field(
                 "publication_names",
                 repeatable=True,
                 help="Sales-channel names to publish to; omit to default to the Online Store "
-                "(the alias 'online_store' also works).",
+                "(the alias 'online_store' also works). Used only for products not in the catalog.",
             ),
         ),
     ),
     Cmd(
         "unpublish",
         "POST",
-        "/agent/stores/{store_id}/listings/unpublish",
-        summary="Hide listings from the storefront. Defaults to the Online Store — you do not need "
-        "to name a channel.",
+        "/agent/stores/{store_id}/shopify-listings/withdraw",
+        summary="Take listings off the storefront (WITHDRAWN), keeping the catalog in step. Target by "
+        "listing_id (SellerClaw UUID) or product_id (Shopify id). Reversible — the product keeps its "
+        "id, URL and reviews. Same endpoint as 'withdraw'. Defaults to the Online Store.",
         body=(
-            body_field("product_ids", repeatable=True, help="Shopify product ids to unpublish."),
+            body_field(
+                "listing_ids", repeatable=True, help="SellerClaw listing UUIDs to unpublish."
+            ),
+            body_field(
+                "product_ids", repeatable=True, help="Shopify product ids to unpublish."
+            ),
             body_field(
                 "publication_names",
                 repeatable=True,
                 help="Sales-channel names to unpublish from; omit to default to the Online Store "
-                "(the alias 'online_store' also works).",
+                "(the alias 'online_store' also works). Used only for products not in the catalog.",
             ),
         ),
     ),
@@ -227,6 +249,36 @@ SPECS = (
                 required=True,
                 repeatable=True,
                 help="Draft listing ids (UUIDs) to publish to Shopify.",
+            ),
+        ),
+    ),
+    Cmd(
+        "withdraw",
+        "POST",
+        "/agent/stores/{store_id}/shopify-listings/withdraw",
+        summary=(
+            "Take published Shopify listings off the storefront and keep the catalog in step. Target "
+            "by listing_id (SellerClaw UUID) or product_id (Shopify id). Reversible: the product "
+            "stays ACTIVE in Shopify with the same id, URL and reviews, and the rows are kept for "
+            "history. This is the default take-down — use 'delete' only for an explicit, irreversible "
+            "removal."
+        ),
+        body=(
+            body_field(
+                "listing_ids",
+                repeatable=True,
+                help="SellerClaw listing UUIDs to withdraw from the storefront.",
+            ),
+            body_field(
+                "product_ids",
+                repeatable=True,
+                help="Shopify product ids to withdraw (resolved to your listings where tracked).",
+            ),
+            body_field(
+                "publication_names",
+                repeatable=True,
+                help="Sales-channel names to withdraw from; omit for the Online Store. Used only "
+                "for products not in the catalog.",
             ),
         ),
     ),
