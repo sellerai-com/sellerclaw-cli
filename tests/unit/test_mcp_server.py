@@ -132,6 +132,7 @@ def test_describe_command_surfaces_flag_choices_and_ranges() -> None:
 
 _LISTINGS_COMMANDS = {
     "get",
+    "adopt-marketplace-version",
     "search",
     "sync",
     "drafts",

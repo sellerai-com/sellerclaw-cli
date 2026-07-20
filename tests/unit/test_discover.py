@@ -66,6 +66,7 @@ def test_files_group_discoverable() -> None:
 
 _LISTINGS_COMMANDS = [
     "get",
+    "adopt-marketplace-version",
     "search",
     "sync",
     "drafts",
