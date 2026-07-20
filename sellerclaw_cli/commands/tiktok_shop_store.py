@@ -48,6 +48,21 @@ SPECS = (
         summary="List brands available to the shop, optionally narrowed to a category.",
         flags=(flag("category_id", help="Narrow brands to this leaf category id."),),
     ),
+    Cmd(
+        "list-locations",
+        "GET",
+        "/agent/stores/{store_id}/locations",
+        summary="List the shop's warehouses; 'is_default' marks the one stock is written to.",
+    ),
+    Cmd(
+        "refresh-locations",
+        "POST",
+        "/agent/stores/{store_id}/locations/refresh",
+        summary=(
+            "Re-read warehouses from TikTok now — for one the seller just created in Seller Center. "
+            "Otherwise the mirror only refreshes daily."
+        ),
+    ),
 )
 
 app = build_group(

@@ -47,6 +47,15 @@ SPECS = (
             "only on the owner's explicit request. Takes the warehouse 'id' from list-locations."
         ),
     ),
+    Cmd(
+        "refresh-locations",
+        "POST",
+        "/agent/stores/{store_id}/locations/refresh",
+        summary=(
+            "Re-read locations from Shopify now — for one the seller just created there. Otherwise "
+            "the mirror only refreshes daily."
+        ),
+    ),
 )
 
 app = build_group(NAME, "Shopify store admin: info, settings, locations.", SPECS)
