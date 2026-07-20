@@ -75,6 +75,34 @@ SPECS = (
             "owner's explicit request. Takes the warehouse 'id' from list-locations."
         ),
     ),
+    Cmd(
+        "refresh-locations",
+        "POST",
+        "/agent/stores/{store_id}/locations/refresh",
+        summary=(
+            "Re-read locations from eBay now — for one the seller just created there. Otherwise the "
+            "mirror only refreshes daily."
+        ),
+    ),
+    Cmd(
+        "list-policies",
+        "GET",
+        "/agent/stores/{store_id}/policies",
+        summary=(
+            "List the store's mirrored business policies (fulfillment / payment / return). "
+            "'is_default' marks the one a listing uses when it names none."
+        ),
+    ),
+    Cmd(
+        "refresh-policies",
+        "POST",
+        "/agent/stores/{store_id}/policies/refresh",
+        summary=(
+            "Re-read business policies from eBay now — for one the seller just created there. "
+            "Otherwise the mirror only refreshes daily. Pinning a default stays the owner's call on "
+            "the store page."
+        ),
+    ),
 )
 
 app = build_group(NAME, "eBay store admin: account, business policies, inventory locations.", SPECS)
