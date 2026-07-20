@@ -22,6 +22,23 @@ SPECS = (
         ),
     ),
     Cmd(
+        "adopt-marketplace-version",
+        "POST",
+        "/agent/listings/{listing_id}/adopt-marketplace-version",
+        summary=(
+            "Take the marketplace's current version of one listing as the desired state — the "
+            "counterpart to publishing. A publish sends your local edits out to the channel; this "
+            "does the opposite, copying what the last download read from the marketplace into the "
+            "fields you edit, so 'what you see is what publishes' holds again. Local and instant: it "
+            "calls no marketplace. It DISCARDS this listing's unpublished local edits (an edit is "
+            "recorded locally and only leaves on publish) — that is the point: you are choosing the "
+            "channel's version over your own. Reach for it when the listing drifted (the marketplace "
+            "moved under you) and you would rather keep the marketplace's values than push yours. "
+            "Needs a prior download of this listing to have something to take — refresh the store's "
+            "listings first (`listings sync`) if it has never been read."
+        ),
+    ),
+    Cmd(
         "search",
         "GET",
         "/agent/listings/search",
