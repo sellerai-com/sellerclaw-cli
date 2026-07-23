@@ -368,13 +368,13 @@ def test_ads_groups_mirror_each_other() -> None:
     assert shared <= facebook
 
 
-def test_channels_set_margin_patches_margin() -> None:
-    """`channels set-margin` PATCHes a store with a required numeric `margin` body field."""
-    set_margin = next(
-        c for g in REGISTRY if g.name == "channels" for c in g.commands if c.name == "set-margin"
+def test_channels_set_markup_patches_markup_percent() -> None:
+    """`channels set-markup` PATCHes a store with a required numeric `markup_percent` body field."""
+    set_markup = next(
+        c for g in REGISTRY if g.name == "channels" for c in g.commands if c.name == "set-markup"
     )
-    assert set_margin.method == "PATCH"
-    assert set_margin.path == "/agent/sales-channels/{sales_channel_id}"
-    margin_field = next(f for f in set_margin.body if f.name == "margin")
-    assert margin_field.required is True
-    assert margin_field.type is float
+    assert set_markup.method == "PATCH"
+    assert set_markup.path == "/agent/sales-channels/{sales_channel_id}"
+    markup_field = next(f for f in set_markup.body if f.name == "markup_percent")
+    assert markup_field.required is True
+    assert markup_field.type is float

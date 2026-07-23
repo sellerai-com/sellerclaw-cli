@@ -25,7 +25,7 @@ _CHANNEL_JSON = {
     "specifics": {"reorder_lead_time_days": 21},
     "categories": [],
     "description": "",
-    "margin": 1.15,
+    "markup_percent": 15,
     "created_at": "2026-01-01T00:00:00Z",
     "updated_at": "2026-06-12T00:00:00Z",
 }
@@ -89,7 +89,7 @@ def test_set_lead_time_rejects_unknown_field_locally(
 
 
 @respx.mock
-def test_set_margin_patches_body(
+def test_set_markup_patches_body(
     env_pointing_at_fake_api: None,  # noqa: ARG001
     fake_api_url: str,
 ) -> None:
@@ -97,11 +97,11 @@ def test_set_margin_patches_body(
         return_value=httpx.Response(200, json=_CHANNEL_JSON)
     )
     result = runner.invoke(
-        app, ["channels", "set-margin", STORE_ID, "-b", json.dumps({"margin": 1.3})]
+        app, ["channels", "set-markup", STORE_ID, "-b", json.dumps({"markup_percent": 30})]
     )
     assert result.exit_code == 0, result.stderr
     sent = json.loads(route.calls.last.request.content)
-    assert sent == {"margin": 1.3}
+    assert sent == {"markup_percent": 30}
 
 
 @respx.mock
