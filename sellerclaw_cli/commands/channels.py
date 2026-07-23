@@ -28,17 +28,21 @@ SPECS = (
         summary="Get one sales channel by id.",
     ),
     Cmd(
-        "set-margin",
+        "set-markup",
         "PATCH",
         "/agent/sales-channels/{sales_channel_id}",
-        summary="Set this store's dropshipping markup (margin multiplier, e.g. 1.3 = +30%).",
+        summary="Set this store's dropshipping markup (percent, e.g. 30 = +30%).",
         body=(
             body_field(
-                "margin",
+                "markup_percent",
                 type=float,
                 required=True,
-                help="Cost multiplier applied when pricing listings (>= 1.0; 1.15 = +15%).",
-                example=1.3,
+                help=(
+                    "Markup percent applied over the product cost when pricing listings "
+                    "(0-500; 15 = +15%). A store starts with no markup set — until you set one, "
+                    "new listings are created without a price and cannot be published."
+                ),
+                example=30,
             ),
         ),
     ),

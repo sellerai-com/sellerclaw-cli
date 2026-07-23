@@ -28,10 +28,13 @@ SPECS = (
             ),
             body_field("currency", help="ISO currency the shop prices in.", example="USD"),
             body_field(
-                "margin",
+                "markup_percent",
                 type=float,
-                help="Sell-price multiplier over catalog cost, e.g. 1.15 for +15%.",
-                example=1.15,
+                help=(
+                    "Markup percent over catalog cost, e.g. 30 for +30% (0-500). Optional — a shop "
+                    "starts with no markup, and products aren't priced until you set one."
+                ),
+                example=30,
             ),
         ),
     ),

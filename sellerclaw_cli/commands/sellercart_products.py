@@ -24,8 +24,9 @@ SPECS = (
         "/agent/sellercart/products",
         summary=(
             "Put catalog products on the storefront, one listing per variation. Price defaults to the "
-            "shop's margin over the catalog cost; pass 'prices' to override. A product with no cost and "
-            "no explicit price is refused rather than listed at zero."
+            "shop's markup over the catalog cost; pass 'prices' to override. A product with no cost, "
+            "or a shop with no markup set, is refused rather than listed at zero — set the shop's "
+            "markup or pass an explicit price first."
         ),
         body=(
             body_field(

@@ -13,7 +13,7 @@ SPECS = (
         "/agent/integrations",
         summary=(
             "List all integration kinds with the user's current connections and basic info "
-            "(domain, platform, marketplace_id, account name, status, dates, margin, "
+            "(domain, platform, marketplace_id, account name, status, dates, markup_percent, "
             "shopify_theme_api). Replaces per-kind listings (channels, ad-accounts, suppliers, "
             "research-*) when a single overview is enough."
         ),
