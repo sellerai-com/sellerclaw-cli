@@ -90,6 +90,43 @@ SPECS = (
             ),
         ),
     ),
+    Cmd(
+        "set-target-market",
+        "PATCH",
+        "/agent/sales-channels/{sales_channel_id}",
+        summary=(
+            "Set the store's target market — the destination (ISO alpha-2, e.g. US) whose shipping "
+            "is folded into the listing price. Pass an empty string to clear the override, so "
+            "pricing falls back to the market inferred from the store's order history. Read the "
+            "current value from `channels get` (`specifics.target_market`)."
+        ),
+        body=(
+            body_field(
+                "target_market",
+                required=True,
+                help="Destination country (ISO alpha-2); empty string clears the override.",
+                example="US",
+            ),
+        ),
+    ),
+    Cmd(
+        "set-shipping-in-price",
+        "PATCH",
+        "/agent/sales-channels/{sales_channel_id}",
+        summary=(
+            "Toggle whether shipping to the target market is bundled into the listing price "
+            "(default on). Turn off when the store charges shipping separately on the platform."
+        ),
+        body=(
+            body_field(
+                "shipping_included_in_price",
+                type=bool,
+                required=True,
+                help="true to fold shipping into the price, false to charge it separately.",
+                example=True,
+            ),
+        ),
+    ),
 )
 
 app = build_group(NAME, "Connected sales channels (stores).", SPECS)

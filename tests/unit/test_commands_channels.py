@@ -164,3 +164,81 @@ def test_set_default_policies_rejects_a_flattened_policy_key_locally(
     assert result.exit_code != 0
     assert route.call_count == 0
     assert "default_policies" in result.stderr
+
+
+@respx.mock
+def test_set_target_market_patches_the_override(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.patch(f"{fake_api_url}/agent/sales-channels/{STORE_ID}").mock(
+        return_value=httpx.Response(200, json=_CHANNEL_JSON)
+    )
+    result = runner.invoke(
+        app,
+        ["channels", "set-target-market", STORE_ID, "-b", json.dumps({"target_market": "GB"})],
+    )
+    assert result.exit_code == 0, result.stderr
+    assert route.call_count == 1
+    assert json.loads(route.calls.last.request.content) == {"target_market": "GB"}
+
+
+@respx.mock
+def test_set_target_market_accepts_empty_string_to_clear_the_override(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """An empty string clears the override (falls back to the auto/derived market), not a no-op."""
+    route = respx.patch(f"{fake_api_url}/agent/sales-channels/{STORE_ID}").mock(
+        return_value=httpx.Response(200, json=_CHANNEL_JSON)
+    )
+    result = runner.invoke(
+        app,
+        ["channels", "set-target-market", STORE_ID, "-b", json.dumps({"target_market": ""})],
+    )
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {"target_market": ""}
+
+
+@respx.mock
+def test_set_shipping_in_price_patches_the_boolean(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.patch(f"{fake_api_url}/agent/sales-channels/{STORE_ID}").mock(
+        return_value=httpx.Response(200, json=_CHANNEL_JSON)
+    )
+    result = runner.invoke(
+        app,
+        [
+            "channels",
+            "set-shipping-in-price",
+            STORE_ID,
+            "-b",
+            json.dumps({"shipping_included_in_price": False}),
+        ],
+    )
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {"shipping_included_in_price": False}
+
+
+@respx.mock
+def test_set_shipping_in_price_rejects_a_non_boolean_locally(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.patch(f"{fake_api_url}/agent/sales-channels/{STORE_ID}").mock(
+        return_value=httpx.Response(200, json=_CHANNEL_JSON)
+    )
+    result = runner.invoke(
+        app,
+        [
+            "channels",
+            "set-shipping-in-price",
+            STORE_ID,
+            "-b",
+            json.dumps({"shipping_included_in_price": "yes"}),
+        ],
+    )
+    assert result.exit_code != 0
+    assert route.call_count == 0  # wrong type caught before the network call

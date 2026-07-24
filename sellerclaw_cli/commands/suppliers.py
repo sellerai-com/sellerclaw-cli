@@ -24,11 +24,28 @@ SPECS = (
         "search-products",
         "GET",
         "/agent/suppliers/{provider}/products",
-        summary="Search a supplier's catalog.",
+        summary="Search a supplier's catalog, with optional warehouse / price / sort filters.",
         flags=(
             flag("query", required=True, help="Search text."),
             flag("page", type=int, help="Page number."),
             flag("page_size", type=int, help="Results per page."),
+            flag(
+                "country",
+                param="country_code",
+                help=(
+                    "Only products with a warehouse in this country (ISO alpha-2, e.g. US) — "
+                    "a local warehouse ships cheaper and faster than China."
+                ),
+            ),
+            flag(
+                "verified_only",
+                type=bool,
+                help="Only products with verified warehouse inventory.",
+            ),
+            flag("min_price", type=float, help="Minimum supplier sell price."),
+            flag("max_price", type=float, help="Maximum supplier sell price."),
+            flag("sort", help="Provider sort key (e.g. price)."),
+            flag("order_by", help="Sort direction (asc / desc)."),
         ),
     ),
     Cmd(
@@ -87,15 +104,45 @@ SPECS = (
         "GET",
         "/agent/suppliers/{provider}/stock/product/{product_id}",
         summary=(
-            "Stock for ALL variants of a product in ONE call. Prefer this over "
-            "looping check-stock / check-stock-batch per variant when you have the product id."
+            "Stock for ALL variants of a product in ONE call, split per warehouse (each variant's "
+            "`warehouses` lists the country/area and shippable quantity). Prefer this over looping "
+            "check-stock / check-stock-batch per variant when you have the product id."
+        ),
+    ),
+    Cmd(
+        "quote-shipping",
+        "POST",
+        "/agent/suppliers/{provider}/shipping/quote",
+        summary=(
+            "Quote shipping to a region from country + zip only — the cheapest in-stock warehouse "
+            "wins (not always China). Use this for a quick 'what would shipping cost to X' check; "
+            "use calculate-shipping once the full delivery address is known."
+        ),
+        body=(
+            body_field(
+                "items",
+                type=dict,
+                repeatable=True,
+                required=True,
+                help="Lines to quote: array of {variant_id*, quantity*}.",
+            ),
+            body_field(
+                "destination",
+                type=dict,
+                required=True,
+                help="Where to: {country_code*, zip_code*}.",
+                example={"country_code": "US", "zip_code": "10001"},
+            ),
         ),
     ),
     Cmd(
         "calculate-shipping",
         "POST",
         "/agent/suppliers/{provider}/shipping/calculate",
-        summary="Calculate shipping cost for a supplier order.",
+        summary=(
+            "Calculate shipping for a supplier order. The cheapest in-stock warehouse is chosen "
+            "automatically; pass from_country_code to pin a specific origin."
+        ),
         body=(
             body_field(
                 "items",
@@ -110,6 +157,13 @@ SPECS = (
                 help=(
                     "Destination: {country_code*, province*, city*, zip_code*, "
                     "address_line*, full_name*, phone*}."
+                ),
+            ),
+            body_field(
+                "from_country_code",
+                help=(
+                    "Ship-from country (ISO alpha-2) — pins the origin warehouse; omit to "
+                    "auto-pick the cheapest in-stock warehouse."
                 ),
             ),
             body_field("pay_type", type=int, help="Supplier pay type (1-3, default 2)."),
@@ -129,7 +183,10 @@ SPECS = (
         "create-order",
         "POST",
         "/agent/suppliers/{provider}/orders",
-        summary="Place a dropship purchase order with the supplier.",
+        summary=(
+            "Place a dropship purchase order with the supplier. The cheapest in-stock warehouse "
+            "nearest the buyer is chosen automatically; pass from_country_code to pin an origin."
+        ),
         body=(
             body_field(
                 "items",
@@ -144,6 +201,13 @@ SPECS = (
                 help=(
                     "Destination: {country_code*, province*, city*, zip_code*, "
                     "address_line*, full_name*, phone*}."
+                ),
+            ),
+            body_field(
+                "from_country_code",
+                help=(
+                    "Ship-from country (ISO alpha-2) — pins the origin warehouse; omit to "
+                    "auto-pick the cheapest in-stock warehouse nearest the buyer."
                 ),
             ),
             body_field("pay_type", type=int, help="Supplier pay type (1-3, default 2)."),
