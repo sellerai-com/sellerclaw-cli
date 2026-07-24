@@ -28,33 +28,80 @@ SPECS = (
             "opted in to eBay Business Policies."
         ),
     ),
-    Cmd("list-locations", "GET", "/agent/ebay/stores/{store_id}/locations", summary="List inventory locations."),
+    Cmd(
+        "list-locations",
+        "GET",
+        "/agent/stores/{store_id}/locations",
+        summary=(
+            "List the store's ship-from warehouses. 'is_default' marks the one publishing and stock "
+            "sync use; use each row's 'id' with delete-location."
+        ),
+    ),
+    Cmd(
+        "list-raw-locations",
+        "GET",
+        "/agent/ebay/stores/{store_id}/locations",
+        summary=(
+            "eBay's raw location payload (merchantLocationKey, status, full address), for details "
+            "the mirrored list-locations view normalizes away."
+        ),
+    ),
     Cmd(
         "create-location",
         "POST",
-        "/agent/ebay/stores/{store_id}/locations",
-        summary="Create an inventory location.",
+        "/agent/stores/{store_id}/locations",
+        summary=(
+            "Create a ship-from location on eBay AND mirror it here in one call — no separate "
+            "refresh needed. Prefer letting the owner do this in Seller Hub; only run it when they "
+            "ask you to. No location key is taken: it is derived from the name."
+        ),
         body=(
-            body_field("merchant_location_key", required=True, help="Unique location key (max 36 chars)."),
             body_field("name", required=True, help="Human-readable location name."),
             body_field(
                 "address",
                 type=dict,
-                help="Postal address {addressLine1, city, country, stateOrProvince?, postalCode?}.",
+                required=True,
+                help="Address: {address_line1 (required), city (required), country_code (required, "
+                "ISO-3166 alpha-2 e.g. US), address_line2, state_or_province, postal_code, phone}.",
             ),
         ),
     ),
     Cmd(
-        "ensure-warehouse-location",
-        "POST",
-        "/agent/ebay/stores/{store_id}/locations/warehouse",
-        summary="Get or create the SellerClaw Warehouse location.",
-    ),
-    Cmd(
         "delete-location",
         "DELETE",
-        "/agent/ebay/stores/{store_id}/locations/{merchant_location_key}",
-        summary="Delete an inventory location.",
+        "/agent/stores/{store_id}/locations/{warehouse_id}",
+        summary=(
+            "Remove a ship-from location from eBay and tombstone it here. Destructive — only on the "
+            "owner's explicit request. Takes the warehouse 'id' from list-locations."
+        ),
+    ),
+    Cmd(
+        "refresh-locations",
+        "POST",
+        "/agent/stores/{store_id}/locations/refresh",
+        summary=(
+            "Re-read locations from eBay now — for one the seller just created there. Otherwise the "
+            "mirror only refreshes daily."
+        ),
+    ),
+    Cmd(
+        "list-policies",
+        "GET",
+        "/agent/stores/{store_id}/policies",
+        summary=(
+            "List the store's mirrored business policies (fulfillment / payment / return). "
+            "'is_default' marks the one a listing uses when it names none."
+        ),
+    ),
+    Cmd(
+        "refresh-policies",
+        "POST",
+        "/agent/stores/{store_id}/policies/refresh",
+        summary=(
+            "Re-read business policies from eBay now — for one the seller just created there. "
+            "Otherwise the mirror only refreshes daily. Pinning a default stays the owner's call on "
+            "the store page."
+        ),
     ),
 )
 

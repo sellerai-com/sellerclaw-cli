@@ -39,7 +39,14 @@ SPECS = (
                     "failed",
                 ),
             ),
-            flag("sales_channel_id", help="Filter by sales channel id."),
+            flag("sales_channel_id", help="Filter by sales channel id.", aliases=("--store-id",)),
+            flag(
+                "product_id",
+                help=(
+                    "Keep only orders containing this catalog product — the 'who bought this?' "
+                    "lookup."
+                ),
+            ),
             flag(
                 "limit",
                 type=int,
@@ -71,6 +78,23 @@ SPECS = (
         ),
         flags=(
             flag("q", required=True, help="Search text (order number, customer, or a line-item SKU/title)."),
+            flag(
+                "status",
+                help="Also filter by internal order status.",
+                choices=(
+                    "new",
+                    "pending_approval",
+                    "approved",
+                    "purchasing",
+                    "purchased",
+                    "awaiting_payment",
+                    "shipped",
+                    "fulfilled",
+                    "cancelled",
+                    "failed",
+                ),
+            ),
+            flag("sales_channel_id", help="Also filter by sales channel id.", aliases=("--store-id",)),
             flag("limit", type=int, minimum=1, maximum=200, default=50, help="Max results in this page."),
             flag("offset", type=int, minimum=0, default=0, help="Number of results to skip (for paging)."),
         ),

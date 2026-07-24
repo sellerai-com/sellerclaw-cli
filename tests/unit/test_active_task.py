@@ -95,3 +95,25 @@ def test_ambiguous_prefix_is_rejected(env: str) -> None:
     result = runner.invoke(app, ["subagent-tasks", "complete", "7715c2ce"])
     assert result.exit_code == 1
     assert "prefix" in result.stderr
+
+
+@respx.mock
+def test_list_forwards_team_task_id_filter(env: str) -> None:
+    """`list --team-task-id <uuid>` passes team_task_id as a query param."""
+    route = respx.get(f"{env}/agent/goals/my-tasks").mock(
+        return_value=httpx.Response(200, json={"tasks": []})
+    )
+    result = runner.invoke(app, ["subagent-tasks", "list", "--team-task-id", TASK_A])
+    assert result.exit_code == 0, result.stderr
+    assert route.calls.last.request.url.params.get("team_task_id") == TASK_A
+
+
+@respx.mock
+def test_list_without_team_task_id_omits_param(env: str) -> None:
+    """Omitting the filter sends no team_task_id query param (unchanged behavior)."""
+    route = respx.get(f"{env}/agent/goals/my-tasks").mock(
+        return_value=httpx.Response(200, json={"tasks": []})
+    )
+    result = runner.invoke(app, ["subagent-tasks", "list"])
+    assert result.exit_code == 0, result.stderr
+    assert "team_task_id" not in route.calls.last.request.url.params

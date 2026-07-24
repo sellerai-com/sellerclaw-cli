@@ -48,11 +48,16 @@ SERVER_INSTRUCTIONS = (
     "SellerClaw e-commerce control over the seller's stores, orders, listings, ads, suppliers, "
     "email and research. The surface is large, so discover before you call:\n"
     "1. `sellerclaw_groups` — list command groups and their commands.\n"
-    "2. `sellerclaw_describe(group, command)` — exact positionals, flags and JSON body fields, "
-    "plus a ready `call_example` for `sellerclaw_run`.\n"
+    "2. `sellerclaw_describe(group)` — every command in that group with its positionals, flags, "
+    "JSON body fields and a ready `call_example`. Pass `command` too for just one of them.\n"
     "3. `sellerclaw_run(group, command, positionals, flags, body)` — invoke it.\n"
     "Always describe a command before running it the first time. Some actions (e.g. sending email "
-    "or marketing campaigns) are gated server-side and need the owner's approval."
+    "or marketing campaigns) are gated server-side and need the owner's approval.\n"
+    "Finding things: read one row by its SellerClaw id with the channel-agnostic groups — "
+    "`listings get`, `orders get`, `catalog get` (the per-channel groups like `shopify-listings` "
+    "do not read by id). `listings search` finds listings by product_id (one row per variant), "
+    "store, SKU, marketplace id, channel or status; `catalog list` finds a product by exact SKU or "
+    "by supplier item; `orders list` takes a product_id (who bought this)."
 )
 
 _GROUPS_TOOL_DESC = (
@@ -60,9 +65,10 @@ _GROUPS_TOOL_DESC = (
     "research, …) with the commands inside each. Start here, then call sellerclaw_describe."
 )
 _DESCRIBE_TOOL_DESC = (
-    "Full schema for one command: HTTP method, positional arguments (in order), query flags "
-    "(with types/choices/ranges), JSON body fields, and a ready-to-use call_example for "
-    "sellerclaw_run. Call this before sellerclaw_run the first time you use a command."
+    "Full schema — HTTP method, positional arguments (in order), query flags (with "
+    "types/choices/ranges), JSON body fields, and a ready-to-use call_example for sellerclaw_run. "
+    "Pass only `group` to get every command in it in one call; add `command` for a single one. "
+    "Call this before sellerclaw_run the first time you use a command."
 )
 _RUN_TOOL_DESC = (
     "Invoke a SellerClaw command. `positionals` is a {name: value} map for the path arguments, "
@@ -138,22 +144,45 @@ def _visible_groups() -> list[GroupSpec]:
     return [g for g in REGISTRY if g.name in MCP_VISIBLE_GROUPS]
 
 
+def _resolve_group(group: str) -> GroupSpec:
+    """Find an MCP-visible group, or raise an actionable error."""
+    visible = _visible_groups()
+    matched = next((g for g in visible if g.name == group), None)
+    if matched is None:
+        names = ", ".join(sorted(g.name for g in visible))
+        raise UserInputError(f"unknown group {group!r}. Call sellerclaw_groups. Available: {names}.")
+    return matched
+
+
+def _sibling_group_hint(group: str, wanted: str) -> str:
+    """Point a channel group at the channel-agnostic group that owns the verb, if one does.
+
+    ``shopify-listings`` and friends carry only channel-specific verbs; reading one row by its
+    SellerClaw id lives in the cross-channel ``listings`` / ``orders`` group, because the id is not
+    scoped to a channel. Derived from the registry, so a channel added later is covered for free.
+    """
+    if "-" not in group:
+        return ""
+    entity = group.rsplit("-", 1)[-1]
+    sibling = next((g for g in _visible_groups() if g.name == entity), None)
+    if sibling is None or not any(c.name == wanted for c in sibling.commands):
+        return ""
+    return f" `{wanted}` lives in the channel-agnostic group instead: group='{entity}'."
+
+
 def _resolve(group: str, command: str) -> tuple[GroupSpec, Cmd]:
     """Find the (group, command) pair among the MCP-visible groups, or raise an actionable error.
 
     Groups outside :data:`MCP_VISIBLE_GROUPS` are invisible here even though they exist in the CLI,
     so they read as unknown — an MCP client can neither describe nor run them.
     """
-    visible = _visible_groups()
-    matched = next((g for g in visible if g.name == group), None)
-    if matched is None:
-        names = ", ".join(sorted(g.name for g in visible))
-        raise UserInputError(f"unknown group {group!r}. Call sellerclaw_groups. Available: {names}.")
+    matched = _resolve_group(group)
     cmd = next((c for c in matched.commands if c.name == command), None)
     if cmd is None:
         names = ", ".join(sorted(c.name for c in matched.commands))
         raise UserInputError(
-            f"unknown command {command!r} in group {group!r}. Commands: {names}."
+            f"unknown command {command!r} in group {group!r}."
+            f"{_sibling_group_hint(group, command)} Commands: {names}."
         )
     return matched, cmd
 
@@ -167,6 +196,10 @@ def _flag_schema(f: Flag) -> dict[str, Any]:
         "repeatable": f.repeatable,
         "help": f.help,
     }
+    if f.aliases:
+        # Free-text search answers to --q / --query / --search / --text whichever one the command
+        # declares; surfacing the aliases means a caller's first guess is accepted.
+        item["also_accepted_as"] = [a.lstrip("-").replace("-", "_") for a in f.aliases]
     if f.choices:
         item["choices"] = list(f.choices)
     if f.minimum is not None:
@@ -224,11 +257,10 @@ def list_groups() -> list[dict[str, Any]]:
     ]
 
 
-def describe_command(group: str, command: str) -> dict[str, Any]:
-    """Return the full schema for one command so the caller can build a valid sellerclaw_run."""
-    matched, cmd = _resolve(group, command)
+def _command_schema(group: str, cmd: Cmd) -> dict[str, Any]:
+    """Everything needed to build a valid `sellerclaw_run` for one command."""
     return {
-        "group": matched.name,
+        "group": group,
         "command": cmd.name,
         "method": cmd.method,
         "path": cmd.path,
@@ -238,8 +270,25 @@ def describe_command(group: str, command: str) -> dict[str, Any]:
         "takes_body": cmd.takes_body,
         "body_freeform": cmd.takes_body and not cmd.body,
         "body_fields": [_body_schema(b) for b in cmd.body],
-        "call_example": _call_example(matched.name, cmd),
+        "call_example": _call_example(group, cmd),
     }
+
+
+def describe_command(group: str, command: str | None = None) -> dict[str, Any]:
+    """Return the full schema for one command — or for every command in the group at once.
+
+    Omitting ``command`` describes the whole group in a single call, so the caller learns every
+    verb, flag and body field of an area without a lookup per command.
+    """
+    if command is None:
+        matched = _resolve_group(group)
+        return {
+            "group": matched.name,
+            "summary": matched.help,
+            "commands": [_command_schema(matched.name, cmd) for cmd in matched.commands],
+        }
+    matched, cmd = _resolve(group, command)
+    return _command_schema(matched.name, cmd)
 
 
 def _request_token() -> str | None:

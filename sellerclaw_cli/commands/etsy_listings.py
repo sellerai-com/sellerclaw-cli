@@ -101,15 +101,18 @@ SPECS = (
             body_field(
                 "taxonomy_id",
                 type=int,
-                help="Etsy taxonomy (category) id — required to publish; falls back to the shop default.",
+                help="Etsy taxonomy (category) id — omit to let the system place each product.",
             ),
+            # Omitting a policy is the normal case: the server settles it from the store's pinned
+            # default, or from the shop's only one of that type. Ambiguous and unpinned, it does not
+            # guess — the drafts are still created and the question comes back in `needs_policies`.
             body_field(
                 "shipping_profile_id",
-                help="Etsy shipping profile id — required to publish; falls back to the shop default.",
+                help="Etsy shipping profile id — omit to let the shop settle it.",
             ),
             body_field(
                 "return_policy_id",
-                help="Etsy return policy id (recommended for physical goods).",
+                help="Etsy return policy id — omit to let the shop settle it (Etsy does not require one).",
             ),
             body_field(
                 "who_made",
@@ -146,6 +149,35 @@ SPECS = (
         ),
     ),
     Cmd(
+        "set-policies",
+        "POST",
+        "/agent/etsy/stores/{store_id}/listings/set-policies",
+        summary=(
+            "Point many drafts at the same shop policies in one call — the answer to a "
+            '`needs_policies` question (body: {"listing_ids": ["<uuid>", ...], '
+            '"shipping_profile_id": "..."}). One policy set for the whole list: a policy belongs to '
+            "the Etsy shop, not the listing. Take the ids from `needs_policies[].options`; an "
+            "omitted policy is left as it is. Drafts only — a published listing is refused (use "
+            "`update`, which tells Etsy). Returns the patched rows with fresh readiness."
+        ),
+        body=(
+            body_field(
+                "listing_ids",
+                required=True,
+                repeatable=True,
+                help="Draft listing ids (UUIDs) to point at these policies.",
+            ),
+            body_field(
+                "shipping_profile_id",
+                help="Etsy shipping profile id; omit to leave it as it is.",
+            ),
+            body_field(
+                "return_policy_id",
+                help="Etsy return policy id; omit to leave it as it is.",
+            ),
+        ),
+    ),
+    Cmd(
         "withdraw",
         "POST",
         "/agent/etsy/stores/{store_id}/listings/withdraw",
@@ -167,8 +199,10 @@ SPECS = (
         "PATCH",
         "/agent/etsy/stores/{store_id}/listings/{listing_id}",
         summary=(
-            "Edit an Etsy listing group; pushed to Etsy when the listing is PUBLISHED "
-            '(body: {"title"?, "description"?, "sell_prices"?: {sku: price}, "quantities"?: {sku: qty}}).'
+            "Edit one Etsy listing group; pushed to Etsy when the listing is PUBLISHED "
+            '(body: {"title"?, "description"?, "sell_prices"?: {sku: price}, "quantities"?: {sku: qty}, '
+            '"shipping_profile_id"?, "return_policy_id"?}). To fix the policies on many drafts at '
+            "once, use `set-policies` instead."
         ),
         body=(
             body_field("title", help="New listing title."),
@@ -182,6 +216,14 @@ SPECS = (
                 "quantities",
                 type=dict,
                 help='New stock quantities keyed by listing SKU, e.g. {"SKU-1": 5}.',
+            ),
+            body_field(
+                "shipping_profile_id",
+                help="Etsy shipping profile id; omit to leave it as it is.",
+            ),
+            body_field(
+                "return_policy_id",
+                help="Etsy return policy id; omit to leave it as it is.",
             ),
         ),
     ),

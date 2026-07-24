@@ -52,14 +52,7 @@ jobs:
           python-version: "3.12"
 
       # The Claude Code plugin under plugins/ is generated from plugin/ and committed (the marketplace
-      # references it by path). Rebuild it and fail if it drifts from the source tree.
-      - name: Rebuild the committed plugin
-        run: python3 scripts/build_plugin.py --target claude-code
-
-      - name: Check it is up to date
-        run: |
-          if ! git diff --quiet -- plugins/; then
-            echo "::error::plugins/claude-code is stale — run 'make plugin' and commit the result." >&2
-            git diff --stat -- plugins/
-            exit 1
-          fi
+      # serves it straight from main). Fail if it drifts from the source tree. Same command the local
+      # release gate runs (`make plugin-check`), so the two can never disagree.
+      - name: Committed plugin is up to date
+        run: python3 scripts/build_plugin.py --check

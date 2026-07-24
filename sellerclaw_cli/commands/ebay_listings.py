@@ -9,6 +9,53 @@ NAME = "ebay-listings"
 # Listing READS come from the unified SellerClaw mirror (/agent/stores/{store_id}/listings),
 # warmed on connect + refreshed periodically; pass --live on search to hit eBay directly. The
 # draft/publish ops stay under the store resource (/agent/stores/{store_id}/ebay-*).
+
+# The "lazy" draft body: only product_ids is required — the server places the category and fills the
+# item specifics when they are omitted. Shared by preview-drafts and publish-product.
+_LAZY_DRAFT_BODY = (
+    body_field(
+        "product_ids",
+        required=True,
+        repeatable=True,
+        help="Catalog product ids (UUIDs); one draft per product.",
+    ),
+    body_field("category_id", help="eBay category id — omit to let the system place each product."),
+    body_field("title", help="Listing title (max 80 chars); defaults to the product name."),
+    body_field(
+        "condition",
+        choices=("NEW", "USED", "REFURBISHED"),
+        help="Item condition (defaults to NEW).",
+    ),
+    body_field(
+        "merchant_location_key",
+        help="Inventory location key (resolved from your eBay account if omitted).",
+    ),
+    body_field("description", help="Listing description (HTML allowed)."),
+    body_field(
+        "api_kind",
+        choices=("trading", "inventory"),
+        help="Which eBay API to publish with (defaults to trading).",
+    ),
+    # Omitting a policy is the normal case: the server settles it from the store's pinned default,
+    # or from the account's only policy of that type. Ambiguous and unpinned, it does not guess —
+    # the drafts are still created and the question comes back in `needs_policies`.
+    body_field(
+        "fulfillment_policy_id",
+        help="eBay fulfillment business policy id — omit to let the store settle it.",
+    ),
+    body_field(
+        "payment_policy_id",
+        help="eBay payment business policy id — omit to let the store settle it.",
+    ),
+    body_field(
+        "return_policy_id",
+        help="eBay return business policy id — omit to let the store settle it.",
+    ),
+    body_field("images", repeatable=True, help="List of image URLs (max 24)."),
+    body_field("aspects", type=dict, help="Item specifics; omit to auto-fill from the product."),
+    body_field("sell_prices", type=dict, help="Override sell prices keyed by SKU/variant."),
+)
+
 SPECS = (
     Cmd(
         "list",
@@ -185,35 +232,58 @@ SPECS = (
         "create-drafts",
         "POST",
         "/agent/stores/{store_id}/ebay-draft-listings",
-        summary="Create eBay draft listings.",
+        summary="Create eBay draft listings (category and item specifics are filled for you).",
+        # Only product_ids is required, matching every other channel's draft command and the server,
+        # which fills the rest: it places the category, resolves the item specifics off the product,
+        # takes the title from the catalog, defaults the condition and reads the location from the
+        # eBay account. Requiring them here used to reject the very body the server wants.
+        body=_LAZY_DRAFT_BODY,
+    ),
+    Cmd(
+        "preview-drafts",
+        "POST",
+        "/agent/stores/{store_id}/ebay-draft-listings/preview",
+        summary="Preview what drafting products would set (category + item specifics) — creates nothing.",
+        body=_LAZY_DRAFT_BODY,
+    ),
+    Cmd(
+        "publish-product",
+        "POST",
+        "/agent/stores/{store_id}/ebay-draft-listings/publish-product",
+        summary="One shot: draft products (auto category + specifics) and publish the ready ones.",
+        body=_LAZY_DRAFT_BODY,
+    ),
+    Cmd(
+        "set-policies",
+        "POST",
+        "/agent/stores/{store_id}/ebay-draft-listings/set-policies",
+        summary=(
+            "Point many drafts at the same business policies in one call — the answer to a "
+            '`needs_policies` question (body: {"listing_ids": ["<uuid>", ...], '
+            '"fulfillment_policy_id": "..."}). One policy set for the whole list: a policy belongs '
+            "to the eBay account, not the listing. Take the ids from `needs_policies[].options`; an "
+            "omitted policy is left as it is. Drafts only — a published listing is refused (use "
+            "`update`, which tells eBay). Returns the patched rows with fresh readiness."
+        ),
         body=(
             body_field(
-                "product_ids",
+                "listing_ids",
                 required=True,
                 repeatable=True,
-                help="Catalog product ids (UUIDs) to create one draft per product.",
+                help="Draft listing ids (UUIDs) to point at these policies.",
             ),
-            body_field("title", required=True, help="Listing title (max 80 chars)."),
-            body_field("category_id", required=True, help="eBay category id."),
             body_field(
-                "condition",
-                required=True,
-                choices=("NEW", "USED", "REFURBISHED"),
-                help="Item condition.",
+                "fulfillment_policy_id",
+                help="eBay fulfillment business policy id; omit to leave it as it is.",
             ),
-            body_field("merchant_location_key", required=True, help="Inventory location key."),
-            body_field("description", help="Listing description (HTML allowed)."),
             body_field(
-                "api_kind",
-                choices=("trading", "inventory"),
-                help="Which eBay API to publish with (defaults to trading).",
+                "payment_policy_id",
+                help="eBay payment business policy id; omit to leave it as it is.",
             ),
-            body_field("fulfillment_policy_id", help="eBay fulfillment business policy id (resolved at publish if omitted)."),
-            body_field("payment_policy_id", help="eBay payment business policy id (resolved at publish if omitted)."),
-            body_field("return_policy_id", help="eBay return business policy id (resolved at publish if omitted)."),
-            body_field("images", repeatable=True, help="List of image URLs (max 24)."),
-            body_field("aspects", type=dict, help="Item specifics, e.g. {\"Color\": [\"Black\"]}."),
-            body_field("sell_prices", type=dict, help="Override sell prices keyed by SKU/variant."),
+            body_field(
+                "return_policy_id",
+                help="eBay return business policy id; omit to leave it as it is.",
+            ),
         ),
     ),
     Cmd("get-draft", "GET", "/agent/stores/{store_id}/ebay-draft-listings/{listing_id}", summary="Get one eBay draft listing."),

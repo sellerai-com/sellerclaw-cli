@@ -19,7 +19,10 @@ SPECS = (
         "GET",
         "/agent/goals/my-tasks",
         summary="List the tasks assigned to you.",
-        flags=(flag("agent_id", help="Filter by agent id (defaults to the caller)."),),
+        flags=(
+            flag("agent_id", help="Filter by agent id (defaults to the caller)."),
+            flag("team_task_id", help="Filter to the subtasks of this team task (UUID)."),
+        ),
     ),
     Cmd(
         "get",
@@ -34,6 +37,15 @@ SPECS = (
         "GET",
         "/agent/goals/events/agent_task/{task_id}",
         summary="Audit timeline (events) for a task.",
+        active_slot=_SLOT,
+        resolve_list_path=_LIST,
+    ),
+    Cmd(
+        "reports",
+        "GET",
+        "/agent/goals/reports/agent_task/{task_id}",
+        summary="Report history: every result submitted across the task's re-runs, with review verdicts. "
+        "Read this before re-running a returned task to see what earlier attempts already covered.",
         active_slot=_SLOT,
         resolve_list_path=_LIST,
     ),
@@ -140,6 +152,16 @@ SPECS = (
                 required=True,
                 help="One string: the full result as a Markdown report (TL;DR, findings, numbers). "
                 "The reviewer reads only this field — put structured data inside it, not as extra keys.",
+            ),
+            body_field(
+                "attachments",
+                type=dict,
+                repeatable=True,
+                help="Optional media for the report — an array of objects, each "
+                '{"kind": "image"|"file"|"link", "url": "...", "title"?: "...", '
+                '"file_id"?: "<id from `sellerclaw files upload`>"}. '
+                "Use for screenshots, generated files, or reference links; do not paste these into `outcome`.",
+                example=[{"kind": "link", "url": "https://example.com/dashboard", "title": "Live dashboard"}],
             ),
         ),
         active_slot=_SLOT,

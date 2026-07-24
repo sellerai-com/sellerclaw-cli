@@ -13,6 +13,21 @@ SPECS = (
         "/agent/stores/{store_id}/info",
         summary="Get the BigCommerce store info (name, currency, storefront domain).",
     ),
+    Cmd(
+        "list-locations",
+        "GET",
+        "/agent/stores/{store_id}/locations",
+        summary="List the store's warehouses; 'is_default' marks the one stock is written to.",
+    ),
+    Cmd(
+        "refresh-locations",
+        "POST",
+        "/agent/stores/{store_id}/locations/refresh",
+        summary=(
+            "Re-read warehouses from BigCommerce now — for one the seller just created there. "
+            "Otherwise the mirror only refreshes daily."
+        ),
+    ),
 )
 
 app = build_group(NAME, "BigCommerce store admin: store name, currency and domain.", SPECS)

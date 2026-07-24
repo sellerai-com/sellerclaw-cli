@@ -2,12 +2,23 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import zipfile
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
-from scripts.build_plugin import TARGETS, assemble, available_targets, pack_zip, read_version
+from scripts.build_plugin import (
+    TARGETS,
+    assemble,
+    available_targets,
+    build_target,
+    check_target,
+    committed_targets,
+    pack_zip,
+    read_version,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -121,3 +132,106 @@ def test_target_out_policy() -> None:
     assert all(spec.out.startswith("dist/") for name, spec in TARGETS.items() if name != "claude-code")
     # The Desktop .mcpb bundle ships the MCP server only — no skills/hooks layers.
     assert TARGETS["claude-desktop"].layers == ()
+    # Only the committed target is checkable for drift — dist/ is git-ignored and rebuilt every time.
+    assert committed_targets(REPO_ROOT) == ["claude-code"]
+
+
+COMMITTED_OUT = TARGETS["claude-code"].out
+
+
+@pytest.fixture
+def repo(tmp_path: Path) -> Path:
+    """A throwaway repo: the plugin/ source plus a freshly built, in-sync committed plugins/ tree."""
+    root = tmp_path / "repo"
+    shutil.copytree(PLUGIN_SRC, root / "plugin")
+    build_target("claude-code", root)
+    return root
+
+
+def test_check_target_is_clean_when_the_committed_tree_matches_the_source(repo: Path) -> None:
+    assert check_target("claude-code", repo) == []
+
+
+def test_check_target_passes_on_this_repo() -> None:
+    # The marketplace serves plugins/claude-code straight from main, so the tree committed here must
+    # always be exactly what plugin/ produces. This is the regression guard for that: edit plugin/,
+    # forget `make plugin`, and this fails long before the stale skills reach anyone.
+    drift = check_target("claude-code", REPO_ROOT)
+    assert not drift, "the committed plugin is stale — run `make plugin` and commit:\n  " + "\n  ".join(drift)
+
+
+def _edit_a_skill(repo: Path) -> None:
+    skill = repo / COMMITTED_OUT / "skills" / CORE_SKILL / "SKILL.md"
+    skill.write_text(skill.read_text() + "\nhand-edited, never regenerated\n")
+
+
+def _bump_the_version_without_rebuilding(repo: Path) -> None:
+    (repo / "plugin" / "VERSION").write_text("99.0.0\n")
+
+
+def _drop_the_executable_bit(repo: Path) -> None:
+    (repo / COMMITTED_OUT / "hooks" / "session_start.sh").chmod(0o644)
+
+
+def _delete_a_generated_file(repo: Path) -> None:
+    (repo / COMMITTED_OUT / "skills" / CORE_SKILL / "SKILL.md").unlink()
+
+
+def _leave_a_stale_file_behind(repo: Path) -> None:
+    (repo / COMMITTED_OUT / "skills" / "sellerclaw-retired" / "SKILL.md").parent.mkdir(parents=True)
+    (repo / COMMITTED_OUT / "skills" / "sellerclaw-retired" / "SKILL.md").write_text("dropped from plugin/\n")
+
+
+@pytest.mark.parametrize(
+    ("desync", "expected"),
+    [
+        pytest.param(
+            _edit_a_skill,
+            [f"out of date: {COMMITTED_OUT}/skills/{CORE_SKILL}/SKILL.md"],
+            id="skill edited in the committed tree instead of the source",
+        ),
+        pytest.param(
+            _bump_the_version_without_rebuilding,
+            [f"out of date: {COMMITTED_OUT}/.claude-plugin/plugin.json"],
+            id="plugin/VERSION bumped but never rebuilt",
+        ),
+        pytest.param(
+            _drop_the_executable_bit,
+            [f"out of date: {COMMITTED_OUT}/hooks/session_start.sh"],
+            id="hook lost its executable bit",
+        ),
+        pytest.param(
+            _delete_a_generated_file,
+            [f"never committed: {COMMITTED_OUT}/skills/{CORE_SKILL}/SKILL.md"],
+            id="generated file missing from the commit",
+        ),
+        pytest.param(
+            _leave_a_stale_file_behind,
+            [f"stale leftover, plugin/ no longer produces it: {COMMITTED_OUT}/skills/sellerclaw-retired/SKILL.md"],
+            id="skill removed from the source but left in the commit",
+        ),
+    ],
+)
+def test_check_target_reports_each_way_the_committed_tree_can_drift(
+    repo: Path,
+    desync: Callable[[Path], None],
+    expected: list[str],
+) -> None:
+    desync(repo)
+    assert check_target("claude-code", repo) == expected
+
+
+def test_check_target_writes_nothing(repo: Path) -> None:
+    # The release gate runs this on a tree it is about to tag, and refuses to tag a dirty tree — so
+    # the check must not touch a single byte, not even the mtimes it would take to rebuild in place.
+    def snapshot() -> dict[str, tuple[bytes, float]]:
+        root = repo / COMMITTED_OUT
+        return {
+            p.relative_to(root).as_posix(): (p.read_bytes(), p.stat().st_mtime)
+            for p in root.rglob("*")
+            if p.is_file()
+        }
+
+    before = snapshot()
+    assert check_target("claude-code", repo) == []
+    assert snapshot() == before

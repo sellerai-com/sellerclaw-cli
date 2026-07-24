@@ -64,12 +64,31 @@ def test_files_group_discoverable() -> None:
     assert flags["--url"]["required"] is True
 
 
+_LISTINGS_COMMANDS = [
+    "get",
+    "adopt-marketplace-version",
+    "search",
+    "variable",
+    "sync",
+    "drafts",
+    "readiness",
+    "check",
+    "bulk-update",
+    "delete-drafts",
+    "bulk-publish",
+    "bulk-jobs",
+    "bulk-job",
+]
+
+
 def test_listings_group_exposes_get_and_search() -> None:
-    """The channel-agnostic 'listings' group resolves a listing by id and searches by name."""
+    """The channel-agnostic 'listings' group resolves a listing by id, finds listings by any of
+    the handles the caller may hold, and runs the bulk draft workflow (drafts → readiness → fix →
+    publish)."""
     result = runner.invoke(app, ["commands", "--group", "listings"])
     assert result.exit_code == 0, result.output
     cmds = {row["command"] for row in _data(result.stdout)}
-    assert cmds == {"get", "search"}
+    assert cmds == set(_LISTINGS_COMMANDS)
 
     get_detail = _data(runner.invoke(app, ["describe", "listings", "get"]).stdout)
     assert get_detail["method"] == "GET"
@@ -78,7 +97,68 @@ def test_listings_group_exposes_get_and_search() -> None:
     search_detail = _data(runner.invoke(app, ["describe", "listings", "search"]).stdout)
     assert search_detail["method"] == "GET"
     flags = {f["flag"]: f for f in search_detail["flags"]}
-    assert flags["--q"]["required"] is True
+    assert {"--q", "--product-id", "--store-id", "--sku", "--remote-id", "--platform", "--status"} <= set(flags)
+    # No criterion is mandatory any more: each one is a separate route to the same listings, and
+    # requiring free text blocked the product -> listings lookup entirely.
+    assert all(not spec["required"] for spec in flags.values())
+    assert flags["--q"]["aliases"] == ["--query", "--search", "--text", "--keyword", "--keywords"]
+
+
+def test_catalog_finds_a_product_by_sku_and_by_supplier_item() -> None:
+    """`catalog list` carries the exact-SKU and supplier-item lookups — the latter is the
+    'do I already have this product?' check that prevents sourcing a duplicate."""
+    detail = _data(runner.invoke(app, ["describe", "catalog", "list"]).stdout)
+    flags = {f["flag"] for f in detail["flags"]}
+    assert {"--sku", "--supplier-product-id", "--supplier-provider", "--q"} <= flags
+
+
+def test_orders_find_who_bought_a_product() -> None:
+    """`orders list --product-id` answers 'who bought this' without scanning every order."""
+    detail = _data(runner.invoke(app, ["describe", "orders", "list"]).stdout)
+    flags = {f["flag"] for f in detail["flags"]}
+    assert "--product-id" in flags
+
+
+def test_describe_a_whole_group_in_one_call() -> None:
+    """Omitting the command describes every command in the group — one call instead of N."""
+    result = runner.invoke(app, ["describe", "catalog"])
+    assert result.exit_code == 0, result.output
+    payload = _data(result.stdout)
+    assert payload["group"] == "catalog"
+    described = {cmd["command"] for cmd in payload["commands"]}
+    assert {"list", "get", "search", "create", "source-from-supplier"} <= described
+    source = next(cmd for cmd in payload["commands"] if cmd["command"] == "source-from-supplier")
+    assert [field["field"] for field in source["body_fields"]]  # body schema travels with it
+    assert source["example"].startswith("sellerclaw catalog source-from-supplier")
+
+
+def test_describe_an_unknown_group_suggests_a_real_one() -> None:
+    """A wrong group name is a dead end unless the error names the closest real one."""
+    result = runner.invoke(app, ["describe", "shopify-products"])
+    assert result.exit_code != 0
+    assert "shopify-" in result.stderr
+
+
+def test_groups_carry_their_command_names() -> None:
+    """`groups` lists the commands, not just a count — a count forces a second call to find out
+    whether the verb you want even exists there."""
+    payload = _data(runner.invoke(app, ["groups"]).stdout)
+    listings = next(row for row in payload if row["group"] == "listings")
+    assert listings["commands"] == _LISTINGS_COMMANDS
+
+
+def test_suppliers_expose_per_product_stock() -> None:
+    """``check-stock-by-product`` fetches stock for all variants of a product in one call."""
+    result = runner.invoke(app, ["commands", "--group", "suppliers"])
+    assert result.exit_code == 0, result.output
+    cmds = {row["command"] for row in _data(result.stdout)}
+    assert "check-stock-by-product" in cmds
+
+    detail = _data(runner.invoke(app, ["describe", "suppliers", "check-stock-by-product"]).stdout)
+    assert detail["method"] == "GET"
+    assert detail["positionals"] == ["provider", "product_id"]
+    assert detail["body"] is False
+    assert detail["example"].startswith("sellerclaw suppliers check-stock-by-product <provider> <product_id>")
 
 
 def test_catalog_and_orders_expose_search() -> None:
@@ -289,13 +369,13 @@ def test_ads_groups_mirror_each_other() -> None:
     assert shared <= facebook
 
 
-def test_channels_set_margin_patches_margin() -> None:
-    """`channels set-margin` PATCHes a store with a required numeric `margin` body field."""
-    set_margin = next(
-        c for g in REGISTRY if g.name == "channels" for c in g.commands if c.name == "set-margin"
+def test_channels_set_markup_patches_markup_percent() -> None:
+    """`channels set-markup` PATCHes a store with a required numeric `markup_percent` body field."""
+    set_markup = next(
+        c for g in REGISTRY if g.name == "channels" for c in g.commands if c.name == "set-markup"
     )
-    assert set_margin.method == "PATCH"
-    assert set_margin.path == "/agent/sales-channels/{sales_channel_id}"
-    margin_field = next(f for f in set_margin.body if f.name == "margin")
-    assert margin_field.required is True
-    assert margin_field.type is float
+    assert set_markup.method == "PATCH"
+    assert set_markup.path == "/agent/sales-channels/{sales_channel_id}"
+    markup_field = next(f for f in set_markup.body if f.name == "markup_percent")
+    assert markup_field.required is True
+    assert markup_field.type is float
