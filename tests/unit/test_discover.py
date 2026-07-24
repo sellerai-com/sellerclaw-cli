@@ -68,6 +68,7 @@ _LISTINGS_COMMANDS = [
     "get",
     "adopt-marketplace-version",
     "search",
+    "variable",
     "sync",
     "drafts",
     "readiness",

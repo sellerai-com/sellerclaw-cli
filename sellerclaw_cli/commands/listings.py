@@ -87,6 +87,32 @@ SPECS = (
         ),
     ),
     Cmd(
+        "variable",
+        "GET",
+        "/agent/listings/variable",
+        summary=(
+            "Get one product's WHOLE variable listing on one store — every variation folded under a "
+            "single header (status span, price range, total stock) plus each variation's own price / "
+            "stock / sale-blockers, and the listing's open problems. A multi-variant publish makes "
+            "one storefront product with N variations; 'search --product-id' returns them as N flat "
+            "rows, this returns them as the one listing they are. Needs the catalog product "
+            "(--product-id) and the store (--store-id, its id or its domain). Report it to the owner "
+            "as ONE variable listing (one card), never as N separate rows."
+        ),
+        flags=(
+            flag(
+                "product_id",
+                required=True,
+                help="Catalog product id — the variable listing is this product on the store.",
+            ),
+            flag(
+                "store_id",
+                required=True,
+                help="The store: its sales channel id or its domain (see `channels list`).",
+            ),
+        ),
+    ),
+    Cmd(
         "sync",
         "POST",
         "/agent/stores/{store_id}/listings/sync",
