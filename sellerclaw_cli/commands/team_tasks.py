@@ -96,7 +96,8 @@ SPECS = (
                 required=True,
                 help=(
                     "Ordered list of phases. Each item is an object with `text` (required) and "
-                    "optional `status` (pending|in_progress|done|skipped), `id`, and `metadata`. "
+                    "optional `status` (pending|in_progress|done|skipped), `id`, `note` (the "
+                    "owner-facing progress line) and `metadata` (private). "
                     "Omit `id` for a new phase (the server assigns one); re-send an existing `id` "
                     "to keep its history. Lay out every phase up front, including ones whose agent "
                     "task you can't create yet (they depend on an earlier phase's output)."
@@ -114,7 +115,7 @@ SPECS = (
         "plan-check",
         "POST",
         "/agent/goals/team-tasks/{task_id}/plan/check",
-        summary="Update one plan item: set its status and/or merge metadata into it.",
+        summary="Update one plan phase: set its status, its owner-facing note, and/or merge metadata.",
         body=(
             body_field(
                 "item_id",
@@ -127,11 +128,18 @@ SPECS = (
                 help="New status for the phase.",
             ),
             body_field(
+                "note",
+                help=(
+                    "Short plain-language line the owner reads under this phase in their plan view "
+                    '(e.g. "Sourced the folding organizer ($4.20) from CJ"). No raw ids.'
+                ),
+            ),
+            body_field(
                 "metadata",
                 type=dict,
                 help=(
                     "Keys to merge into the item — e.g. the fulfilling agent task id: "
-                    '{"agent_task_id": "<id>"}.'
+                    '{"agent_task_id": "<id>"}. Never shown to the owner.'
                 ),
             ),
         ),

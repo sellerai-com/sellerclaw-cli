@@ -98,9 +98,10 @@ SPECS = (
                 required=True,
                 help=(
                     "Ordered list of steps. Each item is an object with `text` (required) and "
-                    "optional `status` (pending|in_progress|done|skipped), `id`, and `metadata`. "
-                    "Omit `id` for a new step (the server assigns one); re-send an existing `id` "
-                    "to keep that item's history when restructuring."
+                    "optional `status` (pending|in_progress|done|skipped), `id`, `note` (the "
+                    "owner-facing progress line) and `metadata` (private). Omit `id` for a new "
+                    "step (the server assigns one); re-send an existing `id` to keep that item's "
+                    "history when restructuring."
                 ),
                 example=[
                     {"text": "Search CJ for pet products"},
@@ -117,7 +118,7 @@ SPECS = (
         "plan-check",
         "POST",
         "/agent/goals/agent-tasks/{task_id}/plan/check",
-        summary="Update one plan item: set its status and/or merge metadata into it.",
+        summary="Update one plan item: set its status, its owner-facing note, and/or merge metadata.",
         body=(
             body_field(
                 "item_id",
@@ -130,11 +131,19 @@ SPECS = (
                 help="New status for the item.",
             ),
             body_field(
+                "note",
+                help=(
+                    "Short plain-language line the owner reads under this step in their plan view "
+                    '(e.g. "Saved the folding organizer to the catalog"). No raw ids.'
+                ),
+            ),
+            body_field(
                 "metadata",
                 type=dict,
                 help=(
                     "Keys to merge into the item — ids of things you created or saved so you don't "
-                    'redo them on resume (e.g. {"catalog_product_id": "prod-9"}).'
+                    'redo them on resume (e.g. {"catalog_product_id": "prod-9"}). Never shown to '
+                    "the owner."
                 ),
             ),
         ),
