@@ -60,6 +60,27 @@ SPECS = (
         ),
     ),
     Cmd(
+        "confirm",
+        "POST",
+        "/agent/goals/action-requests/{request_id}/confirm-from-chat",
+        summary="Close a request using the owner's chat reply instead of making them press a button.",
+        body=(
+            body_field(
+                "chat_id",
+                required=True,
+                help="Chat the owner answered in (from `chats list`).",
+            ),
+            body_field(
+                "message_id",
+                required=True,
+                help=(
+                    "The owner's message that answers this request (from `chats list-messages`). "
+                    "Point at their reply — not your own question, and not an earlier line."
+                ),
+            ),
+        ),
+    ),
+    Cmd(
         "cancel",
         "POST",
         "/agent/goals/action-requests/{request_id}/cancel",

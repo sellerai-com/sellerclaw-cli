@@ -73,11 +73,57 @@ SPECS = (
         "update",
         "PATCH",
         "/agent/goals/team-tasks/{task_id}",
-        summary="Update a team task.",
+        summary="Update a team task. Draft only — once it is running, use `amend`.",
         body=(
             body_field("title", help="New title."),
             body_field("description", help="New description."),
             body_field("deadline", help="New ISO-8601 deadline."),
+        ),
+        active_slot=_SLOT,
+        resolve_list_path=_LIST,
+    ),
+    Cmd(
+        "amend",
+        "POST",
+        "/agent/goals/team-tasks/{task_id}/amend",
+        summary="Record a change to a running task when the owner changes their mind mid-job.",
+        body=(
+            body_field(
+                "kind",
+                required=True,
+                choices=("clarification", "narrowing", "widening"),
+                help=(
+                    "How the change affects the amount of work. 'narrowing' drops work, 'widening' "
+                    "adds it, 'clarification' leaves it the same."
+                ),
+                example="narrowing",
+            ),
+            body_field(
+                "text",
+                required=True,
+                help=(
+                    "The change in plain language, as the owner would read it "
+                    '(e.g. "eBay is out — publish to Shopify only").'
+                ),
+            ),
+            body_field(
+                "chat_id",
+                help="Chat the owner asked for this in (from `chats list`). Pair with message_id.",
+            ),
+            body_field(
+                "message_id",
+                help=(
+                    "The owner's message asking for this change (from `chats list-messages`). "
+                    "Their reply, not your own question."
+                ),
+            ),
+            body_field(
+                "action_request_id",
+                help=(
+                    "Instead of a message: an approval the owner has already answered. Use one or "
+                    "the other, never both."
+                ),
+            ),
         ),
         active_slot=_SLOT,
         resolve_list_path=_LIST,
