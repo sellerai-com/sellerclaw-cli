@@ -48,9 +48,13 @@ sellerclaw_run(group="ebay-listings", command="sync-stock",
   positionals={"store_id": STORE_ID}, body={"items": [{"sku": "WM-01", "quantity": 42}]})
 ```
 
-eBay listings need business policies (payment/return/shipping) and a location — get their ids from the
-`ebay-store` group and add whichever a field error asks for. Drafts live under `create-drafts` /
-`update-draft` / `publish` in the same group.
+eBay listings need business policies (payment/return/shipping) and a location — take their ids from
+`ebay-store list-policies` / `ebay-store list-locations` and add whichever a field error asks for.
+Those ids are SellerClaw's own, and they are what every field here expects; the marketplace's own ids
+(`list-business-policies`, `list-raw-locations`) are a raw account read, not something to send back.
+To stop being asked on every draft, pin the store's defaults once with `channels set-default-policies`
+/ `channels set-default-warehouse` — the owner's call, so ask first. Drafts live under
+`create-drafts` / `update-draft` / `publish` in the same group.
 
 ## Amazon
 

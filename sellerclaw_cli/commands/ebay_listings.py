@@ -28,7 +28,10 @@ _LAZY_DRAFT_BODY = (
     ),
     body_field(
         "merchant_location_key",
-        help="Inventory location key (resolved from your eBay account if omitted).",
+        help=(
+            "Ship-from warehouse, as SellerClaw's id from `ebay-store list-locations` — omit to "
+            "let the store settle it."
+        ),
     ),
     body_field("description", help="Listing description (HTML allowed)."),
     body_field(
@@ -39,17 +42,28 @@ _LAZY_DRAFT_BODY = (
     # Omitting a policy is the normal case: the server settles it from the store's pinned default,
     # or from the account's only policy of that type. Ambiguous and unpinned, it does not guess —
     # the drafts are still created and the question comes back in `needs_policies`.
+    # Named explicitly, the id is SellerClaw's (`ebay-store list-policies`), like every other id on
+    # this API — eBay's own id is a detail of the publish path, not something to type here.
     body_field(
         "fulfillment_policy_id",
-        help="eBay fulfillment business policy id — omit to let the store settle it.",
+        help=(
+            "Fulfillment policy, as SellerClaw's id from `ebay-store list-policies` — omit to let "
+            "the store settle it."
+        ),
     ),
     body_field(
         "payment_policy_id",
-        help="eBay payment business policy id — omit to let the store settle it.",
+        help=(
+            "Payment policy, as SellerClaw's id from `ebay-store list-policies` — omit to let the "
+            "store settle it."
+        ),
     ),
     body_field(
         "return_policy_id",
-        help="eBay return business policy id — omit to let the store settle it.",
+        help=(
+            "Return policy, as SellerClaw's id from `ebay-store list-policies` — omit to let the "
+            "store settle it."
+        ),
     ),
     body_field("images", repeatable=True, help="List of image URLs (max 24)."),
     body_field("aspects", type=dict, help="Item specifics; omit to auto-fill from the product."),
@@ -212,10 +226,18 @@ SPECS = (
                 choices=("NEW", "USED", "REFURBISHED"),
                 help="Item condition.",
             ),
-            body_field("merchant_location_key", help="Inventory location key."),
-            body_field("fulfillment_policy_id", help="eBay fulfillment business policy id."),
-            body_field("payment_policy_id", help="eBay payment business policy id."),
-            body_field("return_policy_id", help="eBay return business policy id."),
+            # Ids as SellerClaw reports them (`ebay-store list-locations` / `list-policies`) —
+            # eBay's own ids belong to the publish path, not to this API.
+            body_field(
+                "merchant_location_key",
+                help="Ship-from warehouse id from `ebay-store list-locations`.",
+            ),
+            body_field(
+                "fulfillment_policy_id",
+                help="Fulfillment policy id from `ebay-store list-policies`.",
+            ),
+            body_field("payment_policy_id", help="Payment policy id from `ebay-store list-policies`."),
+            body_field("return_policy_id", help="Return policy id from `ebay-store list-policies`."),
             body_field("images", repeatable=True, help="List of image URLs (max 24)."),
             body_field("aspects", type=dict, help="Item specifics, e.g. {\"Color\": [\"Black\"]}."),
         ),
@@ -261,9 +283,10 @@ SPECS = (
             "Point many drafts at the same business policies in one call — the answer to a "
             '`needs_policies` question (body: {"listing_ids": ["<uuid>", ...], '
             '"fulfillment_policy_id": "..."}). One policy set for the whole list: a policy belongs '
-            "to the eBay account, not the listing. Take the ids from `needs_policies[].options`; an "
-            "omitted policy is left as it is. Drafts only — a published listing is refused (use "
-            "`update`, which tells eBay). Returns the patched rows with fresh readiness."
+            "to the eBay account, not the listing. Take the ids from `needs_policies[].options` or "
+            "`ebay-store list-policies` — SellerClaw's ids, not eBay's own; an omitted policy is "
+            "left as it is. Drafts only — a published listing is refused (use `update`, which tells "
+            "eBay). Returns the patched rows with fresh readiness."
         ),
         body=(
             body_field(
@@ -274,15 +297,18 @@ SPECS = (
             ),
             body_field(
                 "fulfillment_policy_id",
-                help="eBay fulfillment business policy id; omit to leave it as it is.",
+                help=(
+                    "Fulfillment policy id from `ebay-store list-policies`; omit to leave it as "
+                    "it is."
+                ),
             ),
             body_field(
                 "payment_policy_id",
-                help="eBay payment business policy id; omit to leave it as it is.",
+                help="Payment policy id from `ebay-store list-policies`; omit to leave it as it is.",
             ),
             body_field(
                 "return_policy_id",
-                help="eBay return business policy id; omit to leave it as it is.",
+                help="Return policy id from `ebay-store list-policies`; omit to leave it as it is.",
             ),
         ),
     ),
@@ -301,10 +327,18 @@ SPECS = (
                 choices=("NEW", "USED", "REFURBISHED"),
                 help="Item condition.",
             ),
-            body_field("merchant_location_key", help="Inventory location key."),
-            body_field("fulfillment_policy_id", help="eBay fulfillment business policy id."),
-            body_field("payment_policy_id", help="eBay payment business policy id."),
-            body_field("return_policy_id", help="eBay return business policy id."),
+            # Ids as SellerClaw reports them (`ebay-store list-locations` / `list-policies`) —
+            # eBay's own ids belong to the publish path, not to this API.
+            body_field(
+                "merchant_location_key",
+                help="Ship-from warehouse id from `ebay-store list-locations`.",
+            ),
+            body_field(
+                "fulfillment_policy_id",
+                help="Fulfillment policy id from `ebay-store list-policies`.",
+            ),
+            body_field("payment_policy_id", help="Payment policy id from `ebay-store list-policies`."),
+            body_field("return_policy_id", help="Return policy id from `ebay-store list-policies`."),
             body_field("images", repeatable=True, help="List of image URLs (max 24)."),
             body_field("aspects", type=dict, help="Item specifics, e.g. {\"Color\": [\"Black\"]}."),
         ),

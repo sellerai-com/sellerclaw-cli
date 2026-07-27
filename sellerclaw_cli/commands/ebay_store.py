@@ -23,9 +23,10 @@ SPECS = (
         "GET",
         "/agent/ebay/stores/{store_id}/business-policies",
         summary=(
-            "List fulfillment/payment/return business policies with their ids "
-            "(required by create-drafts/publish). Empty sets mean the seller has not "
-            "opted in to eBay Business Policies."
+            "A raw read of the eBay account's fulfillment/payment/return business policies, for "
+            "detail the mirror normalizes away. The ids here are eBay's own — SellerClaw commands "
+            "take the ids from `list-policies` instead. Empty sets mean the seller has not opted in "
+            "to eBay Business Policies."
         ),
     ),
     Cmd(
@@ -33,8 +34,10 @@ SPECS = (
         "GET",
         "/agent/stores/{store_id}/locations",
         summary=(
-            "List the store's ship-from warehouses. 'is_default' marks the one publishing and stock "
-            "sync use; use each row's 'id' with delete-location."
+            "List the store's ship-from warehouses. Each row's 'id' is SellerClaw's, and it is what "
+            "every command naming a warehouse takes — delete-location, and "
+            "`channels set-default-warehouse` to pin the one publishing and stock sync use "
+            "('is_default' marks the current pin)."
         ),
     ),
     Cmd(
@@ -72,7 +75,7 @@ SPECS = (
         "/agent/stores/{store_id}/locations/{warehouse_id}",
         summary=(
             "Remove a ship-from location from eBay and tombstone it here. Destructive — only on the "
-            "owner's explicit request. Takes the warehouse 'id' from list-locations."
+            "owner's explicit request. Takes the warehouse 'id' (SellerClaw's) from list-locations."
         ),
     ),
     Cmd(
@@ -89,8 +92,10 @@ SPECS = (
         "GET",
         "/agent/stores/{store_id}/policies",
         summary=(
-            "List the store's mirrored business policies (fulfillment / payment / return). "
-            "'is_default' marks the one a listing uses when it names none."
+            "List the store's business policies (fulfillment / payment / return). Each row's 'id' "
+            "is SellerClaw's, and it is the one every command naming a policy takes — drafts, "
+            "set-policies, `channels set-default-policies`. 'is_default' marks the one a listing "
+            "uses when it names none."
         ),
     ),
     Cmd(
@@ -99,8 +104,8 @@ SPECS = (
         "/agent/stores/{store_id}/policies/refresh",
         summary=(
             "Re-read business policies from eBay now — for one the seller just created there. "
-            "Otherwise the mirror only refreshes daily. Pinning a default stays the owner's call on "
-            "the store page."
+            "Otherwise the mirror only refreshes daily. Pin one as the store's default with "
+            "`channels set-default-policies` (the owner's call — ask first)."
         ),
     ),
 )

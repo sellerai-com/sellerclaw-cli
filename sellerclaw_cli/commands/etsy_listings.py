@@ -106,13 +106,21 @@ SPECS = (
             # Omitting a policy is the normal case: the server settles it from the store's pinned
             # default, or from the shop's only one of that type. Ambiguous and unpinned, it does not
             # guess — the drafts are still created and the question comes back in `needs_policies`.
+            # Named explicitly, the id is SellerClaw's (`etsy-store list-policies`), like every
+            # other id on this API — Etsy's own id is a detail of the publish path.
             body_field(
                 "shipping_profile_id",
-                help="Etsy shipping profile id — omit to let the shop settle it.",
+                help=(
+                    "Shipping profile, as SellerClaw's id from `etsy-store list-policies` — omit "
+                    "to let the shop settle it."
+                ),
             ),
             body_field(
                 "return_policy_id",
-                help="Etsy return policy id — omit to let the shop settle it (Etsy does not require one).",
+                help=(
+                    "Return policy, as SellerClaw's id from `etsy-store list-policies` — omit to "
+                    "let the shop settle it (Etsy does not require one)."
+                ),
             ),
             body_field(
                 "who_made",
@@ -156,9 +164,10 @@ SPECS = (
             "Point many drafts at the same shop policies in one call — the answer to a "
             '`needs_policies` question (body: {"listing_ids": ["<uuid>", ...], '
             '"shipping_profile_id": "..."}). One policy set for the whole list: a policy belongs to '
-            "the Etsy shop, not the listing. Take the ids from `needs_policies[].options`; an "
-            "omitted policy is left as it is. Drafts only — a published listing is refused (use "
-            "`update`, which tells Etsy). Returns the patched rows with fresh readiness."
+            "the Etsy shop, not the listing. Take the ids from `needs_policies[].options` or "
+            "`etsy-store list-policies` — SellerClaw's ids, not Etsy's own; an omitted policy is "
+            "left as it is. Drafts only — a published listing is refused (use `update`, which tells "
+            "Etsy). Returns the patched rows with fresh readiness."
         ),
         body=(
             body_field(
@@ -169,11 +178,13 @@ SPECS = (
             ),
             body_field(
                 "shipping_profile_id",
-                help="Etsy shipping profile id; omit to leave it as it is.",
+                help=(
+                    "Shipping profile id from `etsy-store list-policies`; omit to leave it as it is."
+                ),
             ),
             body_field(
                 "return_policy_id",
-                help="Etsy return policy id; omit to leave it as it is.",
+                help="Return policy id from `etsy-store list-policies`; omit to leave it as it is.",
             ),
         ),
     ),
@@ -219,11 +230,13 @@ SPECS = (
             ),
             body_field(
                 "shipping_profile_id",
-                help="Etsy shipping profile id; omit to leave it as it is.",
+                help=(
+                    "Shipping profile id from `etsy-store list-policies`; omit to leave it as it is."
+                ),
             ),
             body_field(
                 "return_policy_id",
-                help="Etsy return policy id; omit to leave it as it is.",
+                help="Return policy id from `etsy-store list-policies`; omit to leave it as it is.",
             ),
         ),
     ),

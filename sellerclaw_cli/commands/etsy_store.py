@@ -18,8 +18,10 @@ SPECS = (
         "GET",
         "/agent/stores/{store_id}/policies",
         summary=(
-            "List the shop's mirrored policies (shipping profiles, return policies). 'is_default' "
-            "marks the one a listing uses when it names none."
+            "List the shop's policies (shipping profiles, return policies). Each row's 'id' is "
+            "SellerClaw's, and it is the one every command naming a policy takes — drafts, "
+            "set-policies, `channels set-default-policies`. 'is_default' marks the one a listing "
+            "uses when it names none."
         ),
     ),
     Cmd(
@@ -28,8 +30,8 @@ SPECS = (
         "/agent/stores/{store_id}/policies/refresh",
         summary=(
             "Re-read shipping profiles and return policies from Etsy now — for one the seller just "
-            "created there. Otherwise the mirror only refreshes daily. Pinning a default stays the "
-            "owner's call on the store page."
+            "created there. Otherwise the mirror only refreshes daily. Pin one as the shop's "
+            "default with `channels set-default-policies` (the owner's call — ask first)."
         ),
     ),
 )

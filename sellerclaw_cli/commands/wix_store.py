@@ -17,7 +17,11 @@ SPECS = (
         "list-locations",
         "GET",
         "/agent/stores/{store_id}/locations",
-        summary="List the site's locations; 'is_default' marks the one stock is written to.",
+        summary=(
+            "List the site's locations. Each row's 'id' is SellerClaw's — pass it to "
+            "`channels set-default-warehouse` to pin the one stock is written to ('is_default' "
+            "marks the current pin)."
+        ),
     ),
     Cmd(
         "refresh-locations",
