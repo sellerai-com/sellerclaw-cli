@@ -12,6 +12,14 @@ from sellerclaw_cli._errors import ApiError, AuthError, NetworkError, ServerErro
 
 DEFAULT_TIMEOUT_SECONDS = 30.0
 RETRY_STATUS_CODES = frozenset({429, 502, 503, 504})
+#: Statuses safe to resend a write on: the server rejected the call at the gate and never ran it.
+#: 502/504 are excluded — an upstream timeout means the request *did* reach the app.
+WRITE_RETRY_STATUS_CODES = frozenset({429})
+#: Methods a resend cannot duplicate (HTTP semantics). Everything else is a write.
+IDEMPOTENT_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "PUT", "DELETE"})
+#: Transport failures that prove the request never left the client — safe to resend anything.
+#: A read/write timeout is *not* here: the body was already on the wire.
+_UNSENT_TRANSPORT_ERRORS = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
 MAX_RETRIES = 3
 _BACKOFF_CAP_SECONDS = 10.0
 _BACKOFF_JITTER_MAX = 0.25
@@ -62,10 +70,17 @@ class Client:
         Raises AuthError (401/403), ApiError (other 4xx), ServerError (5xx after retries),
         NetworkError (timeout/connection) — never raises httpx exceptions directly.
 
+        Retries exist to ride out a transient glitch on a *read*. A write (POST/PATCH) is only
+        resent when the server provably never ran it — the connection never opened, or it answered
+        429. On a timeout the call may already have been applied, so resending it would create a
+        second listing / order / task; the caller is told to check state instead.
+
         ``files``/``data`` enable multipart uploads; pass them mutually exclusively with ``json``.
         """
         assert self._http is not None  # noqa: S101 — invariant from __post_init__
         last_transport_error: httpx.HTTPError | None = None
+        idempotent = method.upper() in IDEMPOTENT_METHODS
+        retry_statuses = RETRY_STATUS_CODES if idempotent else WRITE_RETRY_STATUS_CODES
 
         for attempt in range(MAX_RETRIES):
             is_last = attempt == MAX_RETRIES - 1
@@ -80,8 +95,9 @@ class Client:
                 )
             except (httpx.ConnectError, httpx.TimeoutException, httpx.ReadError, httpx.WriteError) as exc:
                 last_transport_error = exc
-                if is_last:
-                    raise NetworkError(str(exc) or exc.__class__.__name__) from exc
+                unsent = isinstance(exc, _UNSENT_TRANSPORT_ERRORS)
+                if is_last or not (idempotent or unsent):
+                    raise NetworkError(_transport_message(exc, delivered=not unsent and not idempotent)) from exc
                 time.sleep(_backoff_seconds(attempt))
                 continue
             except httpx.HTTPError as exc:
@@ -93,14 +109,16 @@ class Client:
             if 200 <= status < 300:
                 return _decode_body(response)
 
-            if status in RETRY_STATUS_CODES and not is_last:
+            if status in retry_statuses and not is_last:
                 time.sleep(_retry_delay(response, attempt))
                 continue
 
             raise _error_for_response(response)
 
         # Loop exhausted only via transport errors; the `raise NetworkError` above should have fired.
-        raise NetworkError(str(last_transport_error) if last_transport_error else "exhausted retries")
+        if last_transport_error is not None:
+            raise NetworkError(_transport_message(last_transport_error, delivered=False))
+        raise NetworkError("exhausted retries")
 
     def close(self) -> None:
         if self._http is not None:
@@ -112,6 +130,14 @@ class Client:
 
     def __exit__(self, *_: object) -> None:
         self.close()
+
+
+def _transport_message(exc: httpx.HTTPError, *, delivered: bool) -> str:
+    """Message for a transport failure. ``delivered`` marks a write that may already have run."""
+    base = str(exc) or exc.__class__.__name__
+    if not delivered:
+        return base
+    return f"{base} — the request reached the server and may have been applied; check current state before resending"
 
 
 def _decode_body(response: httpx.Response) -> Any:
