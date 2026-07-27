@@ -10,6 +10,9 @@ import httpx
 from sellerclaw_cli._agent_id import resolve_agent_id
 from sellerclaw_cli._errors import ApiError, AuthError, NetworkError, ServerError
 
+#: Budget for a command that has none of its own. Deliberately short: most calls are reads, and a
+#: fast, honest failure beats a long wait. Commands that do real work inside the request declare
+#: their own (``Cmd.timeout``; see ``LONG_TIMEOUT_SECONDS`` in ``_command_group``).
 DEFAULT_TIMEOUT_SECONDS = 30.0
 RETRY_STATUS_CODES = frozenset({429, 502, 503, 504})
 #: Statuses safe to resend a write on: the server rejected the call at the gate and never ran it.
@@ -48,12 +51,16 @@ class Client:
         )
 
     @classmethod
-    def from_env(cls) -> Client:
-        """Build a Client from Config.load() results."""
+    def from_env(cls, *, timeout: float | None = None) -> Client:
+        """Build a Client from Config.load() results, optionally with a non-default timeout."""
         from sellerclaw_cli import _config
 
         cfg = _config.load()
-        return cls(base_url=cfg.api_url, token=cfg.token)
+        return cls(
+            base_url=cfg.api_url,
+            token=cfg.token,
+            timeout=DEFAULT_TIMEOUT_SECONDS if timeout is None else timeout,
+        )
 
     def request(
         self,
@@ -97,7 +104,11 @@ class Client:
                 last_transport_error = exc
                 unsent = isinstance(exc, _UNSENT_TRANSPORT_ERRORS)
                 if is_last or not (idempotent or unsent):
-                    raise NetworkError(_transport_message(exc, delivered=not unsent and not idempotent)) from exc
+                    raise NetworkError(
+                        _transport_message(
+                            exc, delivered=not unsent and not idempotent, waited=self.timeout
+                        )
+                    ) from exc
                 time.sleep(_backoff_seconds(attempt))
                 continue
             except httpx.HTTPError as exc:
@@ -117,7 +128,9 @@ class Client:
 
         # Loop exhausted only via transport errors; the `raise NetworkError` above should have fired.
         if last_transport_error is not None:
-            raise NetworkError(_transport_message(last_transport_error, delivered=False))
+            raise NetworkError(
+                _transport_message(last_transport_error, delivered=False, waited=self.timeout)
+            )
         raise NetworkError("exhausted retries")
 
     def close(self) -> None:
@@ -132,9 +145,16 @@ class Client:
         self.close()
 
 
-def _transport_message(exc: httpx.HTTPError, *, delivered: bool) -> str:
-    """Message for a transport failure. ``delivered`` marks a write that may already have run."""
+def _transport_message(exc: httpx.HTTPError, *, delivered: bool, waited: float | None = None) -> str:
+    """Message for a transport failure. ``delivered`` marks a write that may already have run.
+
+    A bare "timed out" reads as "the server is down", which is the one thing it does not mean on a
+    long-running command. Naming the budget we actually waited turns it into something the caller can
+    act on: raise it (``--timeout``) or, better, use the command's background form.
+    """
     base = str(exc) or exc.__class__.__name__
+    if isinstance(exc, httpx.TimeoutException) and waited is not None:
+        base = f"{base} after {waited:g}s"
     if not delivered:
         return base
     return f"{base} — the request reached the server and may have been applied; check current state before resending"

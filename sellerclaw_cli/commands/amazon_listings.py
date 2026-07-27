@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typer
 
-from sellerclaw_cli._command_group import Cmd, body_field, build_group, flag
+from sellerclaw_cli._command_group import Cmd, LONG_TIMEOUT_SECONDS, body_field, build_group, flag
 
 NAME = "amazon-listings"
 
@@ -109,6 +109,7 @@ SPECS = (
         "draft",
         "POST",
         "/agent/amazon/stores/{store_id}/listings/draft",
+        timeout=LONG_TIMEOUT_SECONDS,
         summary=(
             "Create local DRAFT offers from catalog products before publishing. Amazon sells on "
             "shared catalog items, so every variation must name the ASIN it will be offered on "
@@ -143,6 +144,7 @@ SPECS = (
         "publish",
         "POST",
         "/agent/amazon/stores/{store_id}/listings/publish",
+        timeout=LONG_TIMEOUT_SECONDS,
         summary=(
             "Publish DRAFT offers to Amazon "
             '(body: {"listing_ids": ["<uuid>", ...]}). Async: Amazon only *accepts* the submission, '

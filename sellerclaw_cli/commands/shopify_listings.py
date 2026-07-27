@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typer
 
-from sellerclaw_cli._command_group import Cmd, body_field, build_group, flag
+from sellerclaw_cli._command_group import Cmd, LONG_TIMEOUT_SECONDS, body_field, build_group, flag
 
 NAME = "shopify-listings"
 
@@ -163,6 +163,7 @@ SPECS = (
         "publish",
         "POST",
         "/agent/stores/{store_id}/shopify-listings/publish",
+        timeout=LONG_TIMEOUT_SECONDS,
         summary="Put listings (back) on the storefront, keeping the catalog in step. Target by "
         "listing_id (SellerClaw UUID) or product_id (Shopify id). A tracked listing returns at its "
         "existing product/URL (never re-created). Defaults to the Online Store.",
@@ -229,6 +230,7 @@ SPECS = (
         "create-drafts",
         "POST",
         "/agent/stores/{store_id}/draft-listings",
+        timeout=LONG_TIMEOUT_SECONDS,
         summary="Create draft listings from catalog products. Stock is taken from the catalog and "
         "the channel is the Online Store — you never set them; the optional fields only tweak content.",
         body=(
@@ -289,6 +291,7 @@ SPECS = (
         "publish-product",
         "POST",
         "/agent/stores/{store_id}/draft-listings/publish-product",
+        timeout=LONG_TIMEOUT_SECONDS,
         summary="One-shot: create drafts for catalog products AND publish them to the storefront in "
         "a single call. Stock comes from the catalog, the channel is the Online Store, and overselling "
         "is denied — all automatic; you never pass stock or a channel. Returns the same "

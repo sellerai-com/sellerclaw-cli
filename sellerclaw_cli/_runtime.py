@@ -24,14 +24,18 @@ def run_operation(
     *,
     params: dict[str, Any] | None = None,
     json_body: Any = None,
+    timeout: float | None = None,
 ) -> None:
     """Execute an API call and print its result in the user-selected format.
 
     On any CliError, prints the structured error to stderr and exits with the mapped code —
     generated commands should never need their own try/except.
+
+    ``timeout`` is the command's own budget; a ``--timeout`` on the command line overrides it, so a
+    caller who knows their batch is unusually large is never stuck with our estimate.
     """
     try:
-        with Client.from_env() as client:
+        with Client.from_env(timeout=_timeout_from_ctx(ctx, timeout)) as client:
             result = client.request(method, path, params=params, json=json_body)
     except CliError as err:
         code = print_error(err)
@@ -85,6 +89,12 @@ def _format_from_ctx(ctx: typer.Context) -> OutputFormat:
     if ctx.obj is None:
         return OutputFormat.JSON
     return ctx.obj.get("format", OutputFormat.JSON)
+
+
+def _timeout_from_ctx(ctx: typer.Context, command_timeout: float | None) -> float | None:
+    """The global ``--timeout`` if one was given, else the command's own budget."""
+    override = ctx.obj.get("timeout") if isinstance(ctx.obj, dict) else None
+    return override if override is not None else command_timeout
 
 
 def _decode_json(text: str, *, source: str) -> Any:

@@ -219,6 +219,10 @@ def _command_detail(group: str, cmd: Cmd) -> dict[str, object]:
         "body_strict": cmd.body_strict if cmd.body else None,
         "body_freeform": cmd.takes_body and not cmd.body and not cmd.query_body,
         "query_body": cmd.query_body,
+        # How long this command may legitimately run. A caller that wraps us in a deadline of its own
+        # (a shell timeout, an agent's exec budget) has no other way to know that publishing takes
+        # minutes where a list takes a moment — and kills a working call for lack of that.
+        "timeout_seconds": cmd.effective_timeout,
         "example": _example(group, cmd),
     }
 

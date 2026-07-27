@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typer
 
-from sellerclaw_cli._command_group import Cmd, body_field, build_group, flag
+from sellerclaw_cli._command_group import Cmd, LONG_TIMEOUT_SECONDS, body_field, build_group, flag
 
 NAME = "bigcommerce-listings"
 
@@ -86,6 +86,7 @@ SPECS = (
         "draft",
         "POST",
         "/agent/bigcommerce/stores/{store_id}/listings/draft",
+        timeout=LONG_TIMEOUT_SECONDS,
         summary=(
             "Create local DRAFT listings from catalog products before publishing "
             '(body: {"product_ids": ["<uuid>", ...]}). One draft row per product variant.'
@@ -103,6 +104,7 @@ SPECS = (
         "publish",
         "POST",
         "/agent/bigcommerce/stores/{store_id}/listings/publish",
+        timeout=LONG_TIMEOUT_SECONDS,
         summary=(
             "Publish local DRAFT listings to BigCommerce as live products "
             '(body: {"listing_ids": ["<uuid>", ...]}). Returns published rows + per-id errors.'

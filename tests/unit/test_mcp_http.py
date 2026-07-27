@@ -9,6 +9,7 @@ import httpx
 import pytest
 import respx
 
+from sellerclaw_cli._command_group import LONG_TIMEOUT_SECONDS
 from sellerclaw_cli.mcp_server import (
     SellerclawTokenVerifier,
     _client_for_tool,
@@ -100,7 +101,9 @@ def test_client_for_tool_falls_back_to_config_token(
     monkeypatch.setenv("SELLERCLAW_API_URL", fake_api_url)
     monkeypatch.setenv("SELLERCLAW_TOKEN", fake_token)
 
-    client = _client_for_tool()
+    client = _client_for_tool(LONG_TIMEOUT_SECONDS)
 
     assert client.base_url == fake_api_url
     assert client.token == fake_token
+    # The command's budget travels with the client, so an MCP call waits as long as the CLI would.
+    assert client.timeout == LONG_TIMEOUT_SECONDS

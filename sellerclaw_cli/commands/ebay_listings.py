@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typer
 
-from sellerclaw_cli._command_group import Cmd, body_field, build_group, flag
+from sellerclaw_cli._command_group import Cmd, LONG_TIMEOUT_SECONDS, body_field, build_group, flag
 
 NAME = "ebay-listings"
 
@@ -188,6 +188,7 @@ SPECS = (
         "publish",
         "POST",
         "/agent/stores/{store_id}/ebay-listings/publish",
+        timeout=LONG_TIMEOUT_SECONDS,
         summary="Publish eBay listings.",
         body=(
             body_field(
@@ -254,6 +255,7 @@ SPECS = (
         "create-drafts",
         "POST",
         "/agent/stores/{store_id}/ebay-draft-listings",
+        timeout=LONG_TIMEOUT_SECONDS,
         summary="Create eBay draft listings (category and item specifics are filled for you).",
         # Only product_ids is required, matching every other channel's draft command and the server,
         # which fills the rest: it places the category, resolves the item specifics off the product,
@@ -265,6 +267,7 @@ SPECS = (
         "preview-drafts",
         "POST",
         "/agent/stores/{store_id}/ebay-draft-listings/preview",
+        timeout=LONG_TIMEOUT_SECONDS,
         summary="Preview what drafting products would set (category + item specifics) — creates nothing.",
         body=_LAZY_DRAFT_BODY,
     ),
@@ -272,6 +275,7 @@ SPECS = (
         "publish-product",
         "POST",
         "/agent/stores/{store_id}/ebay-draft-listings/publish-product",
+        timeout=LONG_TIMEOUT_SECONDS,
         summary="One shot: draft products (auto category + specifics) and publish the ready ones.",
         body=_LAZY_DRAFT_BODY,
     ),

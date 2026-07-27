@@ -393,8 +393,10 @@ class TestWriteRetrySafety:
 
         assert route.call_count == 1
         assert no_sleep == []
+        # The budget is named: a bare "timed out" reads as "the server is down", which is exactly
+        # what a slow-but-still-working publish is not.
         assert excinfo.value.message == (
-            "timed out — the request reached the server and may have been applied; "
+            "timed out after 30s — the request reached the server and may have been applied; "
             "check current state before resending"
         )
 
