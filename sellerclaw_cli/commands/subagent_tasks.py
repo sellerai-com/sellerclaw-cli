@@ -118,12 +118,26 @@ SPECS = (
         "plan-check",
         "POST",
         "/agent/goals/agent-tasks/{task_id}/plan/check",
-        summary="Update one plan item: set its status, its owner-facing note, and/or merge metadata.",
+        summary="Update plan items: set status, owner-facing note, and/or merge metadata.",
         body=(
             body_field(
+                "items",
+                type=dict,
+                repeatable=True,
+                help=(
+                    "Several items at once — an array of "
+                    '{"item_id": "...", "status"?: ..., "note"?: ..., "metadata"?: {...}}. '
+                    "Use it when more than one step changed in the same breath (one finished, the "
+                    "next started). Either send this or the single-item fields below, not both."
+                ),
+                example=[
+                    {"item_id": "1", "status": "done", "note": "Saved the folding organizer"},
+                    {"item_id": "2", "status": "in_progress"},
+                ],
+            ),
+            body_field(
                 "item_id",
-                required=True,
-                help="Id of the plan item to update (read it from `get`).",
+                help="Id of the plan item to update (read it from `get`). Single-item shorthand.",
             ),
             body_field(
                 "status",
@@ -171,6 +185,18 @@ SPECS = (
                 '"file_id"?: "<id from `sellerclaw files upload`>"}. '
                 "Use for screenshots, generated files, or reference links; do not paste these into `outcome`.",
                 example=[{"kind": "link", "url": "https://example.com/dashboard", "title": "Live dashboard"}],
+            ),
+            body_field(
+                "plan",
+                type=dict,
+                repeatable=True,
+                help=(
+                    "Close the plan in this same call — an array of "
+                    '{"item_id": "...", "status": "done"|"skipped", "note"?: ...}. '
+                    "Every step must end `done` or `skipped`, or the report is rejected and names "
+                    "what is still open."
+                ),
+                example=[{"item_id": "1", "status": "done"}, {"item_id": "2", "status": "skipped"}],
             ),
         ),
         active_slot=_SLOT,

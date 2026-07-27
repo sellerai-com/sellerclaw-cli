@@ -98,17 +98,49 @@ def test_plan_check_still_rejects_unknown_fields_locally(env: str, group: str, p
 
 
 @respx.mock
+@pytest.mark.parametrize(
+    ("group", "path", "review_path"),
+    [
+        pytest.param("subagent-tasks", "agent-tasks", "request-review", id="subagent-request-review"),
+        pytest.param("team-tasks", "team-tasks", "request-review", id="team-request-review"),
+        pytest.param("team-tasks", "team-tasks", "complete", id="team-complete"),
+    ],
+)
+def test_report_can_close_the_plan_in_the_same_call(
+    env: str, group: str, path: str, review_path: str
+) -> None:
+    route = respx.post(f"{env}/agent/goals/{path}/{TASK_ID}/{review_path}").mock(
+        return_value=httpx.Response(200, json={"id": TASK_ID})
+    )
+    plan = [{"item_id": "1", "status": "done"}, {"item_id": "2", "status": "skipped"}]
+
+    result = runner.invoke(
+        app,
+        [group, review_path, TASK_ID, "-b", json.dumps({"outcome": "All live.", "plan": plan})],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {"outcome": "All live.", "plan": plan}
+
+
+@respx.mock
 @pytest.mark.parametrize(("group", "path"), _GROUPS)
-def test_plan_check_requires_item_id(env: str, group: str, path: str) -> None:
+def test_plan_check_sends_a_batch(env: str, group: str, path: str) -> None:
+    # Several items in one call — the shape that collapses a burst of ticks into one model turn.
     route = respx.post(f"{env}/agent/goals/{path}/{TASK_ID}/plan/check").mock(
         return_value=httpx.Response(200, json={"id": TASK_ID})
     )
+    items = [
+        {"item_id": "1", "status": "done", "note": "Saved the folding organizer"},
+        {"item_id": "2", "status": "in_progress"},
+    ]
 
-    result = runner.invoke(app, [group, "plan-check", TASK_ID, "-b", json.dumps({"status": "done"})])
+    result = runner.invoke(
+        app, [group, "plan-check", TASK_ID, "-b", json.dumps({"items": items})]
+    )
 
-    assert result.exit_code != 0
-    assert "item_id" in result.stderr
-    assert route.call_count == 0
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {"items": items}
 
 
 @respx.mock
