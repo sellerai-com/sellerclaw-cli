@@ -163,19 +163,30 @@ SPECS = (
         "GET",
         "/agent/listings/variable",
         summary=(
-            "Get one product's WHOLE variable listing on one store — every variation folded under a "
-            "single header (status span, price range, total stock) plus each variation's own price / "
+            "Get one WHOLE variable listing on one store — every variation folded under a single "
+            "header (status span, price range, total stock) plus each variation's own price / "
             "stock / sale-blockers, and the listing's open problems. A multi-variant publish makes "
-            "one storefront product with N variations; 'search --product-id' returns them as N flat "
-            "rows, this returns them as the one listing they are. Needs the catalog product "
-            "(--product-id) and the store (--store-id, its id or its domain). Report it to the owner "
-            "as ONE variable listing (one card), never as N separate rows."
+            "one storefront product with N variations; 'search' returns them as N flat rows, this "
+            "returns them as the one listing they are. Name it with --group-id (every row of one "
+            "listing carries the same group_id — take it from any search row) plus --store-id (its "
+            "id or its domain). Report it to the owner as ONE variable listing (one card), never "
+            "as N separate rows."
         ),
         flags=(
             flag(
+                "group_id",
+                help=(
+                    "Variation group id — what says 'these rows are one listing'. Read it off any "
+                    "search row. Works for a listing found on the store as well as one published "
+                    "from the catalog, and it does not change when a draft goes live."
+                ),
+            ),
+            flag(
                 "product_id",
-                required=True,
-                help="Catalog product id — the variable listing is this product on the store.",
+                help=(
+                    "Catalog product id — the older way to name the listing, still accepted. Only "
+                    "resolves a listing published from the catalog; prefer --group-id."
+                ),
             ),
             flag(
                 "store_id",
