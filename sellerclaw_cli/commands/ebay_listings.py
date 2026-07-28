@@ -255,8 +255,14 @@ SPECS = (
         "create-drafts",
         "POST",
         "/agent/stores/{store_id}/ebay-draft-listings",
+        job_poll_path="/agent/stores/{store_id}/bulk-listing-jobs/{job_id}",
         timeout=LONG_TIMEOUT_SECONDS,
-        summary="Create eBay draft listings (category and item specifics are filled for you).",
+        summary=(
+            "Create eBay draft listings (category and item specifics are filled for you). Runs in "
+            "the background and this command waits it out, so the answer is the finished job: the "
+            "created rows with their readiness, and any question it raised. Add `--no-wait` to get "
+            "the job id straight away instead."
+        ),
         # Only product_ids is required, matching every other channel's draft command and the server,
         # which fills the rest: it places the category, resolves the item specifics off the product,
         # takes the title from the catalog, defaults the condition and reads the location from the
@@ -275,8 +281,15 @@ SPECS = (
         "publish-product",
         "POST",
         "/agent/stores/{store_id}/ebay-draft-listings/publish-product",
+        job_poll_path="/agent/stores/{store_id}/bulk-listing-jobs/{job_id}",
         timeout=LONG_TIMEOUT_SECONDS,
-        summary="One shot: draft products (auto category + specifics) and publish the ready ones.",
+        summary=(
+            "One shot: draft products (auto category + specifics) and publish the ready ones. Runs "
+            "in the background and this command waits it out — the answer is the finished job, with "
+            "per-product outcomes, the live rows, and any question that stopped a product. A "
+            "timeout here is NOT a failure and must never be re-sent: the job id is in the answer, "
+            "read it with `listings bulk-job`."
+        ),
         body=_LAZY_DRAFT_BODY,
     ),
     Cmd(

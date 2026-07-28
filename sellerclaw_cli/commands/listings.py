@@ -241,6 +241,7 @@ SPECS = (
         "bulk-publish",
         "POST",
         "/agent/stores/{store_id}/bulk-listing-jobs",
+        job_poll_path="/agent/stores/{store_id}/bulk-listing-jobs/{job_id}",
         summary=(
             "Publish or withdraw many listings on one store in the background, resumably. Body: "
             "'kind' (publish/withdraw), 'listing_ids', and 'only_ready' (default true) which, on a "

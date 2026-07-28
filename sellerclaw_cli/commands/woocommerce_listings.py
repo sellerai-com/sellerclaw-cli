@@ -86,10 +86,14 @@ SPECS = (
         "draft",
         "POST",
         "/agent/woocommerce/stores/{store_id}/listings/draft",
+        job_poll_path="/agent/stores/{store_id}/bulk-listing-jobs/{job_id}",
         timeout=LONG_TIMEOUT_SECONDS,
         summary=(
             "Create local DRAFT listings from catalog products before publishing "
-            '(body: {"product_ids": ["<uuid>", ...]}). One draft row per product variation.'
+            '(body: {"product_ids": ["<uuid>", ...]}). One draft row per product variation. Runs '
+            "in the background and this command waits it out, so the answer is the finished job: "
+            "the created rows with their readiness, and any product the shop had no category for. "
+            "Add `--no-wait` to get the job id straight away instead."
         ),
         body=(
             body_field(

@@ -230,9 +230,13 @@ SPECS = (
         "create-drafts",
         "POST",
         "/agent/stores/{store_id}/draft-listings",
+        job_poll_path="/agent/stores/{store_id}/bulk-listing-jobs/{job_id}",
         timeout=LONG_TIMEOUT_SECONDS,
         summary="Create draft listings from catalog products. Stock is taken from the catalog and "
-        "the channel is the Online Store — you never set them; the optional fields only tweak content.",
+        "the channel is the Online Store — you never set them; the optional fields only tweak "
+        "content. Runs in the background and this command waits it out, so the answer is the "
+        "finished job: the created rows with their readiness, and any category a product "
+        "introduced. Add `--no-wait` to get the job id straight away instead.",
         body=(
             body_field(
                 "product_ids",
@@ -291,11 +295,14 @@ SPECS = (
         "publish-product",
         "POST",
         "/agent/stores/{store_id}/draft-listings/publish-product",
+        job_poll_path="/agent/stores/{store_id}/bulk-listing-jobs/{job_id}",
         timeout=LONG_TIMEOUT_SECONDS,
-        summary="One-shot: create drafts for catalog products AND publish them to the storefront in "
-        "a single call. Stock comes from the catalog, the channel is the Online Store, and overselling "
-        "is denied — all automatic; you never pass stock or a channel. Returns the same "
-        "results[]/errors[] batch shape as publish-drafts.",
+        summary="One-shot: create drafts for catalog products AND publish them to the storefront. "
+        "Stock comes from the catalog, the channel is the Online Store, and overselling is denied — "
+        "all automatic; you never pass stock or a channel. Runs in the background and this command "
+        "waits it out, so the answer is the finished job with per-product outcomes and the live "
+        "rows. A timeout here is NOT a failure and must never be re-sent: the job id is in the "
+        "answer, read it with `listings bulk-job`.",
         body=(
             body_field(
                 "product_ids",

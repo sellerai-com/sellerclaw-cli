@@ -154,6 +154,14 @@ def _root(
         ),
         min=1,
     ),
+    no_wait: bool = typer.Option(
+        False,
+        "--no-wait",
+        help=(
+            "For commands that start background work (drafting, publishing): return the job as "
+            "queued instead of waiting for it. Read it later with `listings bulk-job`."
+        ),
+    ),
     version: bool = typer.Option(False, "--version", help="Show version and exit."),
 ) -> None:
     if version:
@@ -162,6 +170,7 @@ def _root(
     ctx.ensure_object(dict)
     ctx.obj["format"] = fmt
     ctx.obj["timeout"] = timeout
+    ctx.obj["no_wait"] = no_wait
     if ctx.invoked_subcommand is None:
         typer.echo(ctx.get_help())
         raise typer.Exit(0)

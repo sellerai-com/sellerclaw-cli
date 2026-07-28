@@ -224,6 +224,11 @@ class Cmd:
     active_slot: str | None = None
     active_write: bool = False
     resolve_list_path: str | None = None
+    # Where to read the background job this command starts. A path template over the command's own
+    # positionals plus ``{job_id}``; set it and the CLI waits out the job and prints its result, so
+    # the caller still issues one command and reads one answer. ``--no-wait`` returns the job as it
+    # was queued instead.
+    job_poll_path: str | None = None
     # HTTP budget for this command, when the default is wrong for it. Set it on commands that do real
     # work inside the request (drafting a product places a category and fills item specifics with a
     # model call, publishing then waits on the marketplace) — there, the default refuses a call that
@@ -536,6 +541,10 @@ def _make_callback(group: str, cmd: Cmd):
             _validate_flag(f, value)
             if value is not None and value != [] and value is not False:
                 params[f.query_key] = value
+        poll_path = cmd.job_poll_path
+        if poll_path is not None:
+            for name in positionals:
+                poll_path = poll_path.replace("{" + name + "}", str(values[name]))
         run_operation(
             ctx,
             cmd.method,
@@ -543,6 +552,7 @@ def _make_callback(group: str, cmd: Cmd):
             params=params or None,
             json_body=body,
             timeout=cmd.effective_timeout,
+            job_poll_path=poll_path,
         )
         # Only reached when the call succeeded (run_operation raises typer.Exit on error): remember
         # the task the `start` command just acted on, so follow-up commands can omit the id.

@@ -223,6 +223,9 @@ def _command_detail(group: str, cmd: Cmd) -> dict[str, object]:
         # (a shell timeout, an agent's exec budget) has no other way to know that publishing takes
         # minutes where a list takes a moment — and kills a working call for lack of that.
         "timeout_seconds": cmd.effective_timeout,
+        # True when the command starts background work and this CLI waits it out for you: one call,
+        # one finished answer, no polling to remember. `--no-wait` returns the queued job instead.
+        "waits_for_job": cmd.job_poll_path is not None,
         "example": _example(group, cmd),
     }
 

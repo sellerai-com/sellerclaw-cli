@@ -1,14 +1,21 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any, NoReturn
 
 import typer
 
-from sellerclaw_cli._client import Client
+from sellerclaw_cli._client import DEFAULT_TIMEOUT_SECONDS, Client
 from sellerclaw_cli._errors import CliError, UserInputError
+from sellerclaw_cli._job_wait import (
+    is_finished,
+    looks_like_job,
+    unfinished_note,
+    wait_for_job,
+)
 from sellerclaw_cli._output import OutputFormat, print_error, print_ok
 
 BODY_OPTION_HELP = (
@@ -25,6 +32,7 @@ def run_operation(
     params: dict[str, Any] | None = None,
     json_body: Any = None,
     timeout: float | None = None,
+    job_poll_path: str | None = None,
 ) -> None:
     """Execute an API call and print its result in the user-selected format.
 
@@ -33,10 +41,29 @@ def run_operation(
 
     ``timeout`` is the command's own budget; a ``--timeout`` on the command line overrides it, so a
     caller who knows their batch is unusually large is never stuck with our estimate.
+
+    ``job_poll_path`` marks a command that starts background work. The call itself returns at once —
+    it only queues the job — so the budget is spent waiting for that job here instead, and the caller
+    reads one finished answer rather than having to remember to poll (see :mod:`_job_wait`).
     """
+    budget = _timeout_from_ctx(ctx, timeout) or DEFAULT_TIMEOUT_SECONDS
+    starts_a_job = job_poll_path is not None
+    # A command that only queues a job answers at once, so its budget belongs to the wait below, not
+    # to the HTTP call. A command that does the work inside the request still needs it on the wire.
+    http_timeout = DEFAULT_TIMEOUT_SECONDS if starts_a_job else budget
     try:
-        with Client.from_env(timeout=_timeout_from_ctx(ctx, timeout)) as client:
+        with Client.from_env(timeout=http_timeout) as client:
             result = client.request(method, path, params=params, json=json_body)
+            if job_poll_path is not None and _waits(ctx) and looks_like_job(result):
+                result = wait_for_job(
+                    result,
+                    fetch=lambda job_id: client.request(
+                        "GET", job_poll_path.replace("{job_id}", job_id)
+                    ),
+                    budget_seconds=budget,
+                )
+                if not is_finished(result):
+                    result = {**result, "note": unfinished_note(result, _poll_command(job_poll_path))}
     except CliError as err:
         code = print_error(err)
         raise typer.Exit(code=code) from err
@@ -95,6 +122,22 @@ def _timeout_from_ctx(ctx: typer.Context, command_timeout: float | None) -> floa
     """The global ``--timeout`` if one was given, else the command's own budget."""
     override = ctx.obj.get("timeout") if isinstance(ctx.obj, dict) else None
     return override if override is not None else command_timeout
+
+
+def _waits(ctx: typer.Context) -> bool:
+    """Whether to wait out a background job. ``--no-wait`` turns it off."""
+    return not (ctx.obj.get("no_wait") if isinstance(ctx.obj, dict) else False)
+
+
+_BULK_JOB_PATH_RE = re.compile(r"/agent/stores/([^/]+)/bulk-listing-jobs")
+
+
+def _poll_command(job_poll_path: str) -> str:
+    """The exact command that reads this job, so giving up costs the caller one call, not a search."""
+    match = _BULK_JOB_PATH_RE.search(job_poll_path)
+    if match is not None:
+        return f"sellerclaw listings bulk-job {match.group(1)}"
+    return "sellerclaw listings bulk-job <store_id>"
 
 
 def _decode_json(text: str, *, source: str) -> Any:

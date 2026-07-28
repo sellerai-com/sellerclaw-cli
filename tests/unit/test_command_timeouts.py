@@ -30,6 +30,7 @@ runner = CliRunner()
 
 STORE_ID = "46438868-3117-408f-a7d6-7e8a4b55e4c9"
 PRODUCT_ID = "a847c4af-86ec-4f26-8861-357637e57c14"
+JOB_ID = "3f6a5b3c-1b4a-4a2f-9d1e-2c8c2a5f9a11"
 
 #: Every command that drafts onto a marketplace or pushes to it. Each is a request the server spends
 #: minutes inside, so each must declare the long budget rather than inherit the default.
@@ -120,12 +121,40 @@ class TestDeclaredBudgets:
 
 class TestBudgetReachesTheClient:
     @respx.mock
-    def test_publish_product_waits_the_long_budget(
+    def test_a_synchronous_publish_waits_the_long_budget_on_the_wire(
         self, env: str, recorded_timeouts: list[float]
     ) -> None:
+        """This one does the work inside the request, so the budget has to be the HTTP timeout."""
+        respx.post(f"{env}/agent/stores/{STORE_ID}/ebay-listings/publish").mock(
+            return_value=httpx.Response(200, json={"results": [], "errors": []})
+        )
+
+        result = runner.invoke(
+            app,
+            [
+                "ebay-listings",
+                "publish",
+                STORE_ID,
+                "-b",
+                json.dumps({"listing_ids": [PRODUCT_ID]}),
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert recorded_timeouts == [LONG_TIMEOUT_SECONDS]
+
+    @respx.mock
+    def test_a_job_starter_keeps_the_short_wire_timeout(
+        self, env: str, recorded_timeouts: list[float]
+    ) -> None:
+        """It only queues the job, so the call itself is instant — the budget is spent waiting."""
         respx.post(
             f"{env}/agent/stores/{STORE_ID}/ebay-draft-listings/publish-product"
-        ).mock(return_value=httpx.Response(200, json={"results": [], "errors": []}))
+        ).mock(
+            return_value=httpx.Response(
+                202, json={"id": JOB_ID, "status": "succeeded", "kind": "publish_product"}
+            )
+        )
 
         result = runner.invoke(
             app,
@@ -139,7 +168,7 @@ class TestBudgetReachesTheClient:
         )
 
         assert result.exit_code == 0, result.output
-        assert recorded_timeouts == [LONG_TIMEOUT_SECONDS]
+        assert recorded_timeouts == [DEFAULT_TIMEOUT_SECONDS]
 
     @respx.mock
     def test_a_read_still_fails_fast(self, env: str, recorded_timeouts: list[float]) -> None:
@@ -157,9 +186,9 @@ class TestBudgetReachesTheClient:
         self, env: str, recorded_timeouts: list[float]
     ) -> None:
         # An unusually large batch is the caller's to know about, so the flag wins over our estimate.
-        respx.post(
-            f"{env}/agent/stores/{STORE_ID}/ebay-draft-listings/publish-product"
-        ).mock(return_value=httpx.Response(200, json={"results": [], "errors": []}))
+        respx.post(f"{env}/agent/stores/{STORE_ID}/ebay-listings/publish").mock(
+            return_value=httpx.Response(200, json={"results": [], "errors": []})
+        )
 
         result = runner.invoke(
             app,
@@ -167,10 +196,10 @@ class TestBudgetReachesTheClient:
                 "--timeout",
                 "600",
                 "ebay-listings",
-                "publish-product",
+                "publish",
                 STORE_ID,
                 "-b",
-                json.dumps({"product_ids": [PRODUCT_ID]}),
+                json.dumps({"listing_ids": [PRODUCT_ID]}),
             ],
         )
 
@@ -228,7 +257,7 @@ class TestDescribeReportsTheBudget:
 
 
 def test_run_operation_defaults_to_the_client_default(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A hand-written command that passes no budget still gets the shared default, not None."""
+    """A hand-written command that passes no budget still gets the shared default, never None."""
     seen: list[float | None] = []
 
     class _Ctx:
@@ -245,4 +274,4 @@ def test_run_operation_defaults_to_the_client_default(monkeypatch: pytest.Monkey
 
     _runtime.run_operation(_Ctx(), "GET", "/agent/thing")  # type: ignore[arg-type]
 
-    assert seen == [None]
+    assert seen == [DEFAULT_TIMEOUT_SECONDS]
