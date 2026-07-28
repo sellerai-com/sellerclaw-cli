@@ -79,10 +79,82 @@ SPECS = (
             ),
             flag(
                 "status",
-                help="Lifecycle status of the mirrored row.",
+                help=(
+                    "Lifecycle status of the row. A draft is a listing you have not published yet "
+                    "-- the same row, not a separate object; publishing moves it to 'published'. "
+                    "'withdrawn' (taken off sale, restorable) and 'removed' are NOT 'unpublished'."
+                ),
                 choices=("draft", "active", "published", "withdrawn", "removed"),
             ),
+            flag(
+                "has_unpublished_changes",
+                type=bool,
+                help=(
+                    "true = listings with edits recorded locally that have not reached the channel "
+                    "yet. This is the set to publish, and the first step of updating live listings."
+                ),
+            ),
+            flag(
+                "changed_since",
+                help=(
+                    "Only listings something actually changed on since this moment (ISO-8601). "
+                    "Read from the change history, not the row's updated_at -- the background "
+                    "stock sync bumps that on rows nobody touched."
+                ),
+            ),
+            flag(
+                "changed_by",
+                repeatable=True,
+                help=(
+                    "Who changed it; repeat the flag to combine (e.g. --changed-by owner "
+                    "--changed-by agent = 'changed by a person')."
+                ),
+                choices=("owner", "agent", "sync", "marketplace", "unknown"),
+            ),
             flag("limit", type=int, minimum=1, maximum=200, default=25, help="Max results per page."),
+            flag("offset", type=int, minimum=0, default=0, help="Results to skip (paging)."),
+        ),
+    ),
+    Cmd(
+        "history",
+        "GET",
+        "/agent/listings/history",
+        summary=(
+            "What has changed on your listings, newest first -- who changed it and whether it "
+            "reached the channel. The question a listing row cannot answer: a price on the row is "
+            "just a number, here it is 'the agent set it at 14:02 and it reached eBay at 14:06', or "
+            "'the supplier sync moved it'. Use it to check your own work after an edit "
+            "(--changed-by is on 'search'; here use --source agent --since), to explain a value "
+            "(--field price), and to find what is still owed to the channel (--only-undelivered). "
+            "Entries are never deleted: a delivered edit keeps its delivered_at, and an edit "
+            "dropped by taking the marketplace's version stays as 'discarded'."
+        ),
+        flags=(
+            flag("listing_id", help="One listing's history (SellerClaw listing id)."),
+            flag("store_id", help="Restrict to one store (sales channel id, see `channels list`)."),
+            flag(
+                "field",
+                repeatable=True,
+                help="Only these fields (e.g. price, quantity, title, status). Repeat to combine.",
+            ),
+            flag(
+                "source",
+                repeatable=True,
+                help=(
+                    "Who made the change. 'sync' is our own upkeep (supplier stock, markup "
+                    "recompute); 'marketplace' is their own value as a download read it; 'unknown' "
+                    "means the write path did not declare itself. Repeat to combine."
+                ),
+                choices=("owner", "agent", "sync", "marketplace", "unknown"),
+            ),
+            flag("since", help="Only changes at or after this moment (ISO-8601)."),
+            flag("until", help="Only changes at or before this moment (ISO-8601)."),
+            flag(
+                "only_undelivered",
+                type=bool,
+                help="Only edits still waiting for a publish to carry them to the channel.",
+            ),
+            flag("limit", type=int, minimum=1, maximum=200, default=50, help="Max results per page."),
             flag("offset", type=int, minimum=0, default=0, help="Results to skip (paging)."),
         ),
     ),

@@ -68,6 +68,7 @@ _LISTINGS_COMMANDS = [
     "get",
     "adopt-marketplace-version",
     "search",
+    "history",
     "variable",
     "sync",
     "drafts",
@@ -98,6 +99,14 @@ def test_listings_group_exposes_get_and_search() -> None:
     assert search_detail["method"] == "GET"
     flags = {f["flag"]: f for f in search_detail["flags"]}
     assert {"--q", "--product-id", "--store-id", "--sku", "--remote-id", "--platform", "--status"} <= set(flags)
+    # The two that make updating live listings workable: which rows still owe the channel, and what
+    # actually moved lately (as opposed to what the background sync re-saved).
+    assert {"--has-unpublished-changes", "--changed-since", "--changed-by"} <= set(flags)
+
+    history_detail = _data(runner.invoke(app, ["describe", "listings", "history"]).stdout)
+    assert history_detail["method"] == "GET"
+    history_flags = {f["flag"] for f in history_detail["flags"]}
+    assert {"--listing-id", "--field", "--source", "--since", "--only-undelivered"} <= history_flags
     # No criterion is mandatory any more: each one is a separate route to the same listings, and
     # requiring free text blocked the product -> listings lookup entirely.
     assert all(not spec["required"] for spec in flags.values())
