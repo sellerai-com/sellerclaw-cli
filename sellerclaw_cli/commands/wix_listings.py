@@ -144,7 +144,8 @@ SPECS = (
         "PATCH",
         "/agent/wix/stores/{store_id}/listings/{listing_id}",
         summary=(
-            "Edit a Wix listing group; pushed to Wix when the listing is PUBLISHED "
+            "Edit a Wix listing group — local only, nothing reaches Wix here. The "
+            "change is recorded as owed and the next publish delivers it "
             '(body: {"title"?, "description"?, "sell_prices"?: {sku: price}, "quantities"?: {sku: qty}}).'
         ),
         body=(

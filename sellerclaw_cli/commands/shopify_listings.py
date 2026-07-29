@@ -129,9 +129,10 @@ SPECS = (
         "update",
         "PUT",
         "/agent/stores/{store_id}/shopify-listings",
-        summary="Update Shopify listings, keeping the SellerClaw catalog in step. Target each item by "
-        "listing_id (SellerClaw UUID) or product_id (Shopify id) — a tracked listing changes on "
-        "Shopify and locally together; one we don't track changes on Shopify directly.",
+        summary="Update Shopify listings. Target each item by listing_id (SellerClaw UUID) or "
+        "product_id (Shopify id). A listing we track changes locally only — the edit is recorded as "
+        "owed and the next publish sends it; a Shopify product we do not track has nothing to owe, "
+        "so it changes on Shopify straight away.",
         body=(
             body_field(
                 "items",

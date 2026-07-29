@@ -90,11 +90,24 @@ SPECS = (
         "update",
         "PATCH",
         "/agent/products/{product_id}",
-        summary="Update product metadata (name, description, images, category, status).",
+        summary=(
+            "Update product metadata (name, description, images, category, status). Catalog only — "
+            "a listing built from this product keeps its own copy of the text and pictures, so this "
+            "changes nothing already on a marketplace. To change what a store shows, edit the "
+            "listing (`listings bulk-update`) and publish."
+        ),
         body=(
             body_field("name", help="New product name."),
             body_field("description", help="New product description."),
-            body_field("images", type=str, repeatable=True, help="Replacement list of image URLs."),
+            body_field(
+                "images",
+                type=str,
+                repeatable=True,
+                help=(
+                    "Replacement list of image URLs for the catalog product. Seeds the gallery of "
+                    "listings created from here on; existing listings keep theirs."
+                ),
+            ),
             body_field("category", help="New category (breadcrumb string, e.g. 'A > B > C')."),
             body_field(
                 "status",

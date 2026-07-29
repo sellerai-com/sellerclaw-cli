@@ -279,11 +279,14 @@ SPECS = (
         "POST",
         "/agent/listings/bulk-update",
         summary=(
-            "Apply per-listing changes to many DRAFT listings at once and get each draft's fresh "
-            "readiness back in the same call. Body: 'items' is a list of "
-            "{listing_id, patch:{title?, description?, sell_prices?, quantities?}} — sell_prices / "
-            "quantities are keyed by SKU. eBay takes title/description only here; Amazon takes "
-            "price/stock only. One failing item does not sink the rest."
+            "Apply per-listing changes to many listings at once — published ones too, not only "
+            "drafts — and get each one's fresh readiness back in the same call. Body: 'items' is a "
+            "list of {listing_id, patch:{title?, description?, sell_prices?, quantities?, images?, "
+            "variation_images?}} — sell_prices / quantities are keyed by SKU. Nothing reaches a "
+            "marketplace here: each edit is written locally and recorded as owed, and the next "
+            "publish delivers it. eBay takes title/description/images only; Amazon takes "
+            "price/stock only (its copy and photos belong to the ASIN card). One failing item does "
+            "not sink the rest."
         ),
         body=(
             body_field(
@@ -292,10 +295,16 @@ SPECS = (
                 required=True,
                 help=(
                     "List of {listing_id, patch}. patch keys: title, description, sell_prices "
-                    "(SKU->price), quantities (SKU->qty)."
+                    "(SKU->price), quantities (SKU->qty), images (the listing's whole gallery in "
+                    "publish order — the first is the cover, and the list replaces what was "
+                    "there), variation_images (variation listing id -> photo URL, null clears one)."
                 ),
                 example=[
                     {"listing_id": "<uuid>", "patch": {"title": "New title"}},
+                    {
+                        "listing_id": "<uuid>",
+                        "patch": {"images": ["https://.../front.jpg", "https://.../back.jpg"]},
+                    },
                 ],
             ),
         ),

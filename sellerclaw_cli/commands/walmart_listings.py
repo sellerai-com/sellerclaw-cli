@@ -200,11 +200,13 @@ SPECS = (
         "PATCH",
         "/agent/walmart/stores/{store_id}/listings/{listing_id}",
         summary=(
-            "Edit a Walmart listing group. Price/stock are pushed to Walmart when PUBLISHED "
+            "Edit a Walmart listing group — local only, nothing reaches Walmart here. The change "
+            "is recorded as owed and the next publish delivers it "
             '(body: {"title"?, "description"?, "sell_prices"?: {sku: price}, "quantities"?: {sku: qty}}). '
             'A "spec" patch (product type, brand, attributes, identifiers, variant grouping, '
-            "primary variation) changes the catalogue item, which Walmart only accepts as a new "
-            "item feed for the whole group — poll publish-status afterwards."
+            "primary variation) changes the catalogue fields on the row; Walmart only accepts those "
+            "as an item feed for the whole group, which the publish submits — poll publish-status "
+            "after that publish, not after this call."
         ),
         body=(
             body_field("title", help="New product title."),

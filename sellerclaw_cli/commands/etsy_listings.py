@@ -212,7 +212,8 @@ SPECS = (
         "PATCH",
         "/agent/etsy/stores/{store_id}/listings/{listing_id}",
         summary=(
-            "Edit one Etsy listing group; pushed to Etsy when the listing is PUBLISHED "
+            "Edit one Etsy listing group — local only, nothing reaches Etsy here. The change is "
+            "recorded as owed and the next publish delivers it "
             '(body: {"title"?, "description"?, "sell_prices"?: {sku: price}, "quantities"?: {sku: qty}, '
             '"shipping_profile_id"?, "return_policy_id"?}). To fix the policies on many drafts at '
             "once, use `set-policies` instead."

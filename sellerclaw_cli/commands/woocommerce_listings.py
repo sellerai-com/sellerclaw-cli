@@ -144,7 +144,8 @@ SPECS = (
         "PATCH",
         "/agent/woocommerce/stores/{store_id}/listings/{listing_id}",
         summary=(
-            "Edit a WooCommerce listing group; pushed to WooCommerce when the listing is PUBLISHED "
+            "Edit a WooCommerce listing group — local only, nothing reaches WooCommerce here. The "
+            "change is recorded as owed and the next publish delivers it "
             '(body: {"title"?, "description"?, "sell_prices"?: {sku: price}, "quantities"?: {sku: qty}}).'
         ),
         body=(

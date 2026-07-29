@@ -217,7 +217,10 @@ SPECS = (
         "update",
         "PATCH",
         "/agent/stores/{store_id}/ebay-listings/{listing_id}",
-        summary="Update a published eBay listing.",
+        summary=(
+            "Edit an eBay listing — local only, nothing reaches eBay here. The change is recorded "
+            "as owed and the next publish delivers it."
+        ),
         body=(
             body_field("title", help="New listing title (max 80 chars)."),
             body_field("description", help="New listing description (HTML allowed)."),

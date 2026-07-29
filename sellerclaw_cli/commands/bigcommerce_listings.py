@@ -144,7 +144,8 @@ SPECS = (
         "PATCH",
         "/agent/bigcommerce/stores/{store_id}/listings/{listing_id}",
         summary=(
-            "Edit a BigCommerce listing group; pushed to BigCommerce when the listing is PUBLISHED "
+            "Edit a BigCommerce listing group — local only, nothing reaches BigCommerce here. The "
+            "change is recorded as owed and the next publish delivers it "
             '(body: {"title"?, "description"?, "sell_prices"?: {sku: price}, "quantities"?: {sku: qty}}).'
         ),
         body=(

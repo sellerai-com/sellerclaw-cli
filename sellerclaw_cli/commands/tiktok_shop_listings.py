@@ -149,7 +149,8 @@ SPECS = (
         "PATCH",
         "/agent/tiktok-shop/stores/{store_id}/listings/{listing_id}",
         summary=(
-            "Edit a TikTok listing group; pushed to TikTok when the listing is PUBLISHED "
+            "Edit a TikTok listing group — local only, nothing reaches TikTok here. The change is "
+            "recorded as owed and the next publish delivers it "
             '(body: {"title"?, "description"?, "category_id"?, "sell_prices"?: {sku: price}, '
             '"quantities"?: {sku: qty}}).'
         ),
