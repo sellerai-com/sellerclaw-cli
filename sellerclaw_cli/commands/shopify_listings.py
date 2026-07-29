@@ -129,18 +129,19 @@ SPECS = (
         "update",
         "PUT",
         "/agent/stores/{store_id}/shopify-listings",
-        summary="Update Shopify listings. Target each item by listing_id (SellerClaw UUID) or "
-        "product_id (Shopify id). A listing we track changes locally only — the edit is recorded as "
-        "owed and the next publish sends it; a Shopify product we do not track has nothing to owe, "
-        "so it changes on Shopify straight away.",
+        summary="Update Shopify listings — local only, nothing reaches Shopify here. The change is "
+        "recorded as owed and the next publish delivers it. Target each item by listing_id "
+        "(SellerClaw UUID) or by product_id (Shopify id), which is resolved to the listing that "
+        "mirrors it. A Shopify product that is not one of your listings is refused by name: only "
+        "active products are mirrored, so a draft or archived one is changed in Shopify itself.",
         body=(
             body_field(
                 "items",
                 type=dict,
                 repeatable=True,
-                help="Products to update. Each: listing_id OR product_id (one required), plus any of "
-                "title, description, product_type, vendor, tags, status, sell_prices ({SKU: price}), "
-                "quantities ({SKU: qty}).",
+                help="Listings to update. Each: listing_id OR product_id (one required), plus any "
+                "of title, description, product_type, sell_prices ({SKU: price}), "
+                "quantities ({SKU: qty}). Use `publish` / `withdraw` to change a product's status.",
             ),
         ),
     ),
