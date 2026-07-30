@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typer
 
-from sellerclaw_cli._command_group import Cmd, body_field, build_group, flag
+from sellerclaw_cli._command_group import Cmd, LONG_TIMEOUT_SECONDS, body_field, build_group, flag
 
 NAME = "walmart-listings"
 
@@ -84,6 +84,7 @@ SPECS = (
         "draft",
         "POST",
         "/agent/walmart/stores/{store_id}/listings/draft",
+        timeout=LONG_TIMEOUT_SECONDS,
         summary=(
             "Create local DRAFT listings from catalog products before publishing. A Walmart "
             "productType is required (each category has its own attribute spec), and every "
@@ -146,6 +147,7 @@ SPECS = (
         "publish",
         "POST",
         "/agent/walmart/stores/{store_id}/listings/publish",
+        timeout=LONG_TIMEOUT_SECONDS,
         summary=(
             "Submit a Walmart item feed for DRAFT listings "
             '(body: {"listing_ids": ["<uuid>", ...]}). Async: rows stay draft (publish_state '
@@ -198,11 +200,13 @@ SPECS = (
         "PATCH",
         "/agent/walmart/stores/{store_id}/listings/{listing_id}",
         summary=(
-            "Edit a Walmart listing group. Price/stock are pushed to Walmart when PUBLISHED "
+            "Edit a Walmart listing group — local only, nothing reaches Walmart here. The change "
+            "is recorded as owed and the next publish delivers it "
             '(body: {"title"?, "description"?, "sell_prices"?: {sku: price}, "quantities"?: {sku: qty}}). '
             'A "spec" patch (product type, brand, attributes, identifiers, variant grouping, '
-            "primary variation) changes the catalogue item, which Walmart only accepts as a new "
-            "item feed for the whole group — poll publish-status afterwards."
+            "primary variation) changes the catalogue fields on the row; Walmart only accepts those "
+            "as an item feed for the whole group, which the publish submits — poll publish-status "
+            "after that publish, not after this call."
         ),
         body=(
             body_field("title", help="New product title."),

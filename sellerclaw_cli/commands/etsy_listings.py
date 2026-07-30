@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typer
 
-from sellerclaw_cli._command_group import Cmd, body_field, build_group, flag
+from sellerclaw_cli._command_group import Cmd, LONG_TIMEOUT_SECONDS, body_field, build_group, flag
 
 NAME = "etsy-listings"
 
@@ -86,6 +86,7 @@ SPECS = (
         "draft",
         "POST",
         "/agent/etsy/stores/{store_id}/listings/draft",
+        timeout=LONG_TIMEOUT_SECONDS,
         summary=(
             "Create local DRAFT listings from catalog products before publishing "
             '(body: {"product_ids": ["<uuid>", ...], plus Etsy attributes}). One draft row per '
@@ -106,13 +107,21 @@ SPECS = (
             # Omitting a policy is the normal case: the server settles it from the store's pinned
             # default, or from the shop's only one of that type. Ambiguous and unpinned, it does not
             # guess — the drafts are still created and the question comes back in `needs_policies`.
+            # Named explicitly, the id is SellerClaw's (`etsy-store list-policies`), like every
+            # other id on this API — Etsy's own id is a detail of the publish path.
             body_field(
                 "shipping_profile_id",
-                help="Etsy shipping profile id — omit to let the shop settle it.",
+                help=(
+                    "Shipping profile, as SellerClaw's id from `etsy-store list-policies` — omit "
+                    "to let the shop settle it."
+                ),
             ),
             body_field(
                 "return_policy_id",
-                help="Etsy return policy id — omit to let the shop settle it (Etsy does not require one).",
+                help=(
+                    "Return policy, as SellerClaw's id from `etsy-store list-policies` — omit to "
+                    "let the shop settle it (Etsy does not require one)."
+                ),
             ),
             body_field(
                 "who_made",
@@ -134,6 +143,7 @@ SPECS = (
         "publish",
         "POST",
         "/agent/etsy/stores/{store_id}/listings/publish",
+        timeout=LONG_TIMEOUT_SECONDS,
         summary=(
             "Publish local DRAFT listings to Etsy as active listings "
             '(body: {"listing_ids": ["<uuid>", ...]}). Returns published rows + per-id errors; a '
@@ -156,9 +166,10 @@ SPECS = (
             "Point many drafts at the same shop policies in one call — the answer to a "
             '`needs_policies` question (body: {"listing_ids": ["<uuid>", ...], '
             '"shipping_profile_id": "..."}). One policy set for the whole list: a policy belongs to '
-            "the Etsy shop, not the listing. Take the ids from `needs_policies[].options`; an "
-            "omitted policy is left as it is. Drafts only — a published listing is refused (use "
-            "`update`, which tells Etsy). Returns the patched rows with fresh readiness."
+            "the Etsy shop, not the listing. Take the ids from `needs_policies[].options` or "
+            "`etsy-store list-policies` — SellerClaw's ids, not Etsy's own; an omitted policy is "
+            "left as it is. Drafts only — a published listing is refused (use `update`, which tells "
+            "Etsy). Returns the patched rows with fresh readiness."
         ),
         body=(
             body_field(
@@ -169,11 +180,13 @@ SPECS = (
             ),
             body_field(
                 "shipping_profile_id",
-                help="Etsy shipping profile id; omit to leave it as it is.",
+                help=(
+                    "Shipping profile id from `etsy-store list-policies`; omit to leave it as it is."
+                ),
             ),
             body_field(
                 "return_policy_id",
-                help="Etsy return policy id; omit to leave it as it is.",
+                help="Return policy id from `etsy-store list-policies`; omit to leave it as it is.",
             ),
         ),
     ),
@@ -199,7 +212,8 @@ SPECS = (
         "PATCH",
         "/agent/etsy/stores/{store_id}/listings/{listing_id}",
         summary=(
-            "Edit one Etsy listing group; pushed to Etsy when the listing is PUBLISHED "
+            "Edit one Etsy listing group — local only, nothing reaches Etsy here. The change is "
+            "recorded as owed and the next publish delivers it "
             '(body: {"title"?, "description"?, "sell_prices"?: {sku: price}, "quantities"?: {sku: qty}, '
             '"shipping_profile_id"?, "return_policy_id"?}). To fix the policies on many drafts at '
             "once, use `set-policies` instead."
@@ -219,11 +233,13 @@ SPECS = (
             ),
             body_field(
                 "shipping_profile_id",
-                help="Etsy shipping profile id; omit to leave it as it is.",
+                help=(
+                    "Shipping profile id from `etsy-store list-policies`; omit to leave it as it is."
+                ),
             ),
             body_field(
                 "return_policy_id",
-                help="Etsy return policy id; omit to leave it as it is.",
+                help="Return policy id from `etsy-store list-policies`; omit to leave it as it is.",
             ),
         ),
     ),

@@ -17,7 +17,7 @@ from pathlib import Path
 import typer
 
 from sellerclaw_cli._client import Client
-from sellerclaw_cli._command_group import REGISTRY, Cmd, GroupSpec, flag
+from sellerclaw_cli._command_group import LONG_TIMEOUT_SECONDS, REGISTRY, Cmd, GroupSpec, flag
 from sellerclaw_cli._errors import CliError, UserInputError
 from sellerclaw_cli._output import OutputFormat, print_error, print_ok
 from sellerclaw_cli._runtime import run_operation
@@ -49,6 +49,9 @@ _SPECS = (
         "from-url",
         "POST",
         "/agent/files/from-url",
+        # The server fetches the remote file inside this request and scans it before answering — a
+        # large one is minutes of work, not a lookup.
+        timeout=LONG_TIMEOUT_SECONDS,
         summary="Download a remote URL into the user's files; returns id + download_url.",
         flags=(
             flag("url", required=True, help="HTTP(S) URL to download the file from."),
@@ -59,6 +62,8 @@ _SPECS = (
         "upload",
         "POST",
         "/agent/files/upload-for-user",
+        # The bytes go up inside this request and are virus-scanned before the answer comes back.
+        timeout=LONG_TIMEOUT_SECONDS,
         summary=(
             "Upload a local file (multipart). Pass the local path as the positional "
             "argument; --filename overrides the name sent to the server."
@@ -105,7 +110,14 @@ def create_from_url(
     body: dict[str, str] = {"url": url}
     if filename is not None:
         body["filename"] = filename
-    run_operation(ctx, "POST", "/agent/files/from-url", params=None, json_body=body)
+    run_operation(
+        ctx,
+        "POST",
+        "/agent/files/from-url",
+        params=None,
+        json_body=body,
+        timeout=LONG_TIMEOUT_SECONDS,
+    )
 
 
 @app.command(
@@ -142,7 +154,7 @@ def upload_user_file(
     files = {"file": (name, content, content_type or "application/octet-stream")}
 
     try:
-        with Client.from_env() as client:
+        with Client.from_env(timeout=LONG_TIMEOUT_SECONDS) as client:
             result = client.request("POST", "/agent/files/upload-for-user", files=files)
     except CliError as err:
         _emit_error(err)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typer
 
-from sellerclaw_cli._command_group import Cmd, body_field, build_group, flag
+from sellerclaw_cli._command_group import Cmd, LONG_TIMEOUT_SECONDS, body_field, build_group, flag
 
 NAME = "shopify-listings"
 
@@ -129,17 +129,19 @@ SPECS = (
         "update",
         "PUT",
         "/agent/stores/{store_id}/shopify-listings",
-        summary="Update Shopify listings, keeping the SellerClaw catalog in step. Target each item by "
-        "listing_id (SellerClaw UUID) or product_id (Shopify id) — a tracked listing changes on "
-        "Shopify and locally together; one we don't track changes on Shopify directly.",
+        summary="Update Shopify listings — local only, nothing reaches Shopify here. The change is "
+        "recorded as owed and the next publish delivers it. Target each item by listing_id "
+        "(SellerClaw UUID) or by product_id (Shopify id), which is resolved to the listing that "
+        "mirrors it. A Shopify product that is not one of your listings is refused by name: only "
+        "active products are mirrored, so a draft or archived one is changed in Shopify itself.",
         body=(
             body_field(
                 "items",
                 type=dict,
                 repeatable=True,
-                help="Products to update. Each: listing_id OR product_id (one required), plus any of "
-                "title, description, product_type, vendor, tags, status, sell_prices ({SKU: price}), "
-                "quantities ({SKU: qty}).",
+                help="Listings to update. Each: listing_id OR product_id (one required), plus any "
+                "of title, description, product_type, sell_prices ({SKU: price}), "
+                "quantities ({SKU: qty}). Use `publish` / `withdraw` to change a product's status.",
             ),
         ),
     ),
@@ -163,6 +165,7 @@ SPECS = (
         "publish",
         "POST",
         "/agent/stores/{store_id}/shopify-listings/publish",
+        timeout=LONG_TIMEOUT_SECONDS,
         summary="Put listings (back) on the storefront, keeping the catalog in step. Target by "
         "listing_id (SellerClaw UUID) or product_id (Shopify id). A tracked listing returns at its "
         "existing product/URL (never re-created). Defaults to the Online Store.",
@@ -229,8 +232,13 @@ SPECS = (
         "create-drafts",
         "POST",
         "/agent/stores/{store_id}/draft-listings",
+        job_poll_path="/agent/stores/{store_id}/bulk-listing-jobs/{job_id}",
+        timeout=LONG_TIMEOUT_SECONDS,
         summary="Create draft listings from catalog products. Stock is taken from the catalog and "
-        "the channel is the Online Store — you never set them; the optional fields only tweak content.",
+        "the channel is the Online Store — you never set them; the optional fields only tweak "
+        "content. Runs in the background: the answer is the queued job and the command that reads "
+        "it. Reading it gives the created rows with their readiness, and any category a product "
+        "introduced; `--wait` holds on until then instead.",
         body=(
             body_field(
                 "product_ids",
@@ -289,10 +297,14 @@ SPECS = (
         "publish-product",
         "POST",
         "/agent/stores/{store_id}/draft-listings/publish-product",
-        summary="One-shot: create drafts for catalog products AND publish them to the storefront in "
-        "a single call. Stock comes from the catalog, the channel is the Online Store, and overselling "
-        "is denied — all automatic; you never pass stock or a channel. Returns the same "
-        "results[]/errors[] batch shape as publish-drafts.",
+        job_poll_path="/agent/stores/{store_id}/bulk-listing-jobs/{job_id}",
+        timeout=LONG_TIMEOUT_SECONDS,
+        summary="One-shot: create drafts for catalog products AND publish them to the storefront. "
+        "Stock comes from the catalog, the channel is the Online Store, and overselling is denied — "
+        "all automatic; you never pass stock or a channel. Runs in the background: the answer is "
+        "the queued job and the command that reads it. Reading it gives per-product outcomes and "
+        "the live rows; `--wait` holds on until then instead. Never re-send this command to check "
+        "on it — that publishes every product a second time.",
         body=(
             body_field(
                 "product_ids",

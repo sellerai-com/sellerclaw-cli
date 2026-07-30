@@ -4,7 +4,8 @@
 #   make install        Sync the dev environment (uv)
 #   make lint           ruff + pyright
 #   make test           Unit tests
-#   make check          lint + test
+#   make lock-check     Verify uv.lock still matches pyproject.toml (writes nothing)
+#   make check          lock-check + lint + test
 #   make build          Build wheel + sdist into dist/
 #   make plugin         Build the Claude plugin variants from plugin/ (TARGET=claude-code for one)
 #   make plugin-check   Verify the committed plugins/ tree still matches plugin/ (writes nothing)
@@ -39,7 +40,7 @@ PART ?= minor
 # release is warranted — test/CI/docs-only churn doesn't require one.
 SHIPPED_PATHS = sellerclaw_cli pyproject.toml README.md
 
-.PHONY: install lint test check build plugin plugin-check mcpb web-zip plugin-bump release-check release-preflight release release-latest release-beta
+.PHONY: install lint test lock-check check build plugin plugin-check mcpb web-zip plugin-bump release-check release-preflight release release-latest release-beta
 
 install:
 	$(UV) sync --group dev
@@ -51,7 +52,14 @@ lint:
 test:
 	$(UV) run pytest -m unit
 
-check: lint test
+# Does the committed uv.lock still describe pyproject.toml? CI and release.yml install with
+# `uv sync --locked`, so a dependency edit pushed without its lock update fails there — this catches
+# it before the push. `uv lock --check` only reports; run `uv lock` (or any `make test`, which
+# re-locks on the way in) to refresh, then commit uv.lock alongside the pyproject change.
+lock-check:
+	$(UV) lock --check
+
+check: lock-check lint test
 
 build:
 	$(UV) build
@@ -126,6 +134,11 @@ release-check:
 	fi
 
 # Everything CI can fail a release on, run BEFORE the tag exists (~25s):
+#   * lock-check  — uv.lock still matches pyproject.toml. Runs FIRST and is NOT skippable: release.yml
+#     installs with `uv sync --locked`, so a stale lock rejects the tag build no matter how urgent the
+#     release is — skipping it only turns a 1-second failure into a burnt tag (see v0.43.0b6). Order
+#     matters inside `check` too: `uv run` re-locks on the way into the tests, so a stale lock would be
+#     silently rewritten mid-release and resurface as a confusing "working tree is dirty" below.
 #   * check       — ruff + pyright + unit tests, the same gate release.yml puts in front of PyPI.
 #   * plugin-check — the committed plugins/ tree still matches plugin/. Not a test, and no test
 #     covers it: `release` pushes the branch first, and a push to main both republishes the
@@ -134,9 +147,11 @@ release-check:
 # It is a *prerequisite* of `release`, so it runs before anything is tagged or pushed and a failure
 # leaves no tag behind. (Prerequisite, not an in-recipe `$(MAKE)` call: make executes recipe lines
 # that mention $(MAKE) even under `-n`, which would turn a dry-run `make -n release` into a real one.)
-# Escape hatch: SKIP_CHECKS=1 (emergencies only — you are shipping unverified code).
+# Escape hatch: SKIP_CHECKS=1 (emergencies only — you are shipping unverified code, lock excepted).
 release-preflight:
 	@set -e; \
+	echo "release-preflight: uv.lock must match pyproject.toml (not skippable)..."; \
+	$(MAKE) --no-print-directory lock-check; \
 	if [ -n "$${SKIP_CHECKS:-}" ]; then \
 	  echo "release-preflight: SKIP_CHECKS=1 — skipping lint, unit tests and the plugin drift check. Shipping unverified."; \
 	else \
@@ -205,11 +220,35 @@ release: release-preflight
 # Both share one "base" = the last STABLE tag bumped by PART (minor by default; PART=patch|major).
 # release-beta cuts release candidates for that base (b1, b2, …); release-latest finalizes it to the
 # clean X.Y.Z. Typical flow: `make release-beta` on dev (repeat as needed) → `make release-latest` on main.
+# When the repo has only beta tags (no stable vX.Y.Z yet), both targets follow the open beta line
+# instead of falling back to v0.0.0 → 0.1.0.
 # `b` is the PEP 440 beta spelling, so PyPI treats the build as a pre-release and a plain
 # `pip install sellerclaw-cli` won't pick it up. Delegates to `release`, which does all the tag pushing.
 release-latest release-beta:
 	@set -eu; \
 	git fetch --tags --quiet $(REMOTE); \
+	if [ "$@" = "release-beta" ]; then \
+	  latest_beta=$$(git tag --list 'v*b*' --sort=-v:refname | head -n1); \
+	  if [ -n "$$latest_beta" ] && echo "$$latest_beta" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+b[0-9]+$$'; then \
+	    base=$$(echo "$$latest_beta" | sed -E 's/^v([0-9]+\.[0-9]+\.[0-9]+)b[0-9]+$$/\1/'); \
+	    n=$$(echo "$$latest_beta" | sed -E 's/^v[0-9]+\.[0-9]+\.[0-9]+b([0-9]+)$$/\1/'); \
+	    new="$${base}b$$((n+1))"; \
+	    echo "release-beta: continuing $$base line (after $$latest_beta) -> pre-release $$new"; \
+	    $(MAKE) --no-print-directory release VERSION="$$new"; \
+	    exit 0; \
+	  fi; \
+	fi; \
+	if [ "$@" = "release-latest" ]; then \
+	  latest_beta=$$(git tag --list 'v*b*' --sort=-v:refname | head -n1); \
+	  if [ -n "$$latest_beta" ]; then \
+	    base=$$(echo "$$latest_beta" | sed -E 's/^v([0-9]+\.[0-9]+\.[0-9]+)b[0-9]+$$/\1/'); \
+	    if [ -n "$$base" ] && ! git rev-parse -q --verify "refs/tags/v$$base" >/dev/null 2>&1; then \
+	      echo "release-latest: finalizing $$base (beta line through $$latest_beta) -> stable $$base"; \
+	      $(MAKE) --no-print-directory release VERSION="$$base" FORCE=1; \
+	      exit 0; \
+	    fi; \
+	  fi; \
+	fi; \
 	last_stable=$$(git tag --list 'v*' --sort=v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$$' | tail -n1); \
 	if [ -z "$$last_stable" ]; then last_stable="v0.0.0"; fi; \
 	b=$${last_stable#v}; \

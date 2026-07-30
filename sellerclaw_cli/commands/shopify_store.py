@@ -14,8 +14,10 @@ SPECS = (
         "GET",
         "/agent/stores/{store_id}/locations",
         summary=(
-            "List the store's ship-from warehouses. 'is_default' marks the one stock is written to; "
-            "use each row's 'id' with delete-location."
+            "List the store's ship-from warehouses. Each row's 'id' is SellerClaw's, and it is what "
+            "every command naming a warehouse takes — delete-location, and "
+            "`channels set-default-warehouse` to pin the one stock is written to ('is_default' "
+            "marks the current pin)."
         ),
     ),
     Cmd(

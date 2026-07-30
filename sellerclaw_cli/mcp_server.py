@@ -301,19 +301,22 @@ def _request_token() -> str | None:
     return access_token.token if access_token is not None else None
 
 
-def _client_for_tool() -> Client:
+def _client_for_tool(timeout: float) -> Client:
     """Build the Client a tool call should use.
 
     In the hosted HTTP server every request carries its own OAuth bearer (one user per request),
     so the token comes from the verified request context. Over stdio there is no request context,
     so fall back to the locally configured token (``sellerclaw auth login`` / ``SELLERCLAW_TOKEN``).
+
+    ``timeout`` is the command's own budget, so a call gets the same wait over MCP as it would from
+    the CLI — a publish that legitimately takes minutes must not be cut short by the door it came in.
     """
     token = _request_token()
     if token is not None:
         from sellerclaw_cli import _config
 
-        return Client(base_url=_config.load().api_url, token=token)
-    return Client.from_env()
+        return Client(base_url=_config.load().api_url, token=token, timeout=timeout)
+    return Client.from_env(timeout=timeout)
 
 
 def run_command(
@@ -350,7 +353,7 @@ def run_command(
     if body is not None and not cmd.takes_body:
         raise UserInputError(f"{group} {command} does not take a body; drop the `body` argument.")
 
-    with _client_for_tool() as client:
+    with _client_for_tool(cmd.effective_timeout) as client:
         return client.request(cmd.method, path, params=params or None, json=body)
 
 

@@ -76,17 +76,44 @@ SPECS = (
             "store's rule. Once pinned, drafts stop coming back with `needs_policies`. Keys are the "
             "platform's own (eBay: default_fulfillment_policy_id, default_payment_policy_id, "
             "default_return_policy_id; Etsy: default_shipping_profile_id, default_return_policy_id); "
-            "an empty value removes the pin and the store goes back to asking. A key the store's "
-            "marketplace does not have is refused, not stored. Read the current pins from "
-            "`channels get` (`specifics`)."
+            "values are the policy ids SellerClaw reports in `ebay-store list-policies` / "
+            "`etsy-store list-policies`, NOT the marketplace's own ids. An empty value removes the "
+            "pin and the store goes back to asking; a value naming no policy of this store is "
+            "refused rather than pinned, as is a key the store's marketplace does not have. Read "
+            "the current pins from `channels get` (`specifics`)."
         ),
         body=(
             body_field(
                 "default_policies",
                 type=dict,
                 required=True,
-                help="Policy ids keyed by the platform's own default_* key; empty value unpins.",
-                example={"default_fulfillment_policy_id": "6001234567890"},
+                help=(
+                    "SellerClaw policy ids (from list-policies) keyed by the platform's own "
+                    "default_* key; empty value unpins."
+                ),
+                example={"default_fulfillment_policy_id": "3f1c9b2e-7d84-4a1f-9c60-5b2e8a0d4f31"},
+            ),
+        ),
+    ),
+    Cmd(
+        "set-default-warehouse",
+        "PATCH",
+        "/agent/sales-channels/{sales_channel_id}",
+        summary=(
+            "Pin the ship-from location this store publishes with and writes stock to. Like the "
+            "policy pins, it is the owner's standing answer — ask before setting it. Once pinned, "
+            "drafts stop coming back with `needs_warehouses` and stock syncs stop being held back "
+            "for want of a location. The id is SellerClaw's, from `<platform>-store list-locations` "
+            "(or the `needs_warehouses[].options` of the draft that asked) — not the marketplace's "
+            "own location key. A warehouse belonging to another store is refused. Read the current "
+            "pin from list-locations (`is_default`)."
+        ),
+        body=(
+            body_field(
+                "default_warehouse_id",
+                required=True,
+                help="Warehouse id (UUID) from list-locations; must be one of this store's own.",
+                example="0b6d1a2c-1f4e-4d3a-9a5f-2c0b7e8d9f10",
             ),
         ),
     ),

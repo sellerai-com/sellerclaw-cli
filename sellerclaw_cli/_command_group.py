@@ -25,9 +25,16 @@ import typer
 
 from sellerclaw_cli import _task_context
 from sellerclaw_cli._agent_id import resolve_agent_id
-from sellerclaw_cli._client import Client
+from sellerclaw_cli._client import DEFAULT_TIMEOUT_SECONDS, Client
 from sellerclaw_cli._errors import CliError, UserInputError
 from sellerclaw_cli._runtime import BODY_OPTION_HELP, emit_error, parse_json_body, run_operation
+
+#: Budget for a command that draws real work into the request instead of just reading a row: a model
+#: call per product to place the category and fill the item specifics, then the marketplace's own
+#: latency on top. Under the default such a call gets cut off while it is still working, and the
+#: caller cannot tell that from a failure — it re-sends, and ends up with two of whatever it made.
+#: Declared per command and reported by ``describe``, so the caller sizes its own wait to match.
+LONG_TIMEOUT_SECONDS = 180.0
 
 _PATH_PARAM_RE = re.compile(r"\{([^}]+)\}")
 # A short id prefix worth expanding against the task list: hex (UUID) fragments, optionally
@@ -217,6 +224,21 @@ class Cmd:
     active_slot: str | None = None
     active_write: bool = False
     resolve_list_path: str | None = None
+    # Where to read the background job this command starts. A path template over the command's own
+    # positionals plus ``{job_id}``; set it and the queued job comes back carrying that exact read
+    # command, so the caller is never left holding an id it cannot use. ``--wait`` makes the CLI hold
+    # on and return the finished job instead.
+    job_poll_path: str | None = None
+    # HTTP budget for this command, when the default is wrong for it. Set it on commands that do real
+    # work inside the request (drafting a product places a category and fills item specifics with a
+    # model call, publishing then waits on the marketplace) — there, the default refuses a call that
+    # is still working. ``describe`` reports the effective value so the caller can size its own wait.
+    timeout: float | None = None
+
+    @property
+    def effective_timeout(self) -> float:
+        """Seconds this command waits for the API — its own budget, or the shared default."""
+        return DEFAULT_TIMEOUT_SECONDS if self.timeout is None else self.timeout
 
     @property
     def active_positional(self) -> str | None:
@@ -519,7 +541,19 @@ def _make_callback(group: str, cmd: Cmd):
             _validate_flag(f, value)
             if value is not None and value != [] and value is not False:
                 params[f.query_key] = value
-        run_operation(ctx, cmd.method, path, params=params or None, json_body=body)
+        poll_path = cmd.job_poll_path
+        if poll_path is not None:
+            for name in positionals:
+                poll_path = poll_path.replace("{" + name + "}", str(values[name]))
+        run_operation(
+            ctx,
+            cmd.method,
+            path,
+            params=params or None,
+            json_body=body,
+            timeout=cmd.effective_timeout,
+            job_poll_path=poll_path,
+        )
         # Only reached when the call succeeded (run_operation raises typer.Exit on error): remember
         # the task the `start` command just acted on, so follow-up commands can omit the id.
         if cmd.active_write and cmd.active_slot and resolved_active:

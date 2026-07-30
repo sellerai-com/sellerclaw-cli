@@ -144,6 +144,25 @@ def _root(
         help="Output format. Default 'json' (single-line, LLM-friendly).",
         case_sensitive=False,
     ),
+    timeout: float | None = typer.Option(
+        None,
+        "--timeout",
+        help=(
+            "Seconds to wait for the API, overriding the command's own budget. Every command "
+            "declares one — `sellerclaw describe <group> <cmd>` reports it as timeout_seconds. "
+            "Raise it for an unusually large batch."
+        ),
+        min=1,
+    ),
+    wait: bool = typer.Option(
+        False,
+        "--wait/--no-wait",
+        help=(
+            "For commands that start background work (drafting, publishing): hold the terminal "
+            "until the job finishes and print the finished job. Off by default — the command "
+            "returns the queued job with the exact command to read it later."
+        ),
+    ),
     version: bool = typer.Option(False, "--version", help="Show version and exit."),
 ) -> None:
     if version:
@@ -151,6 +170,8 @@ def _root(
         raise typer.Exit(0)
     ctx.ensure_object(dict)
     ctx.obj["format"] = fmt
+    ctx.obj["timeout"] = timeout
+    ctx.obj["wait"] = wait
     if ctx.invoked_subcommand is None:
         typer.echo(ctx.get_help())
         raise typer.Exit(0)

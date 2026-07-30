@@ -39,8 +39,12 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
 
+      # --locked: verify against the exact dependency set the tag was cut with. A release must never
+      # re-resolve — that is how the v0.43.0b6 tag died, on an mcp 2.0.0 published the same afternoon.
+      # (The version stamping in the `build` job rewrites pyproject.toml *after* this job, and
+      # `uv build` needs no lock, so nothing here goes stale from it.)
       - name: Install dependencies
-        run: uv sync --group dev --python ${{ matrix.python-version }}
+        run: uv sync --group dev --locked --python ${{ matrix.python-version }}
 
       - name: Ruff
         run: uv run ruff check .

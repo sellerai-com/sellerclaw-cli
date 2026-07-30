@@ -12,6 +12,21 @@ NAME = "team-tasks"
 _SLOT = "team_task"
 _LIST = "/agent/goals/team-tasks"
 
+# Reporting and closing the plan are one decision; sending them together is what removes the
+# "tick, tick, tick, report" sequence at the end of every job.
+_PLAN_CLOSE_FIELD = body_field(
+    "plan",
+    type=dict,
+    repeatable=True,
+    help=(
+        "Close the plan in this same call — an array of "
+        '{"item_id": "...", "status": "done"|"skipped", "note"?: ...}. '
+        "Every phase must end `done` or `skipped`, or the report is rejected and names what is "
+        "still open."
+    ),
+    example=[{"item_id": "1", "status": "done"}, {"item_id": "2", "status": "skipped"}],
+)
+
 SPECS = (
     Cmd("overview", "GET", "/agent/goals/overview", summary="Goals overview (active goal, team tasks, agent tasks)."),
     Cmd(
@@ -58,11 +73,57 @@ SPECS = (
         "update",
         "PATCH",
         "/agent/goals/team-tasks/{task_id}",
-        summary="Update a team task.",
+        summary="Update a team task. Draft only — once it is running, use `amend`.",
         body=(
             body_field("title", help="New title."),
             body_field("description", help="New description."),
             body_field("deadline", help="New ISO-8601 deadline."),
+        ),
+        active_slot=_SLOT,
+        resolve_list_path=_LIST,
+    ),
+    Cmd(
+        "amend",
+        "POST",
+        "/agent/goals/team-tasks/{task_id}/amend",
+        summary="Record a change to a running task when the owner changes their mind mid-job.",
+        body=(
+            body_field(
+                "kind",
+                required=True,
+                choices=("clarification", "narrowing", "widening"),
+                help=(
+                    "How the change affects the amount of work. 'narrowing' drops work, 'widening' "
+                    "adds it, 'clarification' leaves it the same."
+                ),
+                example="narrowing",
+            ),
+            body_field(
+                "text",
+                required=True,
+                help=(
+                    "The change in plain language, as the owner would read it "
+                    '(e.g. "eBay is out — publish to Shopify only").'
+                ),
+            ),
+            body_field(
+                "chat_id",
+                help="Chat the owner asked for this in (from `chats list`). Pair with message_id.",
+            ),
+            body_field(
+                "message_id",
+                help=(
+                    "The owner's message asking for this change (from `chats list-messages`). "
+                    "Their reply, not your own question."
+                ),
+            ),
+            body_field(
+                "action_request_id",
+                help=(
+                    "Instead of a message: an approval the owner has already answered. Use one or "
+                    "the other, never both."
+                ),
+            ),
         ),
         active_slot=_SLOT,
         resolve_list_path=_LIST,
@@ -96,7 +157,8 @@ SPECS = (
                 required=True,
                 help=(
                     "Ordered list of phases. Each item is an object with `text` (required) and "
-                    "optional `status` (pending|in_progress|done|skipped), `id`, and `metadata`. "
+                    "optional `status` (pending|in_progress|done|skipped), `id`, `note` (the "
+                    "owner-facing progress line) and `metadata` (private). "
                     "Omit `id` for a new phase (the server assigns one); re-send an existing `id` "
                     "to keep its history. Lay out every phase up front, including ones whose agent "
                     "task you can't create yet (they depend on an earlier phase's output)."
@@ -114,12 +176,26 @@ SPECS = (
         "plan-check",
         "POST",
         "/agent/goals/team-tasks/{task_id}/plan/check",
-        summary="Update one plan item: set its status and/or merge metadata into it.",
+        summary="Update plan phases: set status, owner-facing note, and/or merge metadata.",
         body=(
             body_field(
+                "items",
+                type=dict,
+                repeatable=True,
+                help=(
+                    "Several phases at once — an array of "
+                    '{"item_id": "...", "status"?: ..., "note"?: ..., "metadata"?: {...}}. '
+                    "Use it when more than one phase changed in the same breath (one finished, the "
+                    "next started). Either send this or the single-phase fields below, not both."
+                ),
+                example=[
+                    {"item_id": "1", "status": "done", "note": "Sourced the folding organizer"},
+                    {"item_id": "2", "status": "in_progress"},
+                ],
+            ),
+            body_field(
                 "item_id",
-                required=True,
-                help="Id of the plan item to update (read it from `get`).",
+                help="Id of the plan item to update (read it from `get`). Single-phase shorthand.",
             ),
             body_field(
                 "status",
@@ -127,11 +203,18 @@ SPECS = (
                 help="New status for the phase.",
             ),
             body_field(
+                "note",
+                help=(
+                    "Short plain-language line the owner reads under this phase in their plan view "
+                    '(e.g. "Sourced the folding organizer ($4.20) from CJ"). No raw ids.'
+                ),
+            ),
+            body_field(
                 "metadata",
                 type=dict,
                 help=(
                     "Keys to merge into the item — e.g. the fulfilling agent task id: "
-                    '{"agent_task_id": "<id>"}.'
+                    '{"agent_task_id": "<id>"}. Never shown to the owner.'
                 ),
             ),
         ),
@@ -155,6 +238,7 @@ SPECS = (
                 "Use for screenshots, generated files, or reference links; do not paste these into `outcome`.",
                 example=[{"kind": "link", "url": "https://example.com/dashboard", "title": "Live dashboard"}],
             ),
+            _PLAN_CLOSE_FIELD,
         ),
         active_slot=_SLOT,
         resolve_list_path=_LIST,
@@ -164,7 +248,10 @@ SPECS = (
         "POST",
         "/agent/goals/team-tasks/{task_id}/complete",
         summary="Mark a team task complete.",
-        body=(body_field("outcome", required=True, help="Final result summary as a Markdown report."),),
+        body=(
+            body_field("outcome", required=True, help="Final result summary as a Markdown report."),
+            _PLAN_CLOSE_FIELD,
+        ),
         active_slot=_SLOT,
         resolve_list_path=_LIST,
     ),

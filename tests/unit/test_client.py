@@ -335,6 +335,123 @@ class TestRetries:
 
 
 # ---------------------------------------------------------------------------
+# Write safety — a non-idempotent call is only resent when the server never ran it.
+# ---------------------------------------------------------------------------
+
+
+WRITE_METHODS = ["POST", "PATCH"]
+IDEMPOTENT_WRITE_METHODS = ["PUT", "DELETE"]
+
+
+class TestWriteRetrySafety:
+    @pytest.mark.parametrize("method", WRITE_METHODS, ids=str.lower)
+    @pytest.mark.parametrize("status", [502, 503, 504], ids=lambda s: f"status-{s}")
+    @respx.mock
+    def test_write_is_not_resent_on_server_failure(
+        self,
+        client: Client,
+        fake_api_url: str,
+        no_sleep: list[float],
+        method: str,
+        status: int,
+    ) -> None:
+        # The app already received the call; a second one would publish/order/create twice.
+        route = respx.route(method=method, url=f"{fake_api_url}/agent/stores").mock(
+            return_value=httpx.Response(status, json={})
+        )
+        with pytest.raises(ServerError):
+            client.request(method, "/agent/stores", json={"name": "Acme"})
+        assert route.call_count == 1
+        assert no_sleep == []
+
+    @pytest.mark.parametrize("method", WRITE_METHODS, ids=str.lower)
+    @respx.mock
+    def test_write_is_resent_on_429(
+        self, client: Client, fake_api_url: str, no_sleep: list[float], method: str
+    ) -> None:
+        # Rate limiting rejects at the gate — the write never ran, so resending is safe.
+        route = respx.route(method=method, url=f"{fake_api_url}/agent/stores").mock(
+            side_effect=[
+                httpx.Response(429, headers={"Retry-After": "2"}, json={}),
+                httpx.Response(200, json={"ok": True}),
+            ]
+        )
+        assert client.request(method, "/agent/stores", json={"name": "Acme"}) == {"ok": True}
+        assert route.call_count == 2
+        assert no_sleep == [pytest.approx(2.0, abs=0.01)]
+
+    @pytest.mark.parametrize("method", WRITE_METHODS, ids=str.lower)
+    @respx.mock
+    def test_write_is_not_resent_on_read_timeout(
+        self, client: Client, fake_api_url: str, no_sleep: list[float], method: str
+    ) -> None:
+        route = respx.route(method=method, url=f"{fake_api_url}/agent/stores").mock(
+            side_effect=httpx.ReadTimeout("timed out")
+        )
+        with pytest.raises(NetworkError) as excinfo:
+            client.request(method, "/agent/stores", json={"name": "Acme"})
+
+        assert route.call_count == 1
+        assert no_sleep == []
+        # The budget is named: a bare "timed out" reads as "the server is down", which is exactly
+        # what a slow-but-still-working publish is not.
+        assert excinfo.value.message == (
+            "timed out after 30s — the request reached the server and may have been applied; "
+            "check current state before resending"
+        )
+
+    @pytest.mark.parametrize("method", WRITE_METHODS, ids=str.lower)
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            pytest.param(httpx.ConnectError("refused"), id="connect-error"),
+            pytest.param(httpx.ConnectTimeout("no route"), id="connect-timeout"),
+            pytest.param(httpx.PoolTimeout("no free connection"), id="pool-timeout"),
+        ],
+    )
+    @respx.mock
+    def test_write_is_resent_when_it_never_left_the_client(
+        self,
+        client: Client,
+        fake_api_url: str,
+        no_sleep: list[float],
+        method: str,
+        exc: httpx.HTTPError,
+    ) -> None:
+        route = respx.route(method=method, url=f"{fake_api_url}/agent/stores").mock(
+            side_effect=[exc, httpx.Response(200, json={"ok": True})]
+        )
+        assert client.request(method, "/agent/stores", json={"name": "Acme"}) == {"ok": True}
+        assert route.call_count == 2
+        assert len(no_sleep) == 1
+
+    @pytest.mark.parametrize("method", WRITE_METHODS, ids=str.lower)
+    @respx.mock
+    def test_unreachable_server_reports_plainly(
+        self, client: Client, fake_api_url: str, no_sleep: list[float], method: str
+    ) -> None:
+        # Nothing was delivered, so the caller must not be told to go check state.
+        respx.route(method=method, url=f"{fake_api_url}/agent/stores").mock(
+            side_effect=httpx.ConnectError("refused")
+        )
+        with pytest.raises(NetworkError) as excinfo:
+            client.request(method, "/agent/stores", json={"name": "Acme"})
+        assert excinfo.value.message == "refused"
+
+    @pytest.mark.parametrize("method", IDEMPOTENT_WRITE_METHODS, ids=str.lower)
+    @respx.mock
+    def test_idempotent_methods_keep_retrying(
+        self, client: Client, fake_api_url: str, no_sleep: list[float], method: str
+    ) -> None:
+        # PUT/DELETE land the same state twice — resending them cannot duplicate anything.
+        route = respx.route(method=method, url=f"{fake_api_url}/agent/stores/s1").mock(
+            side_effect=[httpx.Response(504, json={}), httpx.Response(200, json={"ok": True})]
+        )
+        assert client.request(method, "/agent/stores/s1") == {"ok": True}
+        assert route.call_count == 2
+
+
+# ---------------------------------------------------------------------------
 # Network / transport errors
 # ---------------------------------------------------------------------------
 

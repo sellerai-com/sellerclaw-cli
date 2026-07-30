@@ -49,7 +49,10 @@ dependencies = [
 [project.optional-dependencies]
 # Optional MCP (Model Context Protocol) server — `pip install 'sellerclaw-cli[mcp]'` to expose the
 # CLI to MCP clients like Claude. Imported lazily so the base CLI never pulls these in.
-mcp = ["mcp>=1.9.0"]
+# Capped below 2: the SDK's v2 (2026-07-28) is a rewrite that dropped `mcp.server.fastmcp`, which
+# `mcp_server.py` imports, so an uncapped install builds fine and then fails at startup. Upstream
+# recommends this bound until a consumer migrates; v1.x still gets security fixes.
+mcp = ["mcp>=1.9.0,<2"]
 
 [project.scripts]
 sellerclaw = "sellerclaw_cli.cli:main"
@@ -72,7 +75,9 @@ dev = [
     "pyright>=1.1.390",
     # Installed in dev so pyright resolves the optional MCP SDK and the wiring test can build the
     # server; it stays an *optional* runtime extra for end users (see [project.optional-dependencies]).
-    "mcp>=1.9.0",
+    # Same `<2` cap as the extra — uv.lock is not committed, so CI resolves fresh on every run and
+    # would otherwise pull the v2 rewrite (no `mcp.server.fastmcp`) and fail pyright.
+    "mcp>=1.9.0,<2",
 ]
 
 [tool.hatch.build.targets.wheel]

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typer
 
-from sellerclaw_cli._command_group import Cmd, body_field, build_group, flag
+from sellerclaw_cli._command_group import Cmd, LONG_TIMEOUT_SECONDS, body_field, build_group, flag
 
 NAME = "wix-listings"
 
@@ -86,9 +86,14 @@ SPECS = (
         "draft",
         "POST",
         "/agent/wix/stores/{store_id}/listings/draft",
+        job_poll_path="/agent/stores/{store_id}/bulk-listing-jobs/{job_id}",
+        timeout=LONG_TIMEOUT_SECONDS,
         summary=(
             "Create local DRAFT listings from catalog products before publishing "
-            '(body: {"product_ids": ["<uuid>", ...]}). One draft row per product variant.'
+            '(body: {"product_ids": ["<uuid>", ...]}). One draft row per product variant. Runs in '
+            "the background: the answer is the queued job and the command that reads it. Reading "
+            "it gives the created rows with their readiness, and any product the shop had no "
+            "category for; `--wait` holds on until then instead."
         ),
         body=(
             body_field(
@@ -103,6 +108,7 @@ SPECS = (
         "publish",
         "POST",
         "/agent/wix/stores/{store_id}/listings/publish",
+        timeout=LONG_TIMEOUT_SECONDS,
         summary=(
             "Publish local DRAFT listings to Wix as live products "
             '(body: {"listing_ids": ["<uuid>", ...]}). Returns published rows + per-id errors.'
@@ -138,7 +144,8 @@ SPECS = (
         "PATCH",
         "/agent/wix/stores/{store_id}/listings/{listing_id}",
         summary=(
-            "Edit a Wix listing group; pushed to Wix when the listing is PUBLISHED "
+            "Edit a Wix listing group — local only, nothing reaches Wix here. The "
+            "change is recorded as owed and the next publish delivers it "
             '(body: {"title"?, "description"?, "sell_prices"?: {sku: price}, "quantities"?: {sku: qty}}).'
         ),
         body=(

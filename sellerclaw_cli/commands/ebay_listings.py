@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typer
 
-from sellerclaw_cli._command_group import Cmd, body_field, build_group, flag
+from sellerclaw_cli._command_group import Cmd, LONG_TIMEOUT_SECONDS, body_field, build_group, flag
 
 NAME = "ebay-listings"
 
@@ -19,7 +19,16 @@ _LAZY_DRAFT_BODY = (
         repeatable=True,
         help="Catalog product ids (UUIDs); one draft per product.",
     ),
-    body_field("category_id", help="eBay category id — omit to let the system place each product."),
+    body_field(
+        "category_id",
+        # A `categories search` row carries two ids and this field wants eBay's. Naming both spellings
+        # is cheaper than the round trip a wrong one used to cost: the mirror UUID reached eBay
+        # unresolved and came back as a rejection that named neither the field nor the reason.
+        help=(
+            "eBay category id — the 'external_id' of a `categories search` row (its SellerClaw "
+            "'category_id' is accepted too). Omit to let the system place each product."
+        ),
+    ),
     body_field("title", help="Listing title (max 80 chars); defaults to the product name."),
     body_field(
         "condition",
@@ -28,7 +37,10 @@ _LAZY_DRAFT_BODY = (
     ),
     body_field(
         "merchant_location_key",
-        help="Inventory location key (resolved from your eBay account if omitted).",
+        help=(
+            "Ship-from warehouse, as SellerClaw's id from `ebay-store list-locations` — omit to "
+            "let the store settle it."
+        ),
     ),
     body_field("description", help="Listing description (HTML allowed)."),
     body_field(
@@ -39,17 +51,28 @@ _LAZY_DRAFT_BODY = (
     # Omitting a policy is the normal case: the server settles it from the store's pinned default,
     # or from the account's only policy of that type. Ambiguous and unpinned, it does not guess —
     # the drafts are still created and the question comes back in `needs_policies`.
+    # Named explicitly, the id is SellerClaw's (`ebay-store list-policies`), like every other id on
+    # this API — eBay's own id is a detail of the publish path, not something to type here.
     body_field(
         "fulfillment_policy_id",
-        help="eBay fulfillment business policy id — omit to let the store settle it.",
+        help=(
+            "Fulfillment policy, as SellerClaw's id from `ebay-store list-policies` — omit to let "
+            "the store settle it."
+        ),
     ),
     body_field(
         "payment_policy_id",
-        help="eBay payment business policy id — omit to let the store settle it.",
+        help=(
+            "Payment policy, as SellerClaw's id from `ebay-store list-policies` — omit to let the "
+            "store settle it."
+        ),
     ),
     body_field(
         "return_policy_id",
-        help="eBay return business policy id — omit to let the store settle it.",
+        help=(
+            "Return policy, as SellerClaw's id from `ebay-store list-policies` — omit to let the "
+            "store settle it."
+        ),
     ),
     body_field("images", repeatable=True, help="List of image URLs (max 24)."),
     body_field("aspects", type=dict, help="Item specifics; omit to auto-fill from the product."),
@@ -174,6 +197,7 @@ SPECS = (
         "publish",
         "POST",
         "/agent/stores/{store_id}/ebay-listings/publish",
+        timeout=LONG_TIMEOUT_SECONDS,
         summary="Publish eBay listings.",
         body=(
             body_field(
@@ -202,20 +226,37 @@ SPECS = (
         "update",
         "PATCH",
         "/agent/stores/{store_id}/ebay-listings/{listing_id}",
-        summary="Update a published eBay listing.",
+        summary=(
+            "Edit an eBay listing — local only, nothing reaches eBay here. The change is recorded "
+            "as owed and the next publish delivers it."
+        ),
         body=(
             body_field("title", help="New listing title (max 80 chars)."),
             body_field("description", help="New listing description (HTML allowed)."),
-            body_field("category_id", help="eBay category id."),
+            body_field(
+                "category_id",
+                help=(
+                    "eBay category id — the 'external_id' of a `categories search` row (its "
+                    "SellerClaw 'category_id' is accepted too)."
+                ),
+            ),
             body_field(
                 "condition",
                 choices=("NEW", "USED", "REFURBISHED"),
                 help="Item condition.",
             ),
-            body_field("merchant_location_key", help="Inventory location key."),
-            body_field("fulfillment_policy_id", help="eBay fulfillment business policy id."),
-            body_field("payment_policy_id", help="eBay payment business policy id."),
-            body_field("return_policy_id", help="eBay return business policy id."),
+            # Ids as SellerClaw reports them (`ebay-store list-locations` / `list-policies`) —
+            # eBay's own ids belong to the publish path, not to this API.
+            body_field(
+                "merchant_location_key",
+                help="Ship-from warehouse id from `ebay-store list-locations`.",
+            ),
+            body_field(
+                "fulfillment_policy_id",
+                help="Fulfillment policy id from `ebay-store list-policies`.",
+            ),
+            body_field("payment_policy_id", help="Payment policy id from `ebay-store list-policies`."),
+            body_field("return_policy_id", help="Return policy id from `ebay-store list-policies`."),
             body_field("images", repeatable=True, help="List of image URLs (max 24)."),
             body_field("aspects", type=dict, help="Item specifics, e.g. {\"Color\": [\"Black\"]}."),
         ),
@@ -232,7 +273,14 @@ SPECS = (
         "create-drafts",
         "POST",
         "/agent/stores/{store_id}/ebay-draft-listings",
-        summary="Create eBay draft listings (category and item specifics are filled for you).",
+        job_poll_path="/agent/stores/{store_id}/bulk-listing-jobs/{job_id}",
+        timeout=LONG_TIMEOUT_SECONDS,
+        summary=(
+            "Create eBay draft listings (category and item specifics are filled for you). Runs in "
+            "the background: the answer is the queued job and the command that reads it. Read that "
+            "once the work has plausibly finished for the created rows with their readiness and any "
+            "question it raised — or add `--wait` to hold on until then."
+        ),
         # Only product_ids is required, matching every other channel's draft command and the server,
         # which fills the rest: it places the category, resolves the item specifics off the product,
         # takes the title from the catalog, defaults the condition and reads the location from the
@@ -243,6 +291,7 @@ SPECS = (
         "preview-drafts",
         "POST",
         "/agent/stores/{store_id}/ebay-draft-listings/preview",
+        timeout=LONG_TIMEOUT_SECONDS,
         summary="Preview what drafting products would set (category + item specifics) — creates nothing.",
         body=_LAZY_DRAFT_BODY,
     ),
@@ -250,7 +299,15 @@ SPECS = (
         "publish-product",
         "POST",
         "/agent/stores/{store_id}/ebay-draft-listings/publish-product",
-        summary="One shot: draft products (auto category + specifics) and publish the ready ones.",
+        job_poll_path="/agent/stores/{store_id}/bulk-listing-jobs/{job_id}",
+        timeout=LONG_TIMEOUT_SECONDS,
+        summary=(
+            "One shot: draft products (auto category + specifics) and publish the ready ones. Runs "
+            "in the background: the answer is the queued job and the command that reads it. Reading "
+            "it gives per-product outcomes, the live rows, and any question that stopped a product; "
+            "`--wait` holds on until then instead. Never re-send this command to check on it — that "
+            "publishes every product a second time."
+        ),
         body=_LAZY_DRAFT_BODY,
     ),
     Cmd(
@@ -261,9 +318,10 @@ SPECS = (
             "Point many drafts at the same business policies in one call — the answer to a "
             '`needs_policies` question (body: {"listing_ids": ["<uuid>", ...], '
             '"fulfillment_policy_id": "..."}). One policy set for the whole list: a policy belongs '
-            "to the eBay account, not the listing. Take the ids from `needs_policies[].options`; an "
-            "omitted policy is left as it is. Drafts only — a published listing is refused (use "
-            "`update`, which tells eBay). Returns the patched rows with fresh readiness."
+            "to the eBay account, not the listing. Take the ids from `needs_policies[].options` or "
+            "`ebay-store list-policies` — SellerClaw's ids, not eBay's own; an omitted policy is "
+            "left as it is. Drafts only — a published listing is refused (use `update`, which tells "
+            "eBay). Returns the patched rows with fresh readiness."
         ),
         body=(
             body_field(
@@ -274,15 +332,18 @@ SPECS = (
             ),
             body_field(
                 "fulfillment_policy_id",
-                help="eBay fulfillment business policy id; omit to leave it as it is.",
+                help=(
+                    "Fulfillment policy id from `ebay-store list-policies`; omit to leave it as "
+                    "it is."
+                ),
             ),
             body_field(
                 "payment_policy_id",
-                help="eBay payment business policy id; omit to leave it as it is.",
+                help="Payment policy id from `ebay-store list-policies`; omit to leave it as it is.",
             ),
             body_field(
                 "return_policy_id",
-                help="eBay return business policy id; omit to leave it as it is.",
+                help="Return policy id from `ebay-store list-policies`; omit to leave it as it is.",
             ),
         ),
     ),
@@ -295,16 +356,30 @@ SPECS = (
         body=(
             body_field("title", help="New listing title (max 80 chars)."),
             body_field("description", help="New listing description (HTML allowed)."),
-            body_field("category_id", help="eBay category id."),
+            body_field(
+                "category_id",
+                help=(
+                    "eBay category id — the 'external_id' of a `categories search` row (its "
+                    "SellerClaw 'category_id' is accepted too)."
+                ),
+            ),
             body_field(
                 "condition",
                 choices=("NEW", "USED", "REFURBISHED"),
                 help="Item condition.",
             ),
-            body_field("merchant_location_key", help="Inventory location key."),
-            body_field("fulfillment_policy_id", help="eBay fulfillment business policy id."),
-            body_field("payment_policy_id", help="eBay payment business policy id."),
-            body_field("return_policy_id", help="eBay return business policy id."),
+            # Ids as SellerClaw reports them (`ebay-store list-locations` / `list-policies`) —
+            # eBay's own ids belong to the publish path, not to this API.
+            body_field(
+                "merchant_location_key",
+                help="Ship-from warehouse id from `ebay-store list-locations`.",
+            ),
+            body_field(
+                "fulfillment_policy_id",
+                help="Fulfillment policy id from `ebay-store list-policies`.",
+            ),
+            body_field("payment_policy_id", help="Payment policy id from `ebay-store list-policies`."),
+            body_field("return_policy_id", help="Return policy id from `ebay-store list-policies`."),
             body_field("images", repeatable=True, help="List of image URLs (max 24)."),
             body_field("aspects", type=dict, help="Item specifics, e.g. {\"Color\": [\"Black\"]}."),
         ),

@@ -144,6 +144,7 @@ _LISTINGS_COMMANDS = {
     "bulk-publish",
     "bulk-jobs",
     "bulk-job",
+    "history",
 }
 
 

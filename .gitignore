@@ -6,4 +6,6 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .ruff_cache/
-uv.lock
+# uv.lock IS committed: CI and the release install from it (`uv sync --locked`), so a tag build can
+# never be derailed by a dependency published minutes earlier. `make lock-check` fails when the lock
+# no longer matches pyproject.toml, so a dependency edit cannot be pushed without its lock update.
