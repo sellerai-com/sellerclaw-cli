@@ -236,9 +236,9 @@ SPECS = (
         timeout=LONG_TIMEOUT_SECONDS,
         summary="Create draft listings from catalog products. Stock is taken from the catalog and "
         "the channel is the Online Store — you never set them; the optional fields only tweak "
-        "content. Runs in the background and this command waits it out, so the answer is the "
-        "finished job: the created rows with their readiness, and any category a product "
-        "introduced. Add `--no-wait` to get the job id straight away instead.",
+        "content. Runs in the background: the answer is the queued job and the command that reads "
+        "it. Reading it gives the created rows with their readiness, and any category a product "
+        "introduced; `--wait` holds on until then instead.",
         body=(
             body_field(
                 "product_ids",
@@ -301,10 +301,10 @@ SPECS = (
         timeout=LONG_TIMEOUT_SECONDS,
         summary="One-shot: create drafts for catalog products AND publish them to the storefront. "
         "Stock comes from the catalog, the channel is the Online Store, and overselling is denied — "
-        "all automatic; you never pass stock or a channel. Runs in the background and this command "
-        "waits it out, so the answer is the finished job with per-product outcomes and the live "
-        "rows. A timeout here is NOT a failure and must never be re-sent: the job id is in the "
-        "answer, read it with `listings bulk-job`.",
+        "all automatic; you never pass stock or a channel. Runs in the background: the answer is "
+        "the queued job and the command that reads it. Reading it gives per-product outcomes and "
+        "the live rows; `--wait` holds on until then instead. Never re-send this command to check "
+        "on it — that publishes every product a second time.",
         body=(
             body_field(
                 "product_ids",

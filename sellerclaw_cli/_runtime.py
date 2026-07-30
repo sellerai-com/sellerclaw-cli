@@ -13,6 +13,7 @@ from sellerclaw_cli._errors import CliError, UserInputError
 from sellerclaw_cli._job_wait import (
     is_finished,
     looks_like_job,
+    queued_note,
     unfinished_note,
     wait_for_job,
 )
@@ -43,8 +44,15 @@ def run_operation(
     caller who knows their batch is unusually large is never stuck with our estimate.
 
     ``job_poll_path`` marks a command that starts background work. The call itself returns at once —
-    it only queues the job — so the budget is spent waiting for that job here instead, and the caller
-    reads one finished answer rather than having to remember to poll (see :mod:`_job_wait`).
+    it only queues the job — and by default that queued job *is* the answer, carrying the command
+    that reads it. ``--wait`` spends the budget holding on until the job finishes instead.
+
+    Not waiting is the default because of what waiting costs a caller that is an agent rather than a
+    person. An agent runs commands through a sandbox that detaches anything still running after a few
+    seconds and then answers each poll on the detached session on a fixed ~30-second cadence — so a
+    two-minute publish it "waited" for cost five or six turns of "no new output", turns spent loading
+    the very service the job was waiting on. The wait was written for a human watching a terminal; it
+    is the wrong default for the caller this CLI mostly has (see :mod:`_job_wait`).
     """
     budget = _timeout_from_ctx(ctx, timeout) or DEFAULT_TIMEOUT_SECONDS
     starts_a_job = job_poll_path is not None
@@ -54,16 +62,20 @@ def run_operation(
     try:
         with Client.from_env(timeout=http_timeout) as client:
             result = client.request(method, path, params=params, json=json_body)
-            if job_poll_path is not None and _waits(ctx) and looks_like_job(result):
-                result = wait_for_job(
-                    result,
-                    fetch=lambda job_id: client.request(
-                        "GET", job_poll_path.replace("{job_id}", job_id)
-                    ),
-                    budget_seconds=budget,
-                )
-                if not is_finished(result):
-                    result = {**result, "note": unfinished_note(result, _poll_command(job_poll_path))}
+            if job_poll_path is not None and looks_like_job(result):
+                poll_command = _poll_command(job_poll_path)
+                if not _waits(ctx):
+                    result = {**result, "note": queued_note(result, poll_command)}
+                else:
+                    result = wait_for_job(
+                        result,
+                        fetch=lambda job_id: client.request(
+                            "GET", job_poll_path.replace("{job_id}", job_id)
+                        ),
+                        budget_seconds=budget,
+                    )
+                    if not is_finished(result):
+                        result = {**result, "note": unfinished_note(result, poll_command)}
     except CliError as err:
         code = print_error(err)
         raise typer.Exit(code=code) from err
@@ -125,8 +137,8 @@ def _timeout_from_ctx(ctx: typer.Context, command_timeout: float | None) -> floa
 
 
 def _waits(ctx: typer.Context) -> bool:
-    """Whether to wait out a background job. ``--no-wait`` turns it off."""
-    return not (ctx.obj.get("no_wait") if isinstance(ctx.obj, dict) else False)
+    """Whether to wait out a background job. Off unless ``--wait`` asks for it."""
+    return bool(ctx.obj.get("wait") if isinstance(ctx.obj, dict) else False)
 
 
 _BULK_JOB_PATH_RE = re.compile(r"/agent/stores/([^/]+)/bulk-listing-jobs")

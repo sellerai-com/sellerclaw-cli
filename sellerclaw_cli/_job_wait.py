@@ -51,6 +51,21 @@ def poll_intervals(budget_seconds: float) -> list[float]:
     return intervals
 
 
+def queued_note(payload: dict[str, Any], poll_command: str) -> str:
+    """What to tell a caller who was handed a job rather than a result.
+
+    The default is not to wait, so this note is the only thing standing between the caller and a
+    dead end: the job id alone does not say which command reads it, and an agent that cannot find
+    out will either re-send the write (two listings where one was wanted) or report "started it" as
+    though that were the outcome. Naming the read command costs one line and removes both.
+    """
+    return (
+        f"Queued and running in the background — the work has started, nothing needs re-sending. "
+        f"Read the result with `{poll_command} {payload.get('id')}` once it has had time to finish, "
+        f"or re-run this command with `--wait` to hold until it does."
+    )
+
+
 def unfinished_note(payload: dict[str, Any], poll_command: str) -> str:
     """What to tell a caller whose wait ran out while the job kept going.
 

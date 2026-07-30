@@ -128,6 +128,10 @@ def guide_cmd(ctx: typer.Context) -> None:
             "(e.g. `sellerclaw shopify-listings list <store_id>`).",
             "Filters are `--flags`. A JSON body uses `-b` (literal JSON, `@file.json`, or `@-` stdin).",
             "Most groups have an `overview` command for a one-call summary.",
+            "Drafting and publishing run as background jobs (`describe` marks them "
+            "`starts_background_job`). They answer at once with the job and the command that reads "
+            "it — do other work, then read it once. `--wait` holds until the job finishes instead. "
+            "Either way, never re-send the original command to check on it: that publishes twice.",
         ],
         "discovery": [
             "`sellerclaw describe <group>` — every command in the group with its positionals, "
@@ -223,9 +227,10 @@ def _command_detail(group: str, cmd: Cmd) -> dict[str, object]:
         # (a shell timeout, an agent's exec budget) has no other way to know that publishing takes
         # minutes where a list takes a moment — and kills a working call for lack of that.
         "timeout_seconds": cmd.effective_timeout,
-        # True when the command starts background work and this CLI waits it out for you: one call,
-        # one finished answer, no polling to remember. `--no-wait` returns the queued job instead.
-        "waits_for_job": cmd.job_poll_path is not None,
+        # True when the command queues background work instead of doing it inside the request. It
+        # answers at once with the job (and the command that reads it); add `--wait` to hold until
+        # the job finishes and get the finished job instead.
+        "starts_background_job": cmd.job_poll_path is not None,
         "example": _example(group, cmd),
     }
 

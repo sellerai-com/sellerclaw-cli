@@ -91,9 +91,9 @@ SPECS = (
         summary=(
             "Create local DRAFT listings from catalog products before publishing "
             '(body: {"product_ids": ["<uuid>", ...]}). One draft row per product variant. Runs in '
-            "the background and this command waits it out, so the answer is the finished job: the "
-            "created rows with their readiness, and any product the shop had no category for. Add "
-            "`--no-wait` to get the job id straight away instead."
+            "the background: the answer is the queued job and the command that reads it. Reading "
+            "it gives the created rows with their readiness, and any product the shop had no "
+            "category for; `--wait` holds on until then instead."
         ),
         body=(
             body_field(

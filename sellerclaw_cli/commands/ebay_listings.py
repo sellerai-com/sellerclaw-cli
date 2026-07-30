@@ -19,7 +19,16 @@ _LAZY_DRAFT_BODY = (
         repeatable=True,
         help="Catalog product ids (UUIDs); one draft per product.",
     ),
-    body_field("category_id", help="eBay category id — omit to let the system place each product."),
+    body_field(
+        "category_id",
+        # A `categories search` row carries two ids and this field wants eBay's. Naming both spellings
+        # is cheaper than the round trip a wrong one used to cost: the mirror UUID reached eBay
+        # unresolved and came back as a rejection that named neither the field nor the reason.
+        help=(
+            "eBay category id — the 'external_id' of a `categories search` row (its SellerClaw "
+            "'category_id' is accepted too). Omit to let the system place each product."
+        ),
+    ),
     body_field("title", help="Listing title (max 80 chars); defaults to the product name."),
     body_field(
         "condition",
@@ -224,7 +233,13 @@ SPECS = (
         body=(
             body_field("title", help="New listing title (max 80 chars)."),
             body_field("description", help="New listing description (HTML allowed)."),
-            body_field("category_id", help="eBay category id."),
+            body_field(
+                "category_id",
+                help=(
+                    "eBay category id — the 'external_id' of a `categories search` row (its "
+                    "SellerClaw 'category_id' is accepted too)."
+                ),
+            ),
             body_field(
                 "condition",
                 choices=("NEW", "USED", "REFURBISHED"),
@@ -262,9 +277,9 @@ SPECS = (
         timeout=LONG_TIMEOUT_SECONDS,
         summary=(
             "Create eBay draft listings (category and item specifics are filled for you). Runs in "
-            "the background and this command waits it out, so the answer is the finished job: the "
-            "created rows with their readiness, and any question it raised. Add `--no-wait` to get "
-            "the job id straight away instead."
+            "the background: the answer is the queued job and the command that reads it. Read that "
+            "once the work has plausibly finished for the created rows with their readiness and any "
+            "question it raised — or add `--wait` to hold on until then."
         ),
         # Only product_ids is required, matching every other channel's draft command and the server,
         # which fills the rest: it places the category, resolves the item specifics off the product,
@@ -288,10 +303,10 @@ SPECS = (
         timeout=LONG_TIMEOUT_SECONDS,
         summary=(
             "One shot: draft products (auto category + specifics) and publish the ready ones. Runs "
-            "in the background and this command waits it out — the answer is the finished job, with "
-            "per-product outcomes, the live rows, and any question that stopped a product. A "
-            "timeout here is NOT a failure and must never be re-sent: the job id is in the answer, "
-            "read it with `listings bulk-job`."
+            "in the background: the answer is the queued job and the command that reads it. Reading "
+            "it gives per-product outcomes, the live rows, and any question that stopped a product; "
+            "`--wait` holds on until then instead. Never re-send this command to check on it — that "
+            "publishes every product a second time."
         ),
         body=_LAZY_DRAFT_BODY,
     ),
@@ -341,7 +356,13 @@ SPECS = (
         body=(
             body_field("title", help="New listing title (max 80 chars)."),
             body_field("description", help="New listing description (HTML allowed)."),
-            body_field("category_id", help="eBay category id."),
+            body_field(
+                "category_id",
+                help=(
+                    "eBay category id — the 'external_id' of a `categories search` row (its "
+                    "SellerClaw 'category_id' is accepted too)."
+                ),
+            ),
             body_field(
                 "condition",
                 choices=("NEW", "USED", "REFURBISHED"),

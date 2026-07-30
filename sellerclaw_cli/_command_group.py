@@ -225,9 +225,9 @@ class Cmd:
     active_write: bool = False
     resolve_list_path: str | None = None
     # Where to read the background job this command starts. A path template over the command's own
-    # positionals plus ``{job_id}``; set it and the CLI waits out the job and prints its result, so
-    # the caller still issues one command and reads one answer. ``--no-wait`` returns the job as it
-    # was queued instead.
+    # positionals plus ``{job_id}``; set it and the queued job comes back carrying that exact read
+    # command, so the caller is never left holding an id it cannot use. ``--wait`` makes the CLI hold
+    # on and return the finished job instead.
     job_poll_path: str | None = None
     # HTTP budget for this command, when the default is wrong for it. Set it on commands that do real
     # work inside the request (drafting a product places a category and fills item specifics with a

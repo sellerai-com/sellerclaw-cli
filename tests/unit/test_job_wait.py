@@ -1,13 +1,17 @@
-"""Waiting out a background job, so the caller still issues one command and reads one answer.
+"""Handing back a background job, and waiting one out when the caller asks.
 
 Publishing became a job on the server because a model call per product does not belong inside an
-HTTP request. That split must not leak to the caller: an agent that has to remember to poll will
-sometimes not, and the owner then hears "started it" instead of what happened. So the waiting lives
-in the client, where it costs nothing.
+HTTP request. The caller must not be left holding an id it cannot use, so the queued job always
+comes back carrying the exact command that reads it.
 
-The property that makes this safe is that only the first call writes. Everything after it is a read,
-and a read can be repeated — so a wait that runs out is recoverable with one more read instead of a
-re-send that would publish the same product twice.
+Waiting is opt-in (``--wait``) rather than the default, because the caller is usually an agent, not
+a person at a terminal: its sandbox detaches anything still running after a few seconds and then
+answers every poll on a fixed ~30-second cadence, so a two-minute wait costs five or six turns of
+"no new output" — turns spent loading the very service the job is waiting on.
+
+The property that makes all of this safe is that only the first call writes. Everything after it is
+a read, and a read can be repeated — so checking on a job is always one more read, never a re-send
+that would publish the same product twice.
 """
 
 from __future__ import annotations
@@ -161,24 +165,18 @@ class TestWaiting:
 
 
 class TestThroughTheCommand:
+    @pytest.mark.parametrize(
+        "args",
+        [
+            pytest.param((), id="by-default"),
+            pytest.param(("--no-wait",), id="asked-for-explicitly"),
+        ],
+    )
     @respx.mock
-    def test_publish_product_answers_with_the_finished_job(self, env: str) -> None:
-        respx.post(
-            f"{env}/agent/stores/{STORE_ID}/ebay-draft-listings/publish-product"
-        ).mock(return_value=httpx.Response(202, json=_job("queued")))
-        respx.get(f"{env}/agent/stores/{STORE_ID}/bulk-listing-jobs/{JOB_ID}").mock(
-            return_value=httpx.Response(200, json=_job("succeeded", succeeded_count=1))
-        )
-
-        result = _publish_product()
-
-        assert result.exit_code == 0, result.output
-        payload = json.loads(result.stdout)["data"]
-        assert payload["status"] == "succeeded"
-        assert payload["succeeded_count"] == 1
-
-    @respx.mock
-    def test_no_wait_returns_the_queued_job_without_polling(self, env: str) -> None:
+    def test_publish_product_hands_back_the_queued_job_without_polling(
+        self, env: str, args: tuple[str, ...]
+    ) -> None:
+        """Waiting costs an agent five or six turns of "no new output"; the job id costs it none."""
         respx.post(
             f"{env}/agent/stores/{STORE_ID}/ebay-draft-listings/publish-product"
         ).mock(return_value=httpx.Response(202, json=_job("queued")))
@@ -186,14 +184,46 @@ class TestThroughTheCommand:
             return_value=httpx.Response(200, json=_job("succeeded"))
         )
 
-        result = _publish_product("--no-wait")
+        result = _publish_product(*args)
 
         assert result.exit_code == 0, result.output
         assert json.loads(result.stdout)["data"]["status"] == "queued"
         assert poll.call_count == 0
 
     @respx.mock
-    def test_giving_up_names_the_command_that_reads_the_job(self, env: str) -> None:
+    def test_the_queued_job_names_the_command_that_reads_it(self, env: str) -> None:
+        """A job id alone is a dead end: it does not say which command reads it, and an agent that
+        cannot find out either re-sends the write or reports "started it" as the outcome."""
+        respx.post(
+            f"{env}/agent/stores/{STORE_ID}/ebay-draft-listings/publish-product"
+        ).mock(return_value=httpx.Response(202, json=_job("queued")))
+
+        result = _publish_product()
+
+        assert result.exit_code == 0, result.output
+        note = json.loads(result.stdout)["data"]["note"]
+        assert f"listings bulk-job {STORE_ID} {JOB_ID}" in note
+        assert "nothing needs re-sending" in note
+        assert "--wait" in note
+
+    @respx.mock
+    def test_wait_answers_with_the_finished_job(self, env: str) -> None:
+        respx.post(
+            f"{env}/agent/stores/{STORE_ID}/ebay-draft-listings/publish-product"
+        ).mock(return_value=httpx.Response(202, json=_job("queued")))
+        respx.get(f"{env}/agent/stores/{STORE_ID}/bulk-listing-jobs/{JOB_ID}").mock(
+            return_value=httpx.Response(200, json=_job("succeeded", succeeded_count=1))
+        )
+
+        result = _publish_product("--wait")
+
+        assert result.exit_code == 0, result.output
+        payload = json.loads(result.stdout)["data"]
+        assert payload["status"] == "succeeded"
+        assert payload["succeeded_count"] == 1
+
+    @respx.mock
+    def test_a_wait_that_runs_out_names_the_command_that_reads_the_job(self, env: str) -> None:
         """Nothing failed and nothing may be re-sent — so the answer must point at the one safe call."""
         respx.post(
             f"{env}/agent/stores/{STORE_ID}/ebay-draft-listings/publish-product"
@@ -202,7 +232,7 @@ class TestThroughTheCommand:
             return_value=httpx.Response(200, json=_job("running"))
         )
 
-        result = _publish_product("--timeout", "4")
+        result = _publish_product("--wait", "--timeout", "4")
 
         assert result.exit_code == 0, result.output
         payload = json.loads(result.stdout)["data"]
@@ -224,14 +254,14 @@ class TestThroughTheCommand:
 
 
 class TestDescribeTellsTheCaller:
-    def test_a_waiting_command_says_so(self, env: str) -> None:  # noqa: ARG002
+    def test_a_job_starting_command_says_so(self, env: str) -> None:  # noqa: ARG002
         result = runner.invoke(app, ["describe", "ebay-listings", "publish-product"])
 
         assert result.exit_code == 0, result.output
-        assert json.loads(result.stdout)["data"]["waits_for_job"] is True
+        assert json.loads(result.stdout)["data"]["starts_background_job"] is True
 
     def test_an_ordinary_command_says_so_too(self, env: str) -> None:  # noqa: ARG002
         result = runner.invoke(app, ["describe", "ebay-listings", "list"])
 
         assert result.exit_code == 0, result.output
-        assert json.loads(result.stdout)["data"]["waits_for_job"] is False
+        assert json.loads(result.stdout)["data"]["starts_background_job"] is False
