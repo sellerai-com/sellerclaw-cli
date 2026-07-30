@@ -58,18 +58,35 @@ SPECS = (
             "Stage a new Promoted Listings Standard campaign (pay-on-sale) for the owner's "
             "approval. Nothing goes live here: it returns a pending action with status "
             "'pending_approval'; once the owner approves, run 'apply' with the returned id to "
-            "actually create the campaign and start promoting the listings. 'bid_percentage' is "
-            'the ad rate as a percent string, e.g. "10.0".'
+            "actually create the campaign and start promoting the listings. The ad rate "
+            "('bid_percentage') is charged only when an item sells through the ad, so weigh it "
+            "against the product's margin."
         ),
         body=(
-            body_field("name", type=str, required=True, help="Campaign name.", example="Summer mugs push"),
-            body_field("bid_percentage", type=str, required=True, help='Ad rate percent, e.g. "10.0".', example="10.0"),
+            body_field(
+                "name",
+                type=str,
+                required=True,
+                help="Campaign name: up to 80 characters, no '<' or '>', and unique for the seller "
+                "(list 'campaigns' to see the names already taken).",
+                example="Summer mugs push",
+            ),
+            body_field(
+                "bid_percentage",
+                type=str,
+                required=True,
+                help='Ad rate as a percent string: 2.0-100.0 in steps of 0.1 ("5.0", "12.5" — not '
+                '"1.5" or "10.75"). Percent of the final sale price, charged only on a sale '
+                "through the ad.",
+                example="10.0",
+            ),
             body_field(
                 "listing_ids",
                 type=str,
                 required=True,
                 repeatable=True,
-                help="eBay listing ids to promote.",
+                help="eBay listing ids to promote — any number of them, batched for eBay "
+                "automatically. Each variation of a multi-variation listing becomes its own ad.",
                 example=["1234567890", "1234567891"],
             ),
         ),
@@ -107,10 +124,18 @@ SPECS = (
                 type=str,
                 required=True,
                 repeatable=True,
-                help="eBay listing ids to add to the campaign.",
+                help="eBay listing ids to add to the campaign — any number of them, batched for "
+                "eBay automatically.",
                 example=["1234567890"],
             ),
-            body_field("bid_percentage", type=str, required=True, help='Ad rate percent, e.g. "10.0".', example="10.0"),
+            body_field(
+                "bid_percentage",
+                type=str,
+                required=True,
+                help='Ad rate for the new ads, as a percent string: 2.0-100.0 in steps of 0.1 '
+                '("5.0", "12.5" — not "1.5" or "10.75").',
+                example="10.0",
+            ),
         ),
     ),
     Cmd(
@@ -124,8 +149,22 @@ SPECS = (
             "rate on eBay, so an increase can't be applied without approval."
         ),
         body=(
-            body_field("ad_id", type=str, required=True, help="The ad id whose rate to change.", example="ad-123"),
-            body_field("bid_percentage", type=str, required=True, help='New ad rate percent, e.g. "12.0".', example="12.0"),
+            body_field(
+                "ad_id",
+                type=str,
+                required=True,
+                help="The ad id whose rate to change — the ad, not the listing. Applied launches "
+                "and 'add-listings' return them in result.ads.created[].ad_id.",
+                example="ad-123",
+            ),
+            body_field(
+                "bid_percentage",
+                type=str,
+                required=True,
+                help='New ad rate as a percent string: 2.0-100.0 in steps of 0.1 ("5.0", "12.5" — '
+                'not "1.5" or "10.75").',
+                example="12.0",
+            ),
         ),
     ),
     Cmd(
