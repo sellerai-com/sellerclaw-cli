@@ -220,11 +220,35 @@ release: release-preflight
 # Both share one "base" = the last STABLE tag bumped by PART (minor by default; PART=patch|major).
 # release-beta cuts release candidates for that base (b1, b2, …); release-latest finalizes it to the
 # clean X.Y.Z. Typical flow: `make release-beta` on dev (repeat as needed) → `make release-latest` on main.
+# When the repo has only beta tags (no stable vX.Y.Z yet), both targets follow the open beta line
+# instead of falling back to v0.0.0 → 0.1.0.
 # `b` is the PEP 440 beta spelling, so PyPI treats the build as a pre-release and a plain
 # `pip install sellerclaw-cli` won't pick it up. Delegates to `release`, which does all the tag pushing.
 release-latest release-beta:
 	@set -eu; \
 	git fetch --tags --quiet $(REMOTE); \
+	if [ "$@" = "release-beta" ]; then \
+	  latest_beta=$$(git tag --list 'v*b*' --sort=-v:refname | head -n1); \
+	  if [ -n "$$latest_beta" ] && echo "$$latest_beta" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+b[0-9]+$$'; then \
+	    base=$$(echo "$$latest_beta" | sed -E 's/^v([0-9]+\.[0-9]+\.[0-9]+)b[0-9]+$$/\1/'); \
+	    n=$$(echo "$$latest_beta" | sed -E 's/^v[0-9]+\.[0-9]+\.[0-9]+b([0-9]+)$$/\1/'); \
+	    new="$${base}b$$((n+1))"; \
+	    echo "release-beta: continuing $$base line (after $$latest_beta) -> pre-release $$new"; \
+	    $(MAKE) --no-print-directory release VERSION="$$new"; \
+	    exit 0; \
+	  fi; \
+	fi; \
+	if [ "$@" = "release-latest" ]; then \
+	  latest_beta=$$(git tag --list 'v*b*' --sort=-v:refname | head -n1); \
+	  if [ -n "$$latest_beta" ]; then \
+	    base=$$(echo "$$latest_beta" | sed -E 's/^v([0-9]+\.[0-9]+\.[0-9]+)b[0-9]+$$/\1/'); \
+	    if [ -n "$$base" ] && ! git rev-parse -q --verify "refs/tags/v$$base" >/dev/null 2>&1; then \
+	      echo "release-latest: finalizing $$base (beta line through $$latest_beta) -> stable $$base"; \
+	      $(MAKE) --no-print-directory release VERSION="$$base" FORCE=1; \
+	      exit 0; \
+	    fi; \
+	  fi; \
+	fi; \
 	last_stable=$$(git tag --list 'v*' --sort=v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$$' | tail -n1); \
 	if [ -z "$$last_stable" ]; then last_stable="v0.0.0"; fi; \
 	b=$${last_stable#v}; \
