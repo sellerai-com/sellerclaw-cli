@@ -170,6 +170,11 @@ release-preflight:
 # and a PyPI pre-release. PREFER the `release-latest` / `release-beta` wrappers below — they compute
 # the number for you so the format can't be wrong. `release` is the low-level target they delegate to;
 # call it directly only for an explicit one-off (make release VERSION=0.41.0rc1).
+#
+# Without VERSION, PART bumps the last STABLE tag — pre-releases are skipped on purpose: their number
+# is not three integers, so bumping the newest tag when that is v0.43.0b7 would mean `patch+1` on the
+# string "0b7". The "nothing changed since" guard above still compares against the newest tag of any
+# channel — that question is about shipped code, not about version arithmetic.
 release: release-preflight
 	@set -eu; \
 	if [ -z "$${ALLOW_DIRTY:-}" ] && [ -n "$$(git status --porcelain)" ]; then \
@@ -186,8 +191,9 @@ release: release-preflight
 	if [ -n "$${VERSION:-}" ]; then \
 	  new="$$VERSION"; \
 	else \
-	  if [ -z "$$last" ]; then last="v0.0.0"; fi; \
-	  base=$${last#v}; \
+	  last_stable=$$(git tag --list 'v*' --sort=v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$$' | tail -n1); \
+	  if [ -z "$$last_stable" ]; then last_stable="v0.0.0"; fi; \
+	  base=$${last_stable#v}; \
 	  major=$$(echo "$$base" | cut -d. -f1); \
 	  minor=$$(echo "$$base" | cut -d. -f2); \
 	  patch=$$(echo "$$base" | cut -d. -f3); \
