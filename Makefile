@@ -170,6 +170,11 @@ release-preflight:
 # and a PyPI pre-release. PREFER the `release-latest` / `release-beta` wrappers below — they compute
 # the number for you so the format can't be wrong. `release` is the low-level target they delegate to;
 # call it directly only for an explicit one-off (make release VERSION=0.41.0rc1).
+#
+# Without VERSION, PART bumps the last STABLE tag — pre-releases are skipped on purpose: their number
+# is not three integers, so bumping the newest tag when that is v0.43.0b7 would mean `patch+1` on the
+# string "0b7". The "nothing changed since" guard above still compares against the newest tag of any
+# channel — that question is about shipped code, not about version arithmetic.
 release: release-preflight
 	@set -eu; \
 	if [ -z "$${ALLOW_DIRTY:-}" ] && [ -n "$$(git status --porcelain)" ]; then \
@@ -186,8 +191,9 @@ release: release-preflight
 	if [ -n "$${VERSION:-}" ]; then \
 	  new="$$VERSION"; \
 	else \
-	  if [ -z "$$last" ]; then last="v0.0.0"; fi; \
-	  base=$${last#v}; \
+	  last_stable=$$(git tag --list 'v*' --sort=v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$$' | tail -n1); \
+	  if [ -z "$$last_stable" ]; then last_stable="v0.0.0"; fi; \
+	  base=$${last_stable#v}; \
 	  major=$$(echo "$$base" | cut -d. -f1); \
 	  minor=$$(echo "$$base" | cut -d. -f2); \
 	  patch=$$(echo "$$base" | cut -d. -f3); \
@@ -221,7 +227,10 @@ release: release-preflight
 # release-beta cuts release candidates for that base (b1, b2, …); release-latest finalizes it to the
 # clean X.Y.Z. Typical flow: `make release-beta` on dev (repeat as needed) → `make release-latest` on main.
 # When the repo has only beta tags (no stable vX.Y.Z yet), both targets follow the open beta line
-# instead of falling back to v0.0.0 → 0.1.0.
+# instead of falling back to v0.0.0 → 0.1.0. A beta line is "open" only until its stable tag exists:
+# once vX.Y.Z is out, release-beta must NOT keep appending bN to it — PEP 440 orders 0.43.0b8 *below*
+# 0.43.0, so that tag would publish as an already-superseded pre-release. It starts the next line
+# instead (v0.43.0 released → next beta is 0.44.0b1).
 # `b` is the PEP 440 beta spelling, so PyPI treats the build as a pre-release and a plain
 # `pip install sellerclaw-cli` won't pick it up. Delegates to `release`, which does all the tag pushing.
 release-latest release-beta:
@@ -232,17 +241,21 @@ release-latest release-beta:
 	  if [ -n "$$latest_beta" ] && echo "$$latest_beta" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+b[0-9]+$$'; then \
 	    base=$$(echo "$$latest_beta" | sed -E 's/^v([0-9]+\.[0-9]+\.[0-9]+)b[0-9]+$$/\1/'); \
 	    n=$$(echo "$$latest_beta" | sed -E 's/^v[0-9]+\.[0-9]+\.[0-9]+b([0-9]+)$$/\1/'); \
-	    new="$${base}b$$((n+1))"; \
-	    echo "release-beta: continuing $$base line (after $$latest_beta) -> pre-release $$new"; \
-	    $(MAKE) --no-print-directory release VERSION="$$new"; \
-	    exit 0; \
+	    if git rev-parse -q --verify "refs/tags/v$$base" >/dev/null 2>&1; then \
+	      echo "release-beta: $$base is already released as v$$base — its beta line is closed; opening the next one."; \
+	    else \
+	      new="$${base}b$$((n+1))"; \
+	      echo "release-beta: continuing $$base line (after $$latest_beta) -> pre-release $$new"; \
+	      $(MAKE) --no-print-directory release VERSION="$$new"; \
+	      exit 0; \
+	    fi; \
 	  fi; \
 	fi; \
 	if [ "$@" = "release-latest" ]; then \
 	  latest_beta=$$(git tag --list 'v*b*' --sort=-v:refname | head -n1); \
-	  if [ -n "$$latest_beta" ]; then \
+	  if [ -n "$$latest_beta" ] && echo "$$latest_beta" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+b[0-9]+$$'; then \
 	    base=$$(echo "$$latest_beta" | sed -E 's/^v([0-9]+\.[0-9]+\.[0-9]+)b[0-9]+$$/\1/'); \
-	    if [ -n "$$base" ] && ! git rev-parse -q --verify "refs/tags/v$$base" >/dev/null 2>&1; then \
+	    if ! git rev-parse -q --verify "refs/tags/v$$base" >/dev/null 2>&1; then \
 	      echo "release-latest: finalizing $$base (beta line through $$latest_beta) -> stable $$base"; \
 	      $(MAKE) --no-print-directory release VERSION="$$base" FORCE=1; \
 	      exit 0; \
