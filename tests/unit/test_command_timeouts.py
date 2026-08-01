@@ -37,10 +37,8 @@ JOB_ID = "3f6a5b3c-1b4a-4a2f-9d1e-2c8c2a5f9a11"
 _SLOW_COMMANDS = (
     pytest.param("ebay-listings", "create-drafts", id="ebay-create-drafts"),
     pytest.param("ebay-listings", "preview-drafts", id="ebay-preview-drafts"),
-    pytest.param("ebay-listings", "publish-product", id="ebay-publish-product"),
     pytest.param("ebay-listings", "publish", id="ebay-publish"),
     pytest.param("shopify-listings", "create-drafts", id="shopify-create-drafts"),
-    pytest.param("shopify-listings", "publish-product", id="shopify-publish-product"),
     pytest.param("shopify-listings", "publish", id="shopify-publish"),
     pytest.param("amazon-listings", "draft", id="amazon-draft"),
     pytest.param("amazon-listings", "publish", id="amazon-publish"),
@@ -148,11 +146,9 @@ class TestBudgetReachesTheClient:
         self, env: str, recorded_timeouts: list[float]
     ) -> None:
         """It only queues the job, so the call itself is instant — the budget is spent waiting."""
-        respx.post(
-            f"{env}/agent/stores/{STORE_ID}/ebay-draft-listings/publish-product"
-        ).mock(
+        respx.post(f"{env}/agent/stores/{STORE_ID}/ebay-draft-listings").mock(
             return_value=httpx.Response(
-                202, json={"id": JOB_ID, "status": "succeeded", "kind": "publish_product"}
+                202, json={"id": JOB_ID, "status": "succeeded", "kind": "draft"}
             )
         )
 
@@ -160,7 +156,7 @@ class TestBudgetReachesTheClient:
             app,
             [
                 "ebay-listings",
-                "publish-product",
+                "create-drafts",
                 STORE_ID,
                 "-b",
                 json.dumps({"product_ids": [PRODUCT_ID]}),
@@ -241,7 +237,7 @@ class TestTimeoutMessage:
 
 class TestDescribeReportsTheBudget:
     def test_describe_tells_the_caller_how_long_to_allow(self, env: str) -> None:  # noqa: ARG002
-        result = runner.invoke(app, ["describe", "ebay-listings", "publish-product"])
+        result = runner.invoke(app, ["describe", "ebay-listings", "create-drafts"])
 
         assert result.exit_code == 0, result.output
         payload = json.loads(result.stdout)["data"]

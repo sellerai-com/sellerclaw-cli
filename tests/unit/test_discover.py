@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 from typer.testing import CliRunner
 
-from sellerclaw_cli._command_group import REGISTRY, positionals_of
+from sellerclaw_cli._command_group import LONG_TIMEOUT_SECONDS, REGISTRY, positionals_of
 from sellerclaw_cli.cli import app
 
 pytestmark = pytest.mark.unit
@@ -240,8 +240,59 @@ def test_describe_analytics_report() -> None:
         "last_30d",
         "last_90d",
         "this_month",
+        "last_month",
         "this_year",
     ]
+
+
+@pytest.mark.parametrize(
+    "command",
+    ["metrics", "timeseries", "inventory", "geography"],
+)
+def test_analytics_reads_share_one_window_contract(command: str) -> None:
+    """Every windowed read in the group offers the same four ways to name a period.
+
+    The point of the group is that a caller learns the contract once; a command that drifted to
+    its own dialect would send them back to reading each one.
+    """
+    payload = _data(runner.invoke(app, ["describe", "analytics", command]).stdout)
+    flags = {f["flag"] for f in payload["flags"]}
+    assert {"--period", "--week", "--month", "--date-from", "--date-to"} <= flags
+
+
+@pytest.mark.parametrize(
+    "command",
+    ["metrics", "timeseries", "inventory", "geography", "capital"],
+)
+def test_analytics_reads_accept_several_stores(command: str) -> None:
+    """Every read can be aggregated over more than one store."""
+    payload = _data(runner.invoke(app, ["describe", "analytics", command]).stdout)
+    store = next(f for f in payload["flags"] if f["flag"] == "--store")
+    assert store["repeatable"] is True
+
+
+def test_analytics_capital_takes_no_period() -> None:
+    """Stock is always "as of now", so offering a period would promise history we do not keep."""
+    payload = _data(runner.invoke(app, ["describe", "analytics", "capital"]).stdout)
+    flags = {f["flag"] for f in payload["flags"]}
+    assert "--period" not in flags
+    assert "--dead-after" in flags
+
+
+def test_analytics_metrics_offers_fees_and_warns_it_is_slow() -> None:
+    payload = _data(runner.invoke(app, ["describe", "analytics", "metrics"]).stdout)
+    flags = {f["flag"]: f for f in payload["flags"]}
+    assert "--with-fees" in flags
+    # A live finance call per store needs a budget the caller can size against.
+    assert payload["timeout_seconds"] == LONG_TIMEOUT_SECONDS
+
+
+def test_analytics_range_flags_map_to_from_and_to() -> None:
+    """``--from``/``--to`` are the natural spelling; the API keys are the bare words."""
+    payload = _data(runner.invoke(app, ["describe", "analytics", "metrics"]).stdout)
+    by_flag = {f["flag"]: f for f in payload["flags"]}
+    assert "--from" in by_flag["--date-from"]["aliases"]
+    assert "--to" in by_flag["--date-to"]["aliases"]
 
 
 def test_kb_group_exposes_search() -> None:

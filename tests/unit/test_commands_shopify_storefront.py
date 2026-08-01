@@ -107,29 +107,19 @@ def test_set_inventory_policy_command_is_removed() -> None:
     assert "No such command" in result.stderr or "set-inventory-policy" in result.stderr
 
 
-@respx.mock
-def test_publish_product_posts_full_body(
-    env_pointing_at_fake_api: None,  # noqa: ARG001
-    fake_api_url: str,
-) -> None:
-    """One-shot publish forwards product_ids + optional content to the new endpoint."""
-    route = respx.post(
-        f"{fake_api_url}/agent/stores/{STORE_ID}/draft-listings/publish-product"
-    ).mock(return_value=httpx.Response(200, json={"results": [], "errors": []}))
-    body = {
-        "product_ids": ["p1", "p2"],
-        "title": "Nice widget",
-        "tags": ["a", "b"],
-        "vendor": "Acme",
-        "sell_prices": {"SKU-1": "19.99"},
-        "compare_at_prices": {"SKU-1": "29.99"},
-        "barcodes": {"SKU-1": "0123456789012"},
-    }
-    result = runner.invoke(
-        app, ["shopify-listings", "publish-product", STORE_ID, "-b", json.dumps(body)]
-    )
-    assert result.exit_code == 0, result.stderr
-    assert json.loads(route.calls.last.request.content) == body
+@pytest.mark.parametrize(
+    "group", ["shopify-listings", "ebay-listings"], ids=["shopify", "ebay"]
+)
+def test_publish_product_command_is_removed(group: str) -> None:
+    """Drafting and publishing are separate steps on purpose.
+
+    The one-shot command put a listing on sale without anyone reading what had been written into it
+    — the category a model picked, the item specifics it filled. `create-drafts` answers with all of
+    that (`drafted`), and publishing is its own call once that has been looked at.
+    """
+    result = runner.invoke(app, [group, "publish-product", STORE_ID, "-b", "{}"])
+    assert result.exit_code != 0
+    assert "No such command" in result.stderr or "publish-product" in result.stderr
 
 
 @respx.mock

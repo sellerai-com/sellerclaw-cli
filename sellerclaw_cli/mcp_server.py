@@ -57,7 +57,15 @@ SERVER_INSTRUCTIONS = (
     "`listings get`, `orders get`, `catalog get` (the per-channel groups like `shopify-listings` "
     "do not read by id). `listings search` finds listings by product_id (one row per variant), "
     "store, SKU, marketplace id, channel or status; `catalog list` finds a product by exact SKU or "
-    "by supplier item; `orders list` takes a product_id (who bought this)."
+    "by supplier item; `orders list` takes a product_id (who bought this).\n"
+    "How the business is doing — sales, profit, best sellers, trends, what to reorder, where buyers "
+    "are, cash tied up in stock, what needs attention today — is the `analytics` group. Every "
+    "command there takes the same period (a `period` keyword, or `week`/`month` for a COMPLETED "
+    "week/month, or `from`+`to` dates) and the same store selection (a store id, `all` for every "
+    "store, or a repeated `store` flag). Ask for several stores in one call rather than adding up "
+    "per-store answers — totals add, averages and shares do not. Answers carry a `coverage` block: "
+    'a `history_status` of "syncing" means that store is still importing its sales history, so the '
+    "figures are real but partial and must be reported as such."
 )
 
 _GROUPS_TOOL_DESC = (

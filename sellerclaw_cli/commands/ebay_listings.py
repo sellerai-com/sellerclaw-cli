@@ -11,7 +11,7 @@ NAME = "ebay-listings"
 # draft/publish ops stay under the store resource (/agent/stores/{store_id}/ebay-*).
 
 # The "lazy" draft body: only product_ids is required — the server places the category and fills the
-# item specifics when they are omitted. Shared by preview-drafts and publish-product.
+# item specifics when they are omitted. Shared by create-drafts and preview-drafts.
 _LAZY_DRAFT_BODY = (
     body_field(
         "product_ids",
@@ -276,10 +276,12 @@ SPECS = (
         job_poll_path="/agent/stores/{store_id}/bulk-listing-jobs/{job_id}",
         timeout=LONG_TIMEOUT_SECONDS,
         summary=(
-            "Create eBay draft listings (category and item specifics are filled for you). Runs in "
-            "the background: the answer is the queued job and the command that reads it. Read that "
-            "once the work has plausibly finished for the created rows with their readiness and any "
-            "question it raised — or add `--wait` to hold on until then."
+            "Create eBay draft listings (category and item specifics are filled for you). Nothing "
+            "reaches eBay: publishing is a separate step, after you have read the drafts back. Runs "
+            "in the background: the answer is the queued job and the command that reads it. Read "
+            "that once the work has plausibly finished — `drafted` says what was decided per "
+            "product (category, item specifics, price range), `results` gives the rows with their "
+            "readiness — or add `--wait` to hold on until then."
         ),
         # Only product_ids is required, matching every other channel's draft command and the server,
         # which fills the rest: it places the category, resolves the item specifics off the product,
@@ -293,21 +295,6 @@ SPECS = (
         "/agent/stores/{store_id}/ebay-draft-listings/preview",
         timeout=LONG_TIMEOUT_SECONDS,
         summary="Preview what drafting products would set (category + item specifics) — creates nothing.",
-        body=_LAZY_DRAFT_BODY,
-    ),
-    Cmd(
-        "publish-product",
-        "POST",
-        "/agent/stores/{store_id}/ebay-draft-listings/publish-product",
-        job_poll_path="/agent/stores/{store_id}/bulk-listing-jobs/{job_id}",
-        timeout=LONG_TIMEOUT_SECONDS,
-        summary=(
-            "One shot: draft products (auto category + specifics) and publish the ready ones. Runs "
-            "in the background: the answer is the queued job and the command that reads it. Reading "
-            "it gives per-product outcomes, the live rows, and any question that stopped a product; "
-            "`--wait` holds on until then instead. Never re-send this command to check on it — that "
-            "publishes every product a second time."
-        ),
         body=_LAZY_DRAFT_BODY,
     ),
     Cmd(

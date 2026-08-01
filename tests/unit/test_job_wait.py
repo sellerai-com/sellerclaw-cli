@@ -61,16 +61,16 @@ def _no_real_sleeping(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _job(status: str, **extra: Any) -> dict[str, Any]:
-    return {"id": JOB_ID, "status": status, "kind": "publish_product", **extra}
+    return {"id": JOB_ID, "status": status, "kind": "draft", **extra}
 
 
-def _publish_product(*args: str) -> Any:
+def _create_drafts(*args: str) -> Any:
     return runner.invoke(
         app,
         [
             *args,
             "ebay-listings",
-            "publish-product",
+            "create-drafts",
             STORE_ID,
             "-b",
             json.dumps({"product_ids": [PRODUCT_ID]}),
@@ -173,18 +173,18 @@ class TestThroughTheCommand:
         ],
     )
     @respx.mock
-    def test_publish_product_hands_back_the_queued_job_without_polling(
+    def test_create_drafts_hands_back_the_queued_job_without_polling(
         self, env: str, args: tuple[str, ...]
     ) -> None:
         """Waiting costs an agent five or six turns of "no new output"; the job id costs it none."""
-        respx.post(
-            f"{env}/agent/stores/{STORE_ID}/ebay-draft-listings/publish-product"
-        ).mock(return_value=httpx.Response(202, json=_job("queued")))
+        respx.post(f"{env}/agent/stores/{STORE_ID}/ebay-draft-listings").mock(
+            return_value=httpx.Response(202, json=_job("queued"))
+        )
         poll = respx.get(f"{env}/agent/stores/{STORE_ID}/bulk-listing-jobs/{JOB_ID}").mock(
             return_value=httpx.Response(200, json=_job("succeeded"))
         )
 
-        result = _publish_product(*args)
+        result = _create_drafts(*args)
 
         assert result.exit_code == 0, result.output
         assert json.loads(result.stdout)["data"]["status"] == "queued"
@@ -194,11 +194,11 @@ class TestThroughTheCommand:
     def test_the_queued_job_names_the_command_that_reads_it(self, env: str) -> None:
         """A job id alone is a dead end: it does not say which command reads it, and an agent that
         cannot find out either re-sends the write or reports "started it" as the outcome."""
-        respx.post(
-            f"{env}/agent/stores/{STORE_ID}/ebay-draft-listings/publish-product"
-        ).mock(return_value=httpx.Response(202, json=_job("queued")))
+        respx.post(f"{env}/agent/stores/{STORE_ID}/ebay-draft-listings").mock(
+            return_value=httpx.Response(202, json=_job("queued"))
+        )
 
-        result = _publish_product()
+        result = _create_drafts()
 
         assert result.exit_code == 0, result.output
         note = json.loads(result.stdout)["data"]["note"]
@@ -208,14 +208,14 @@ class TestThroughTheCommand:
 
     @respx.mock
     def test_wait_answers_with_the_finished_job(self, env: str) -> None:
-        respx.post(
-            f"{env}/agent/stores/{STORE_ID}/ebay-draft-listings/publish-product"
-        ).mock(return_value=httpx.Response(202, json=_job("queued")))
+        respx.post(f"{env}/agent/stores/{STORE_ID}/ebay-draft-listings").mock(
+            return_value=httpx.Response(202, json=_job("queued"))
+        )
         respx.get(f"{env}/agent/stores/{STORE_ID}/bulk-listing-jobs/{JOB_ID}").mock(
             return_value=httpx.Response(200, json=_job("succeeded", succeeded_count=1))
         )
 
-        result = _publish_product("--wait")
+        result = _create_drafts("--wait")
 
         assert result.exit_code == 0, result.output
         payload = json.loads(result.stdout)["data"]
@@ -225,14 +225,14 @@ class TestThroughTheCommand:
     @respx.mock
     def test_a_wait_that_runs_out_names_the_command_that_reads_the_job(self, env: str) -> None:
         """Nothing failed and nothing may be re-sent — so the answer must point at the one safe call."""
-        respx.post(
-            f"{env}/agent/stores/{STORE_ID}/ebay-draft-listings/publish-product"
-        ).mock(return_value=httpx.Response(202, json=_job("queued")))
+        respx.post(f"{env}/agent/stores/{STORE_ID}/ebay-draft-listings").mock(
+            return_value=httpx.Response(202, json=_job("queued"))
+        )
         respx.get(f"{env}/agent/stores/{STORE_ID}/bulk-listing-jobs/{JOB_ID}").mock(
             return_value=httpx.Response(200, json=_job("running"))
         )
 
-        result = _publish_product("--wait", "--timeout", "4")
+        result = _create_drafts("--wait", "--timeout", "4")
 
         assert result.exit_code == 0, result.output
         payload = json.loads(result.stdout)["data"]
@@ -255,7 +255,7 @@ class TestThroughTheCommand:
 
 class TestDescribeTellsTheCaller:
     def test_a_job_starting_command_says_so(self, env: str) -> None:  # noqa: ARG002
-        result = runner.invoke(app, ["describe", "ebay-listings", "publish-product"])
+        result = runner.invoke(app, ["describe", "ebay-listings", "create-drafts"])
 
         assert result.exit_code == 0, result.output
         assert json.loads(result.stdout)["data"]["starts_background_job"] is True

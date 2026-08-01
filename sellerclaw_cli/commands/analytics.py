@@ -2,48 +2,110 @@ from __future__ import annotations
 
 import typer
 
-from sellerclaw_cli._command_group import Cmd, build_group, flag
+from sellerclaw_cli._command_group import LONG_TIMEOUT_SECONDS, Cmd, build_group, flag
 
 NAME = "analytics"
 
-SPECS = (
-    Cmd(
-        "report",
-        "POST",
-        "/agent/analytics/stores/{store_id}/report",
-        summary=(
-            "Queue a full sales-analytics report for one store (revenue, AOV, period-over-period "
-            "trend, ABC tiers, best/worst sellers, sleeping catalog, recommendations). Returns "
-            "immediately; the result is delivered to the chat when ready."
-        ),
-        flags=(
-            flag(
-                "period",
-                help="Reporting window.",
-                choices=("last_7d", "last_30d", "last_90d", "this_month", "this_year"),
-                default="last_30d",
-            ),
+# Every read in this group takes the same window and the same store selection, so a caller learns
+# the contract once instead of a dialect per command. Declared here and spread into each Cmd, which
+# also means `describe` shows them identically everywhere.
+
+PERIOD_CHOICES = (
+    "last_7d",
+    "last_30d",
+    "last_90d",
+    "this_month",
+    "last_month",
+    "this_year",
+)
+
+WINDOW_FLAGS = (
+    flag(
+        "period",
+        help="Window ending now.",
+        choices=PERIOD_CHOICES,
+        default="last_30d",
+    ),
+    flag(
+        "week",
+        type=int,
+        minimum=0,
+        maximum=52,
+        help=(
+            "A COMPLETED ISO week instead of --period: 0 = last week (the most recent finished "
+            "one, never the week in progress), 1 = the week before it. Use for 'how was last week'."
         ),
     ),
+    flag(
+        "month",
+        type=int,
+        minimum=0,
+        maximum=24,
+        help=(
+            "A COMPLETED calendar month instead of --period: 0 = last month, 1 = the month before. "
+            "Use for 'compare March with February' (two calls, --month 4 and --month 5)."
+        ),
+    ),
+    flag(
+        "date_from",
+        param="from",
+        aliases=("--from",),
+        help="Start of an explicit range, YYYY-MM-DD (inclusive). Needs --to.",
+    ),
+    flag(
+        "date_to",
+        param="to",
+        aliases=("--to",),
+        help="End of an explicit range, YYYY-MM-DD (inclusive whole day). Needs --from.",
+    ),
+)
+
+STORE_FLAGS = (
+    flag(
+        "store",
+        repeatable=True,
+        help=(
+            "Another store to fold into the same answer; repeat to add more. The server recomputes "
+            "over the combined data, so never add up two single-store answers yourself."
+        ),
+    ),
+)
+
+# Reused in several summaries: the two things that make an answer honest.
+_SELECTION = (
+    "Pass `all` instead of a store id to cover every active store, or repeat --store to pick "
+    "several. Averages, shares and rankings are recomputed over the combined data."
+)
+_ONE_CURRENCY = (
+    "A selection whose stores report in different currencies is refused (`currency_mismatch`) "
+    "rather than summed — group the stores that share a currency, or ask one at a time."
+)
+_COVERAGE = (
+    "Every answer carries `coverage`: which `store_ids` it covers, `history_status` "
+    "(ready / syncing / unavailable) and `history_covered_from`. `syncing` means the store is "
+    "still importing its sales history — say so instead of reporting the figures as complete."
+)
+
+SPECS = (
     Cmd(
         "metrics",
         "GET",
         "/agent/analytics/stores/{store_id}/metrics",
         summary=(
-            "Compute store sales metrics inline (synchronous): revenue, AOV, period-over-period "
-            "trend, ABC tiers, and the top SKUs by revenue with their % share. Use this when you "
-            "need numbers to answer in-task (e.g. 'top sellers by revenue this month'); for a "
-            "narrated report delivered to the chat, use 'report' instead. Reads the local "
-            "sales-history mirror (fast); a store still importing its history (or --fresh) reads "
-            "live, which can be slow on large catalogs — allow a generous timeout for that case."
+            "Sales and profit for a window, computed inline: revenue, orders, AOV, trend vs the "
+            "previous equal window, gross profit and margin, ABC tiers by revenue and by profit, "
+            "sales mix by category, top SKUs by revenue and by profit, sleeping (listed but unsold) "
+            "SKUs. The default money command — use it for 'how are sales', 'top sellers', 'what's "
+            "my margin'. Period: --period, or --week/--month for a completed week/month, or "
+            "--from/--to for an explicit range. "
+            f"{_SELECTION} {_ONE_CURRENCY} Profit is GROSS (cost of goods only); add --with-fees for profit after "
+            "the marketplace's cut. `cost_coverage_pct` is the share of revenue with a known cost — "
+            "cost exists only for supplier-sourced products, so frame a low value as 'profit on "
+            f"sourced products', not whole-store. {_COVERAGE}"
         ),
         flags=(
-            flag(
-                "period",
-                help="Reporting window.",
-                choices=("last_7d", "last_30d", "last_90d", "this_month", "this_year"),
-                default="last_30d",
-            ),
+            *WINDOW_FLAGS,
+            *STORE_FLAGS,
             flag(
                 "top",
                 type=int,
@@ -51,7 +113,57 @@ SPECS = (
                 minimum=1,
                 maximum=50,
                 default=10,
-                help="How many top SKUs by revenue to return.",
+                help="How many top SKUs to return, by revenue and by profit.",
+            ),
+            flag(
+                "with_fees",
+                type=bool,
+                help=(
+                    "Also read what the marketplace charged (eBay/Shopify/Etsy) and add a `net` "
+                    "block: marketplace_fees, net_profit, net_margin_pct, sources. SLOW — a live "
+                    "call per store, one after another. The block is absent when any selected "
+                    "store's fees cannot be read (e.g. Amazon). Fees are dated when the platform "
+                    "charged them and revenue when the order was placed, so over a short window "
+                    "net_profit is close rather than exact."
+                ),
+            ),
+            flag(
+                "fresh",
+                type=bool,
+                help="Bypass the local mirror and fetch live from the store (slower).",
+            ),
+        ),
+        # A fee read goes out to each platform's finance API and pages through transactions.
+        timeout=LONG_TIMEOUT_SECONDS,
+    ),
+    Cmd(
+        "timeseries",
+        "GET",
+        "/agent/analytics/stores/{store_id}/timeseries",
+        summary=(
+            "Revenue, orders and units bucketed over time — the data behind a trend chart. The "
+            "window says WHICH span to chart and --granularity how finely to cut it: `--month 0 "
+            "--granularity day` charts last month day by day. --buckets overrides the count when "
+            "you want a fixed number of periods instead ('the last 12 months' = --granularity "
+            "month --buckets 12). Buckets are calendar-aligned, oldest first; each has "
+            f"period_start/period_end, revenue, order_count, units. {_SELECTION} {_COVERAGE}"
+        ),
+        flags=(
+            *WINDOW_FLAGS,
+            *STORE_FLAGS,
+            flag(
+                "granularity",
+                help="Bucket size.",
+                choices=("day", "week", "month"),
+                default="week",
+            ),
+            flag(
+                "buckets",
+                type=int,
+                param="buckets",
+                minimum=1,
+                maximum=366,
+                help="Fixed number of buckets ending at the window's end. Omit to cover the window.",
             ),
             flag(
                 "fresh",
@@ -65,24 +177,23 @@ SPECS = (
         "GET",
         "/agent/analytics/stores/{store_id}/inventory",
         summary=(
-            "Stock health for a store: what is (about to be) out of stock while still listed, and "
-            "what to reorder. Joins current stock (listing mirror) with sales velocity over the "
-            "window. Returns `stockouts` (items at/near zero — each with `current_stock`, "
-            "`daily_velocity`, `days_of_cover`, `lost_revenue_per_day`, `is_out_of_stock`; costliest "
-            "first) with `out_of_stock_count` + `total_lost_revenue_per_day`; and `reorders` (each "
-            "with `days_of_cover`, `reorder_point`, `suggested_order_qty`, `needs_reorder`; most "
-            "urgent first) with `reorder_count`. `lead_time_days` is the restock time used for the "
-            "reorder math; `lead_time_is_default` = true means the owner has not set one (set it via "
-            "`channels set-lead-time`). Use for 'what's out of stock', 'what do I need to reorder', "
-            "'am I about to sell out'."
+            "Stock health: what is (about to be) out of stock while still listed, and what to "
+            "reorder. Joins current stock with sales velocity over the window. Returns `stockouts` "
+            "(costliest first — each with current_stock, daily_velocity, days_of_cover, "
+            "lost_revenue_per_day, is_out_of_stock) plus out_of_stock_count and "
+            "total_lost_revenue_per_day; and `reorders` (most urgent first — days_of_cover, "
+            "reorder_point, suggested_order_qty, needs_reorder) plus reorder_count. "
+            "`lead_time_is_default` = true means the owner has not set a restock lead time (set it "
+            "with `channels set-lead-time`) — or several stores were combined, which have no single "
+            "one. In-transit stock is not modelled: the math is on-hand only. Use for 'what's out "
+            "of stock', 'what do I need to reorder', 'am I about to sell out'. "
+            f"{_SELECTION} Across stores the same SKU merges into one row: 60 units in each of two "
+            "stores reads as 120, though neither can ship the other's orders — for a restock "
+            f"decision ask per store. {_COVERAGE}"
         ),
         flags=(
-            flag(
-                "period",
-                help="Velocity window (how far back sales are measured).",
-                choices=("last_7d", "last_30d", "last_90d", "this_month", "this_year"),
-                default="last_30d",
-            ),
+            *WINDOW_FLAGS,
+            *STORE_FLAGS,
             flag(
                 "top",
                 type=int,
@@ -91,6 +202,45 @@ SPECS = (
                 maximum=100,
                 default=20,
                 help="How many rows to return per facet (stockouts / reorders).",
+            ),
+        ),
+    ),
+    Cmd(
+        "geography",
+        "GET",
+        "/agent/analytics/stores/{store_id}/geography",
+        summary=(
+            "Where the orders went over the window: `countries` (each with order_count, "
+            "order_share 0..1 and share_delta_pp — the shift vs the previous equal window), the "
+            "`primary_country`, and its `primary_country_regions` (e.g. US states). Use for 'where "
+            "are my buyers', and to advise on shipping policies, fulfillment placement and where "
+            f"to advertise. {_SELECTION} {_COVERAGE}"
+        ),
+        flags=(*WINDOW_FLAGS, *STORE_FLAGS),
+    ),
+    Cmd(
+        "capital",
+        "GET",
+        "/agent/analytics/stores/{store_id}/capital",
+        summary=(
+            "Money sitting in stock on hand: `tied_up_value`, and `dead_stock_value` — the slice "
+            "that has not sold in --dead-after days. Use for 'how much cash is tied up in "
+            "inventory', 'what should I discount or write off'. Takes NO period: stock is always as "
+            "of now (no stock history is kept). Stock is valued at supplier cost, which exists only "
+            "for sourced products, so `coverage_pct` (0..1) is the share of on-hand units the money "
+            "figures actually cover — a low value means the real number is bigger than the one "
+            f"shown, and must be said out loud. {_SELECTION} {_ONE_CURRENCY} {_COVERAGE}"
+        ),
+        flags=(
+            *STORE_FLAGS,
+            flag(
+                "dead_after",
+                type=int,
+                param="dead_after",
+                minimum=1,
+                maximum=365,
+                default=90,
+                help="Days without a sale after which in-stock items count as dead stock.",
             ),
         ),
     ),
@@ -111,53 +261,44 @@ SPECS = (
             "not an error) and `error` (set when a supported block failed to load). Lead with "
             "`headline` — `orders_to_ship`, `shipments_overdue`, `disputes_open`, `out_of_stock`, "
             "`reorders_due`, `account_at_risk`, `attention_count`, `has_errors`. Use for 'what "
-            "needs my attention today', 'morning check', 'anything urgent on this store'."
+            "needs my attention today', 'morning check', 'anything urgent on this store'. This one "
+            "is always about NOW and one store at a time, so it takes no window and no --store."
         ),
         flags=(
             flag(
                 "velocity_period",
                 help="Velocity window for the inventory block (how far back sales are measured).",
-                choices=("last_7d", "last_30d", "last_90d", "this_month", "this_year"),
+                choices=PERIOD_CHOICES,
                 default="last_30d",
             ),
         ),
     ),
     Cmd(
-        "timeseries",
-        "GET",
-        "/agent/analytics/stores/{store_id}/timeseries",
+        "report",
+        "POST",
+        "/agent/analytics/stores/{store_id}/report",
         summary=(
-            "Revenue and orders bucketed over time — the data behind the trend charts. Ask for "
-            "'revenue by week, last 8 weeks' (--granularity week --buckets 8) or 'by month, last "
-            "12 months' (--granularity month --buckets 12), independent of any report period. "
-            "Buckets are calendar-aligned and the last one is the current, partial period."
+            "DELIVERY, not data: queues a narrated sales report for one store and returns "
+            "immediately — the figures arrive back to you later as a separate message, to relay to "
+            "the owner. Use when the owner asked for a report. When YOU need numbers to finish a "
+            "task, use `metrics` instead, which returns them in the response."
         ),
         flags=(
             flag(
-                "granularity",
-                help="Bucket size.",
-                choices=("day", "week", "month"),
-                default="week",
-            ),
-            flag(
-                "buckets",
-                type=int,
-                param="buckets",
-                minimum=1,
-                maximum=366,
-                default=8,
-                help="How many buckets ending now.",
-            ),
-            flag(
-                "fresh",
-                type=bool,
-                help="Bypass the local mirror and fetch live from the store (slower).",
+                "period",
+                help="Reporting window.",
+                choices=PERIOD_CHOICES,
+                default="last_30d",
             ),
         ),
     ),
 )
 
-app = build_group(NAME, "Store sales analytics (read-only).", SPECS)
+app = build_group(
+    NAME,
+    "Store sales analytics (read-only): sales, trends, stock, geography, tied-up capital.",
+    SPECS,
+)
 
 
 def register(parent: typer.Typer) -> None:

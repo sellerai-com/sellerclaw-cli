@@ -291,3 +291,184 @@ def test_analytics_operations_digest_rejects_bad_period_locally(
     )
     assert result.exit_code != 0
     assert route.call_count == 0
+
+
+# --- The shared window + store-selection contract ---------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("cli_args", "expected_params"),
+    [
+        pytest.param(["--week", "0"], {"week": "0"}, id="completed_week"),
+        pytest.param(["--month", "3"], {"month": "3"}, id="completed_month"),
+        pytest.param(
+            ["--from", "2026-03-01", "--to", "2026-03-31"],
+            {"from": "2026-03-01", "to": "2026-03-31"},
+            id="explicit_range_uses_bare_from_and_to_keys",
+        ),
+        pytest.param(["--period", "last_month"], {"period": "last_month"}, id="last_month_keyword"),
+    ],
+)
+@respx.mock
+def test_analytics_metrics_forwards_every_window_form(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+    cli_args: list[str],
+    expected_params: dict[str, str],
+) -> None:
+    route = respx.get(f"{fake_api_url}/agent/analytics/stores/{STORE_ID}/metrics").mock(
+        return_value=httpx.Response(200, json=_METRICS_JSON)
+    )
+    result = runner.invoke(app, ["analytics", "metrics", STORE_ID, *cli_args])
+    assert result.exit_code == 0, result.stderr
+    params = route.calls.last.request.url.params
+    for key, value in expected_params.items():
+        assert params[key] == value
+
+
+@respx.mock
+def test_analytics_metrics_rejects_an_out_of_range_week_locally(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """Bad offsets fail before the round-trip, so the caller sees the limit rather than a 422."""
+    route = respx.get(f"{fake_api_url}/agent/analytics/stores/{STORE_ID}/metrics").mock(
+        return_value=httpx.Response(200, json=_METRICS_JSON)
+    )
+    result = runner.invoke(app, ["analytics", "metrics", STORE_ID, "--week", "99"])
+    assert result.exit_code != 0
+    assert route.call_count == 0
+
+
+@respx.mock
+def test_analytics_metrics_repeats_the_store_flag_for_an_aggregate(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    other = "22222222-2222-4222-8222-222222222222"
+    route = respx.get(f"{fake_api_url}/agent/analytics/stores/{STORE_ID}/metrics").mock(
+        return_value=httpx.Response(200, json=_METRICS_JSON)
+    )
+    result = runner.invoke(app, ["analytics", "metrics", STORE_ID, "--store", other])
+    assert result.exit_code == 0, result.stderr
+    assert route.calls.last.request.url.params.get_list("store") == [other]
+
+
+@respx.mock
+def test_analytics_metrics_accepts_all_in_place_of_a_store_id(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """`all` is the whole-business selection — it must reach the API untouched, not be resolved."""
+    route = respx.get(f"{fake_api_url}/agent/analytics/stores/all/metrics").mock(
+        return_value=httpx.Response(200, json=_METRICS_JSON)
+    )
+    result = runner.invoke(app, ["analytics", "metrics", "all"])
+    assert result.exit_code == 0, result.stderr
+    assert route.call_count == 1
+
+
+@respx.mock
+def test_analytics_metrics_forwards_with_fees(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.get(f"{fake_api_url}/agent/analytics/stores/{STORE_ID}/metrics").mock(
+        return_value=httpx.Response(200, json=_METRICS_JSON)
+    )
+    result = runner.invoke(app, ["analytics", "metrics", STORE_ID, "--with-fees"])
+    assert result.exit_code == 0, result.stderr
+    assert route.calls.last.request.url.params["with_fees"] == "true"
+
+
+# --- geography / capital ----------------------------------------------------------------------
+
+
+_GEOGRAPHY_JSON = {
+    "store_id": STORE_ID,
+    "period": "iso_week",
+    "period_start": "2026-06-01T00:00:00Z",
+    "period_end": "2026-06-07T23:59:59Z",
+    "total_orders": 100,
+    "countries": [
+        {"country_code": "US", "order_count": 90, "order_share": 0.9, "share_delta_pp": 2.0}
+    ],
+    "primary_country": "US",
+    "primary_country_regions": [{"region": "CA", "order_count": 22, "order_share": 0.244}],
+}
+
+
+@respx.mock
+def test_analytics_geography_gets_and_forwards_the_window(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.get(f"{fake_api_url}/agent/analytics/stores/{STORE_ID}/geography").mock(
+        return_value=httpx.Response(200, json=_GEOGRAPHY_JSON)
+    )
+    result = runner.invoke(app, ["analytics", "geography", STORE_ID, "--week", "0"])
+    assert result.exit_code == 0, result.stderr
+    assert route.calls.last.request.url.params["week"] == "0"
+    payload = json.loads(result.stdout)
+    assert payload["data"]["primary_country"] == "US"
+
+
+_CAPITAL_JSON = {
+    "currency": "USD",
+    "tied_up_value": "4200",
+    "dead_stock_value": "900",
+    "dead_stock_lookback_days": 180,
+    "valued_units": 60,
+    "total_units": 100,
+    "coverage_pct": 0.6,
+}
+
+
+@respx.mock
+def test_analytics_capital_gets_and_forwards_dead_after(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.get(f"{fake_api_url}/agent/analytics/stores/{STORE_ID}/capital").mock(
+        return_value=httpx.Response(200, json=_CAPITAL_JSON)
+    )
+    result = runner.invoke(app, ["analytics", "capital", STORE_ID, "--dead-after", "180"])
+    assert result.exit_code == 0, result.stderr
+    assert route.calls.last.request.url.params["dead_after"] == "180"
+    payload = json.loads(result.stdout)
+    assert payload["data"]["coverage_pct"] == 0.6
+
+
+@respx.mock
+def test_analytics_capital_rejects_a_period_flag(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """Stock has no history, so offering a period would promise something we cannot answer."""
+    route = respx.get(f"{fake_api_url}/agent/analytics/stores/{STORE_ID}/capital").mock(
+        return_value=httpx.Response(200, json=_CAPITAL_JSON)
+    )
+    result = runner.invoke(app, ["analytics", "capital", STORE_ID, "--period", "last_30d"])
+    assert result.exit_code != 0
+    assert route.call_count == 0
+
+
+@respx.mock
+def test_analytics_timeseries_buckets_the_window_without_a_count(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """Omitting --buckets means "chart this whole window", so no count is sent."""
+    route = respx.get(f"{fake_api_url}/agent/analytics/stores/{STORE_ID}/timeseries").mock(
+        return_value=httpx.Response(
+            200, json={"store_id": STORE_ID, "granularity": "day", "points": []}
+        )
+    )
+    result = runner.invoke(
+        app, ["analytics", "timeseries", STORE_ID, "--month", "0", "--granularity", "day"]
+    )
+    assert result.exit_code == 0, result.stderr
+    params = route.calls.last.request.url.params
+    assert params["month"] == "0"
+    assert params["granularity"] == "day"
+    assert "buckets" not in params
