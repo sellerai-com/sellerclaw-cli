@@ -76,6 +76,10 @@ _SELECTION = (
     "Pass `all` instead of a store id to cover every active store, or repeat --store to pick "
     "several. Averages, shares and rankings are recomputed over the combined data."
 )
+_ONE_CURRENCY = (
+    "A selection whose stores report in different currencies is refused (`currency_mismatch`) "
+    "rather than summed — group the stores that share a currency, or ask one at a time."
+)
 _COVERAGE = (
     "Every answer carries `coverage`: which `store_ids` it covers, `history_status` "
     "(ready / syncing / unavailable) and `history_covered_from`. `syncing` means the store is "
@@ -94,7 +98,7 @@ SPECS = (
             "SKUs. The default money command — use it for 'how are sales', 'top sellers', 'what's "
             "my margin'. Period: --period, or --week/--month for a completed week/month, or "
             "--from/--to for an explicit range. "
-            f"{_SELECTION} Profit is GROSS (cost of goods only); add --with-fees for profit after "
+            f"{_SELECTION} {_ONE_CURRENCY} Profit is GROSS (cost of goods only); add --with-fees for profit after "
             "the marketplace's cut. `cost_coverage_pct` is the share of revenue with a known cost — "
             "cost exists only for supplier-sourced products, so frame a low value as 'profit on "
             f"sourced products', not whole-store. {_COVERAGE}"
@@ -117,8 +121,10 @@ SPECS = (
                 help=(
                     "Also read what the marketplace charged (eBay/Shopify/Etsy) and add a `net` "
                     "block: marketplace_fees, net_profit, net_margin_pct, sources. SLOW — a live "
-                    "call per store. The block is absent when any selected store's fees cannot be "
-                    "read (e.g. Amazon) or the stores bill in different currencies."
+                    "call per store, one after another. The block is absent when any selected "
+                    "store's fees cannot be read (e.g. Amazon). Fees are dated when the platform "
+                    "charged them and revenue when the order was placed, so over a short window "
+                    "net_profit is close rather than exact."
                 ),
             ),
             flag(
@@ -181,7 +187,9 @@ SPECS = (
             "with `channels set-lead-time`) — or several stores were combined, which have no single "
             "one. In-transit stock is not modelled: the math is on-hand only. Use for 'what's out "
             "of stock', 'what do I need to reorder', 'am I about to sell out'. "
-            f"{_SELECTION} {_COVERAGE}"
+            f"{_SELECTION} Across stores the same SKU merges into one row: 60 units in each of two "
+            "stores reads as 120, though neither can ship the other's orders — for a restock "
+            f"decision ask per store. {_COVERAGE}"
         ),
         flags=(
             *WINDOW_FLAGS,
@@ -221,7 +229,7 @@ SPECS = (
             "of now (no stock history is kept). Stock is valued at supplier cost, which exists only "
             "for sourced products, so `coverage_pct` (0..1) is the share of on-hand units the money "
             "figures actually cover — a low value means the real number is bigger than the one "
-            f"shown, and must be said out loud. {_SELECTION} {_COVERAGE}"
+            f"shown, and must be said out loud. {_SELECTION} {_ONE_CURRENCY} {_COVERAGE}"
         ),
         flags=(
             *STORE_FLAGS,

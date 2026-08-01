@@ -24,7 +24,13 @@ Everything here is the `analytics` group, read-only. Run the examples directly; 
 **The stores.** The positional is a store id, or the literal `all` for every active store. Repeat
 `store` in `flags` to pick an arbitrary set. The server recomputes over the combined data, so
 **never add up two single-store answers yourself** — totals add, but averages, shares and rankings
-do not.
+do not. Two caveats on an aggregate:
+
+- **Money needs one currency.** Stores reporting in different currencies are refused
+  (`currency_mismatch`), not summed — group the ones that share a currency. Order and unit counts
+  (geography, stock health) are unaffected.
+- **The same SKU across stores merges into one row.** Right for "what sold"; misleading for stock —
+  60 units in each of two stores reads as 120, though neither can ship the other's orders.
 
 ## Sales, profit, best sellers
 
@@ -40,8 +46,10 @@ Gives revenue, orders, AOV, trend vs the previous equal window, gross profit and
 sales mix by category, top SKUs by revenue and by profit, and how many listed SKUs sold nothing.
 
 Add `"with_fees": true` for a `net` block — real marketplace fees subtracted (eBay, Shopify, Etsy).
-It is a live call per store, so it is slow; the block is simply absent when a store's fees can't be
-read (Amazon and friends) or the stores bill in different currencies.
+It is a live call per store, one after another, so it is slow; the block is simply absent when a
+store's fees can't be read (Amazon and friends). Fees are dated when the platform charged them and
+revenue when the order was placed, so on a window of a week or less treat `net_profit` as close
+rather than exact.
 
 ## Trends, stock, geography, tied-up cash
 
