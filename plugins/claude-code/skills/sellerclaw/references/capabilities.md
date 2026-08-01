@@ -25,7 +25,7 @@ Many groups take an id as the **first positional** (e.g. a store id for `shopify
 | `catalog` | Internal SellerClaw product catalog. |
 | `orders` | Internal SellerClaw orders. |
 | `listings` | Marketplace listings across all stores, by SellerClaw id. |
-| `analytics` | Store sales analytics (read-only). |
+| `analytics` | Sales, trends, stock health, geography and tied-up capital (read-only). One period contract across the group — `--period`, or `--week`/`--month` for a completed week/month, or `--from`/`--to` — and `all` in place of a store id covers every store at once. |
 
 ## Marketing & ads
 
