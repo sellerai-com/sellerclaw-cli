@@ -51,7 +51,7 @@ The group map (what exists and where) is in [references/capabilities.md](referen
 ## Task recipes
 
 Focused recipes load on their own when relevant: `sellerclaw-listings`, `sellerclaw-orders`,
-`sellerclaw-ads`, `sellerclaw-research`.
+`sellerclaw-ads`, `sellerclaw-research`, `sellerclaw-analytics` (how the business is doing).
 
 ## Setup & troubleshooting
 

@@ -31,6 +31,7 @@ TASK_RECIPES = (
     "sellerclaw-orders",
     "sellerclaw-ads",
     "sellerclaw-research",
+    "sellerclaw-analytics",
 )
 
 
