@@ -6,9 +6,9 @@ from sellerclaw_cli._command_group import Cmd, LONG_TIMEOUT_SECONDS, body_field,
 
 NAME = "shopify-listings"
 
-# Optional content overrides shared by `create-drafts` and `publish-product`. The agent never
-# passes stock or a sales channel: stock is always taken from the catalog and the channel is always
-# the Online Store. These fields only tweak the listing content / prices.
+# Optional content overrides for `create-drafts`. The agent never passes stock or a sales channel:
+# stock is always taken from the catalog and the channel is always the Online Store. These fields
+# only tweak the listing content / prices.
 _LISTING_CONTENT_FIELDS = (
     body_field("title", help="Override the listing title (single-product only)."),
     body_field("description", help="Override the listing description (body HTML)."),
@@ -112,8 +112,9 @@ SPECS = (
         "/agent/stores/{store_id}/listings",
         summary="Create products directly on Shopify from scratch (not from the catalog). Use this "
         "only for products you are NOT sourcing through SellerClaw — for catalog products use "
-        "'publish-product', which creates them as tracked listings the catalog stays in step with. "
-        "A product made here is not tracked until the store's listings are next downloaded.",
+        "'create-drafts' then 'publish-drafts', which creates them as tracked listings the catalog "
+        "stays in step with. A product made here is not tracked until the store's listings are next "
+        "downloaded.",
         body=(
             body_field(
                 "items",
@@ -234,11 +235,12 @@ SPECS = (
         "/agent/stores/{store_id}/draft-listings",
         job_poll_path="/agent/stores/{store_id}/bulk-listing-jobs/{job_id}",
         timeout=LONG_TIMEOUT_SECONDS,
-        summary="Create draft listings from catalog products. Stock is taken from the catalog and "
-        "the channel is the Online Store — you never set them; the optional fields only tweak "
+        summary="Create draft listings from catalog products. Nothing reaches Shopify: publishing "
+        "is a separate step, after you have read the drafts back. Stock is taken from the catalog "
+        "and the channel is the Online Store — you never set them; the optional fields only tweak "
         "content. Runs in the background: the answer is the queued job and the command that reads "
-        "it. Reading it gives the created rows with their readiness, and any category a product "
-        "introduced; `--wait` holds on until then instead.",
+        "it. Reading it gives `drafted` (what was decided per product), the created rows with their "
+        "readiness, and any category a product introduced; `--wait` holds on until then instead.",
         body=(
             body_field(
                 "product_ids",
@@ -291,28 +293,6 @@ SPECS = (
                 help="Sales-channel names to withdraw from; omit for the Online Store. Used only "
                 "for products not in the catalog.",
             ),
-        ),
-    ),
-    Cmd(
-        "publish-product",
-        "POST",
-        "/agent/stores/{store_id}/draft-listings/publish-product",
-        job_poll_path="/agent/stores/{store_id}/bulk-listing-jobs/{job_id}",
-        timeout=LONG_TIMEOUT_SECONDS,
-        summary="One-shot: create drafts for catalog products AND publish them to the storefront. "
-        "Stock comes from the catalog, the channel is the Online Store, and overselling is denied — "
-        "all automatic; you never pass stock or a channel. Runs in the background: the answer is "
-        "the queued job and the command that reads it. Reading it gives per-product outcomes and "
-        "the live rows; `--wait` holds on until then instead. Never re-send this command to check "
-        "on it — that publishes every product a second time.",
-        body=(
-            body_field(
-                "product_ids",
-                required=True,
-                repeatable=True,
-                help="SellerClaw catalog product ids (UUIDs) to publish.",
-            ),
-            *_LISTING_CONTENT_FIELDS,
         ),
     ),
     Cmd(
