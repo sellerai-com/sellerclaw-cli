@@ -228,6 +228,10 @@ def _body_schema(b: Any) -> dict[str, Any]:
         "repeatable": b.repeatable,
         "help": b.help,
     }
+    if b.nullable:
+        # Said only where it is true: here ``null`` is a value meaning "unset this", so a caller
+        # that reads the schema knows it has a way to clear the setting.
+        item["nullable"] = True
     if b.choices:
         item["choices"] = list(b.choices)
     return item

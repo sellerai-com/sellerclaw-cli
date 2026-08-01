@@ -31,16 +31,23 @@ SPECS = (
         "set-markup",
         "PATCH",
         "/agent/sales-channels/{sales_channel_id}",
-        summary="Set this store's dropshipping markup (percent, e.g. 30 = +30%).",
+        summary=(
+            "Set this store's dropshipping markup (percent, e.g. 30 = +30%), or send null to "
+            "remove it and put the store back to having none."
+        ),
         body=(
             body_field(
                 "markup_percent",
                 type=float,
                 required=True,
+                nullable=True,
                 help=(
                     "Markup percent applied over the product cost when pricing listings "
                     "(0-500; 15 = +15%). A store starts with no markup set — until you set one, "
-                    "new listings are created without a price and cannot be published."
+                    "new listings are created without a price and cannot be published. Send "
+                    "`null` to go back to that state — the way to undo a markup set on the wrong "
+                    "store. Do not reach for 0 instead: 0 is a real markup that prices every "
+                    "future listing at cost."
                 ),
                 example=30,
             ),
