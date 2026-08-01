@@ -223,65 +223,60 @@ release: release-preflight
 #   make release-beta     # from dev  -> X.Y.ZbN  (pre-release): "Pre-release" on GitHub, PyPI pre-release
 #   make release-latest   # from main -> X.Y.Z    (stable):      "Latest" on GitHub, normal PyPI install
 #
-# Both share one "base" = the last STABLE tag bumped by PART (minor by default; PART=patch|major).
-# release-beta cuts release candidates for that base (b1, b2, …); release-latest finalizes it to the
-# clean X.Y.Z. Typical flow: `make release-beta` on dev (repeat as needed) → `make release-latest` on main.
-# When the repo has only beta tags (no stable vX.Y.Z yet), both targets follow the open beta line
-# instead of falling back to v0.0.0 → 0.1.0. A beta line is "open" only until its stable tag exists:
-# once vX.Y.Z is out, release-beta must NOT keep appending bN to it — PEP 440 orders 0.43.0b8 *below*
-# 0.43.0, so that tag would publish as an already-superseded pre-release. It starts the next line
-# instead (v0.43.0 released → next beta is 0.44.0b1).
+# Both work toward one "base" version. Normally that is the last STABLE tag bumped by PART (minor by
+# default; PART=patch|major): release-beta cuts pre-releases for it (b1, b2, …) and release-latest
+# finalizes it to the clean X.Y.Z. Typical flow: `make release-beta` on dev (repeat as needed) →
+# `make release-latest` on main.
+#
+# The exception is an OPEN beta line, which both targets follow instead of bumping: betas already cut
+# for a base that still outranks every stable tag. "Outranks" is the whole test — a line is NOT open
+# merely because its own vX.Y.Z tag is missing. PEP 440 orders 0.44.0b2 *below* 1.0.0, so once v1.0.0
+# exists, appending b2 to the 0.44.0 line publishes an already-superseded pre-release (that is exactly
+# how v0.44.0b2 escaped). Whatever closed the line — its own stable tag (v0.43.0 closes the 0.43.0bN
+# line) or a later release that jumped over it (v1.0.0 closes the 0.44.0bN line) — the next beta opens
+# a fresh line off the newest stable: v1.0.0 released → next beta is 1.1.0b1.
+# When the repo has only beta tags and no stable one at all, the open line is followed as usual
+# instead of falling back to v0.0.0 → 0.1.0.
 # `b` is the PEP 440 beta spelling, so PyPI treats the build as a pre-release and a plain
 # `pip install sellerclaw-cli` won't pick it up. Delegates to `release`, which does all the tag pushing.
 release-latest release-beta:
 	@set -eu; \
 	git fetch --tags --quiet $(REMOTE); \
-	if [ "$@" = "release-beta" ]; then \
-	  latest_beta=$$(git tag --list 'v*b*' --sort=-v:refname | head -n1); \
-	  if [ -n "$$latest_beta" ] && echo "$$latest_beta" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+b[0-9]+$$'; then \
-	    base=$$(echo "$$latest_beta" | sed -E 's/^v([0-9]+\.[0-9]+\.[0-9]+)b[0-9]+$$/\1/'); \
-	    n=$$(echo "$$latest_beta" | sed -E 's/^v[0-9]+\.[0-9]+\.[0-9]+b([0-9]+)$$/\1/'); \
-	    if git rev-parse -q --verify "refs/tags/v$$base" >/dev/null 2>&1; then \
-	      echo "release-beta: $$base is already released as v$$base — its beta line is closed; opening the next one."; \
-	    else \
-	      new="$${base}b$$((n+1))"; \
-	      echo "release-beta: continuing $$base line (after $$latest_beta) -> pre-release $$new"; \
-	      $(MAKE) --no-print-directory release VERSION="$$new"; \
-	      exit 0; \
-	    fi; \
-	  fi; \
-	fi; \
-	if [ "$@" = "release-latest" ]; then \
-	  latest_beta=$$(git tag --list 'v*b*' --sort=-v:refname | head -n1); \
-	  if [ -n "$$latest_beta" ] && echo "$$latest_beta" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+b[0-9]+$$'; then \
-	    base=$$(echo "$$latest_beta" | sed -E 's/^v([0-9]+\.[0-9]+\.[0-9]+)b[0-9]+$$/\1/'); \
-	    if ! git rev-parse -q --verify "refs/tags/v$$base" >/dev/null 2>&1; then \
-	      echo "release-latest: finalizing $$base (beta line through $$latest_beta) -> stable $$base"; \
-	      $(MAKE) --no-print-directory release VERSION="$$base" FORCE=1; \
-	      exit 0; \
-	    fi; \
-	  fi; \
-	fi; \
 	last_stable=$$(git tag --list 'v*' --sort=v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$$' | tail -n1); \
 	if [ -z "$$last_stable" ]; then last_stable="v0.0.0"; fi; \
-	b=$${last_stable#v}; \
-	major=$$(echo "$$b" | cut -d. -f1); \
-	minor=$$(echo "$$b" | cut -d. -f2); \
-	patch=$$(echo "$$b" | cut -d. -f3); \
-	case "$(PART)" in \
-	  major) base="$$((major+1)).0.0" ;; \
-	  minor) base="$$major.$$((minor+1)).0" ;; \
-	  patch) base="$$major.$$minor.$$((patch+1))" ;; \
-	  *) echo "Unknown PART=$(PART) (use major|minor|patch)" >&2; exit 1 ;; \
-	esac; \
+	stable=$${last_stable#v}; \
+	base=""; \
+	latest_beta=$$(git tag --list 'v*b*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+b[0-9]+$$' | head -n1); \
+	if [ -n "$$latest_beta" ]; then \
+	  beta_base=$${latest_beta#v}; beta_base=$${beta_base%b*}; \
+	  if [ "$$beta_base" != "$$stable" ] && \
+	     [ "$$(printf '%s\n%s\n' "$$beta_base" "$$stable" | sort -V | tail -n1)" = "$$beta_base" ]; then \
+	    base="$$beta_base"; \
+	    echo "$@: open beta line $$base (latest $$latest_beta, ahead of stable $$last_stable)."; \
+	  else \
+	    echo "$@: beta line $$beta_base is closed by stable $$last_stable — opening the next line."; \
+	  fi; \
+	fi; \
+	if [ -z "$$base" ]; then \
+	  major=$$(echo "$$stable" | cut -d. -f1); \
+	  minor=$$(echo "$$stable" | cut -d. -f2); \
+	  patch=$$(echo "$$stable" | cut -d. -f3); \
+	  case "$(PART)" in \
+	    major) base="$$((major+1)).0.0" ;; \
+	    minor) base="$$major.$$((minor+1)).0" ;; \
+	    patch) base="$$major.$$minor.$$((patch+1))" ;; \
+	    *) echo "Unknown PART=$(PART) (use major|minor|patch)" >&2; exit 1 ;; \
+	  esac; \
+	  echo "$@: base $$base (PART=$(PART) from last stable $$last_stable)."; \
+	fi; \
 	if [ "$@" = "release-beta" ]; then \
 	  n=$$(git tag --list "v$${base}b*" | sed -E 's/.*b([0-9]+)$$/\1/' | grep -E '^[0-9]+$$' | sort -n | tail -n1); \
 	  if [ -z "$$n" ]; then n=0; fi; \
 	  new="$${base}b$$((n+1))"; \
-	  echo "release-beta: base $$base (from last stable $$last_stable) -> pre-release $$new"; \
+	  echo "release-beta: -> pre-release $$new"; \
 	  $(MAKE) --no-print-directory release VERSION="$$new"; \
 	else \
 	  if git tag --list "v$${base}b*" | grep -q .; then force="FORCE=1"; else force=""; fi; \
-	  echo "release-latest: finalizing base $$base (from last stable $$last_stable) -> stable $$base"; \
+	  echo "release-latest: -> stable $$base"; \
 	  $(MAKE) --no-print-directory release VERSION="$$base" $$force; \
 	fi
