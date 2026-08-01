@@ -85,8 +85,9 @@ SPECS = (
                 type=str,
                 required=True,
                 repeatable=True,
-                help="eBay listing ids to promote — any number of them, batched for eBay "
-                "automatically. Each variation of a multi-variation listing becomes its own ad.",
+                help="eBay item numbers of the listings to promote — any number of them, batched "
+                "for eBay automatically. One ad per listing: a multi-variation listing is promoted "
+                "as a whole, so pass its item number once rather than one id per variation.",
                 example=["1234567890", "1234567891"],
             ),
         ),
@@ -124,8 +125,9 @@ SPECS = (
                 type=str,
                 required=True,
                 repeatable=True,
-                help="eBay listing ids to add to the campaign — any number of them, batched for "
-                "eBay automatically.",
+                help="eBay item numbers of the listings to add — any number of them, batched for "
+                "eBay automatically. One ad per listing: pass a multi-variation listing's item "
+                "number once, not one id per variation.",
                 example=["1234567890"],
             ),
             body_field(
@@ -199,7 +201,8 @@ SPECS = (
                 type=str,
                 required=True,
                 repeatable=True,
-                help="eBay listing ids to stop promoting.",
+                help="eBay item numbers of the listings to stop promoting (the same ids "
+                "'add-listings' takes).",
                 example=["1234567890"],
             ),
         ),
