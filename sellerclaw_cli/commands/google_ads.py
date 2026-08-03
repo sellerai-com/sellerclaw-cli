@@ -299,8 +299,14 @@ SPECS = (
         "/agent/ads/google/metrics",
         summary="Get performance metrics.",
         flags=(
-            flag("level", help="campaign | ad_group | keyword."),
-            flag("ids", help="Comma-separated resource ids."),
+            flag(
+                "level",
+                help=(
+                    "campaign | ad_group | ad | asset_group (Performance Max) | product_group. "
+                    "Any other value is refused, not silently read as campaign."
+                ),
+            ),
+            flag("ids", help="Comma-separated resource ids, matching the level."),
             flag("date_from", help="YYYY-MM-DD."),
             flag("date_to", help="YYYY-MM-DD."),
             flag("breakdown", help="Breakdown dimension."),
