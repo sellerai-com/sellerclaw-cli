@@ -106,6 +106,43 @@ def test_set_markup_patches_body(
 
 
 @respx.mock
+def test_set_markup_sends_an_explicit_null_through_to_remove_the_markup(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """`null` is a value here, not an omission — it is how a markup set by mistake is undone.
+
+    The local "missing required field" check used to read it as nothing sent and refuse the call,
+    which left the API's own clear unreachable and `0` (a real markup, pricing at cost) as the only
+    way out.
+    """
+    route = respx.patch(f"{fake_api_url}/agent/sales-channels/{STORE_ID}").mock(
+        return_value=httpx.Response(200, json={**_CHANNEL_JSON, "markup_percent": None})
+    )
+    result = runner.invoke(
+        app, ["channels", "set-markup", STORE_ID, "-b", json.dumps({"markup_percent": None})]
+    )
+    assert result.exit_code == 0, result.stderr
+    sent = json.loads(route.calls.last.request.content)
+    assert sent == {"markup_percent": None}
+
+
+@respx.mock
+def test_set_markup_still_refuses_a_body_that_names_no_markup_at_all(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """Nullable widens what counts as an answer; it does not stop the field being required."""
+    route = respx.patch(f"{fake_api_url}/agent/sales-channels/{STORE_ID}").mock(
+        return_value=httpx.Response(200, json=_CHANNEL_JSON)
+    )
+    result = runner.invoke(app, ["channels", "set-markup", STORE_ID, "-b", json.dumps({})])
+    assert result.exit_code != 0
+    assert "markup_percent" in (result.stderr or "")
+    assert route.call_count == 0
+
+
+@respx.mock
 def test_set_default_policies_patches_the_owners_standing_answer(
     env_pointing_at_fake_api: None,  # noqa: ARG001
     fake_api_url: str,

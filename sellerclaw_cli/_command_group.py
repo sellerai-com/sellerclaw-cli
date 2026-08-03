@@ -135,6 +135,11 @@ class BodyField:
     help: str = ""
     choices: tuple[str, ...] = ()
     example: object | None = None
+    # ``null`` is a real value for this field, not an omission: sending it asks the API to *unset*
+    # what is stored. Without this the "missing required field" check below reads an explicit null
+    # as nothing sent and refuses the call — so a setting only ``null`` can clear stays unclearable
+    # from the CLI however well the API supports it.
+    nullable: bool = False
 
 
 def body_field(
@@ -146,6 +151,7 @@ def body_field(
     help: str = "",
     choices: tuple[str, ...] = (),
     example: object | None = None,
+    nullable: bool = False,
 ) -> BodyField:
     """Concise constructor for a JSON body field inside a ``Cmd``."""
     return BodyField(
@@ -156,6 +162,7 @@ def body_field(
         help=help,
         choices=choices,
         example=example,
+        nullable=nullable,
     )
 
 
@@ -359,7 +366,13 @@ def validate_body(group: str, cmd: Cmd, body: Any) -> None:
     by_name = {f.name: f for f in fields}
     problems: list[str] = []
 
-    missing = [f.name for f in required if body.get(f.name) is None]
+    # A nullable field sent as ``null`` is present and meaningful ("unset this"), so only its
+    # absence counts as missing. For every other field the two are the same thing.
+    missing = [
+        f.name
+        for f in required
+        if f.name not in body or (body[f.name] is None and not f.nullable)
+    ]
     if missing:
         problems.append(f"missing required field(s): {', '.join(missing)}")
 
