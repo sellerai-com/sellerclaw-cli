@@ -54,6 +54,54 @@ def test_update_patches_name_and_markup(
 
 
 @respx.mock
+def test_update_turns_the_shop_into_a_catalog(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """A shop with no checkout is a shape the seller chooses, so the agent can set it."""
+    route = respx.patch(f"{fake_api_url}/agent/sellercart").mock(
+        return_value=httpx.Response(200, json={"sells_online": False})
+    )
+    body = {
+        "sells_online": False,
+        "product_cta_label": "Ask about this",
+        "product_cta_href": "/contacts",
+    }
+
+    result = runner.invoke(app, ["sellercart", "update", "-b", json.dumps(body)])
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == body
+
+
+@respx.mock
+def test_the_product_button_can_be_cleared(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """Empty strings must survive the trip — dropping them would mean "leave the button alone"."""
+    route = respx.patch(f"{fake_api_url}/agent/sellercart").mock(
+        return_value=httpx.Response(200, json={"product_cta_label": None})
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "sellercart",
+            "update",
+            "-b",
+            json.dumps({"product_cta_label": "", "product_cta_href": ""}),
+        ],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {
+        "product_cta_label": "",
+        "product_cta_href": "",
+    }
+
+
+@respx.mock
 def test_unpublish_takes_the_shop_off_the_air(
     env_pointing_at_fake_api: None,  # noqa: ARG001
     fake_api_url: str,
