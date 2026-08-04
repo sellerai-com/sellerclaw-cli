@@ -38,8 +38,11 @@ SPECS = (
             body_field(
                 "prices",
                 type=dict,
-                help="Optional explicit sell prices, keyed by SKU.",
-                example={"SKU-1": "19.99"},
+                help=(
+                    "Optional explicit sell prices, keyed by SKU. Plain numbers, like every other "
+                    "money field in this CLI — a quoted string is refused where the field is checked."
+                ),
+                example={"SKU-1": 19.99},
             ),
         ),
     ),

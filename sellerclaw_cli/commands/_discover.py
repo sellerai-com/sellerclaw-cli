@@ -80,6 +80,13 @@ def _body_repr(cmd: Cmd) -> list[dict[str, object]]:
         }
         if f.choices:
             item["choices"] = list(f.choices)
+        # Said only where true. Both answer "how do I unset this?", and a caller that cannot see the
+        # answer assumes there is none — then leaves a setting switched on because it read the
+        # schema and found no way back.
+        if f.nullable:
+            item["nullable"] = True
+        if f.clearable:
+            item["clearable"] = True
         repr_.append(item)
     return repr_
 

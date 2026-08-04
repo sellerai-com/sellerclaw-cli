@@ -31,6 +31,16 @@ SPECS = (
             ),
         ),
     ),
+    Cmd(
+        "delete",
+        "DELETE",
+        "/agent/sellercart/media/{media_id}",
+        summary=(
+            "Drop an image from the shop's library. Nothing checks whether a page still points at it: "
+            "a block holding the deleted path renders a hole, so look at the pages first, or replace "
+            "the image instead of deleting it."
+        ),
+    ),
 )
 
 app = build_group(NAME, "Images owned by the storefront.", SPECS)
