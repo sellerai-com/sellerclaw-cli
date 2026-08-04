@@ -90,9 +90,9 @@ SPECS = (
         "PATCH",
         "/agent/sellercart",
         summary=(
-            "Rename the shop, or change the markup its prices are computed from. The address and the "
-            "currency are deliberately not changeable: buyers and search engines already hold the "
-            "one, and every price on the shelf is denominated in the other."
+            "Rename the shop, change the markup its prices are computed from, or stop it selling "
+            "online. The address and the currency are deliberately not changeable: buyers and search "
+            "engines already hold the one, and every price on the shelf is denominated in the other."
         ),
         body=(
             body_field("name", help="Shop name shown to buyers.", example="Acme Gear"),
@@ -101,6 +101,32 @@ SPECS = (
                 type=float,
                 help="Markup percent over catalog cost, e.g. 30 for +30% (0-500).",
                 example=45,
+            ),
+            body_field(
+                "sells_online",
+                type=bool,
+                help=(
+                    "False turns the shop into a catalog: prices and stock, no basket, no checkout. "
+                    "A legitimate shape for a shop, not a half-built one. Delivery terms and Stripe "
+                    "are kept, so turning it back on restores the shop instead of restarting setup."
+                ),
+                example=False,
+            ),
+            body_field(
+                "product_cta_label",
+                help=(
+                    "The seller's own button where 'Add to cart' would be on a catalog shop, e.g. "
+                    "'Ask about this'. Send it together with product_cta_href; empty strings clear "
+                    "both. Unset, products show no button at all — better than one that guesses."
+                ),
+                example="Ask about this",
+                clearable=True,
+            ),
+            body_field(
+                "product_cta_href",
+                help="Where that button goes: a page on the shop ('/contacts') or a full link.",
+                example="/contacts",
+                clearable=True,
             ),
         ),
     ),
