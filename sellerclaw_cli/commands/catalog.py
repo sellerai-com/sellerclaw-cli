@@ -114,6 +114,17 @@ SPECS = (
                 choices=("sourced", "active", "archived"),
                 help="New catalog status.",
             ),
+            body_field(
+                "brand",
+                help=(
+                    "Manufacturer's brand. Marketplaces publish it as a native field or a category "
+                    "aspect. A placeholder like 'No brand' is read as unbranded, not as a name."
+                ),
+            ),
+            body_field(
+                "country_of_origin",
+                help="Two-letter country code where the goods were made, e.g. 'PT'.",
+            ),
         ),
     ),
     Cmd(
