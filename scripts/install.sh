@@ -4,12 +4,15 @@
 #   curl -fsSL https://raw.githubusercontent.com/sellerai-com/sellerclaw-cli/main/scripts/install.sh | sh
 #
 # It installs uv (if missing), installs the sellerclaw CLI with the MCP extra, signs you in via
-# your browser (no API token to copy), and wires the MCP server into Claude Code and Claude
-# Desktop (whichever it finds). Safe to re-run — it upgrades and reconfigures in place.
+# your browser (no API token to copy), and wires the MCP server into Claude Code. Safe to re-run —
+# it upgrades and reconfigures in place.
+#
+# Claude Desktop is deliberately NOT configured here any more: its own extension needs no Python and
+# no uv and signs in from inside Claude, so an entry in claude_desktop_config.json would only add a
+# second, worse copy of the same tools.
 #
 # Opt-outs (set before running):
-#   SELLERCLAW_SKIP_LOGIN=1     don't run `auth login`
-#   SELLERCLAW_FORCE_DESKTOP=1  write the Claude Desktop config even if the app isn't detected
+#   SELLERCLAW_SKIP_LOGIN=1  don't run `auth login`
 set -eu
 
 PKG='sellerclaw-cli[mcp]'
@@ -85,36 +88,43 @@ if command -v claude >/dev/null 2>&1; then
 fi
 
 # 5. Claude Desktop -----------------------------------------------------------
+# Nothing is written here. Desktop's own extension is the better path in every way — it installs with
+# no prerequisites, signs in from inside Claude and updates itself — so this step only cleans up: a
+# `sellerclaw` server left in the config by an older run of this installer would show up alongside
+# the extension as a second, identical set of tools, and would still fail on a machine without uv.
 case "$(uname -s)" in
   Darwin) CFG="$HOME/Library/Application Support/Claude/claude_desktop_config.json" ;;
   *)      CFG="${XDG_CONFIG_HOME:-$HOME/.config}/Claude/claude_desktop_config.json" ;;
 esac
 CLAUDE_DIR="$(dirname "$CFG")"
+EXTENSION_URL='https://github.com/sellerai-com/sellerclaw-cli/releases/download/plugin-latest/sellerclaw.mcpb'
 
-if [ -d "$CLAUDE_DIR" ] || [ "${SELLERCLAW_FORCE_DESKTOP:-0}" = "1" ]; then
-  info "Claude Desktop: writing config at $CFG"
-  mkdir -p "$CLAUDE_DIR"
-  # Merge our server into mcpServers, preserving any existing config. Launch via uvx …@latest so each
-  # start auto-updates; absolute uvx path so the desktop app finds it without inheriting shell PATH.
-  run_py "$CFG" "$UVX" <<'PY'
+if [ -d "$CLAUDE_DIR" ]; then
+  REMOVED=''
+  if [ -f "$CFG" ]; then
+    # Touch only our own key, and only when the file is JSON we can read back — someone else's
+    # config is never ours to rewrite or reformat.
+    REMOVED="$(run_py "$CFG" <<'PY'
 import json, pathlib, sys
 cfg = pathlib.Path(sys.argv[1])
-command = sys.argv[2]
-data = {}
-if cfg.exists():
-    try:
-        data = json.loads(cfg.read_text() or "{}")
-    except Exception:
-        data = {}
+try:
+    data = json.loads(cfg.read_text() or "{}")
+except Exception:
+    raise SystemExit(0)
 if not isinstance(data, dict):
-    data = {}
-servers = data.setdefault("mcpServers", {})
-servers["sellerclaw"] = {"command": command, "args": ["--from", "sellerclaw-cli[mcp]@latest", "sellerclaw", "mcp"]}
-cfg.write_text(json.dumps(data, indent=2) + "\n")
+    raise SystemExit(0)
+servers = data.get("mcpServers")
+if isinstance(servers, dict) and servers.pop("sellerclaw", None) is not None:
+    cfg.write_text(json.dumps(data, indent=2) + "\n")
+    print("removed")
 PY
-  info "Done — restart Claude Desktop to load SellerClaw."
-else
-  warn "Claude Desktop not detected ($CLAUDE_DIR missing). Skipped. Re-run with SELLERCLAW_FORCE_DESKTOP=1 to set it up anyway."
+)"
+  fi
+  if [ "$REMOVED" = "removed" ]; then
+    info "Claude Desktop: removed the old SellerClaw entry from $CFG (the extension replaces it)."
+  fi
+  info "Claude Desktop: install the extension — nothing else to set up:"
+  info "  $EXTENSION_URL"
 fi
 
 info "All set. In Claude, try: \"list my SellerClaw stores\"."

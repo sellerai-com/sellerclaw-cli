@@ -1,8 +1,3 @@
----
-name: sellerclaw-listings
-description: "Use when the user wants to list, publish, update, or withdraw a product on Shopify, eBay, or Amazon through SellerClaw — create a listing, change price or stock, fix a draft, or push a catalog product to a store."
----
-
 # SellerClaw — listings
 
 Publishing and maintaining marketplace listings via `sellerclaw_run`. Run the examples directly; reach

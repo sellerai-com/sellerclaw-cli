@@ -36,10 +36,15 @@ async def _request(method: str, path: str, **kwargs: Any) -> httpx.Response:
         return await client.request(method, path, **kwargs)
 
 
-def test_build_http_server_registers_three_tools() -> None:
+def test_build_http_server_registers_the_same_tools_as_stdio() -> None:
     server = build_http_server(issuer_url=ISSUER, resource_url=RESOURCE, api_url=API_URL)
     tools = asyncio.run(server.list_tools())
-    assert {t.name for t in tools} == {"sellerclaw_groups", "sellerclaw_describe", "sellerclaw_run"}
+    assert {t.name for t in tools} == {
+        "sellerclaw_guide",
+        "sellerclaw_groups",
+        "sellerclaw_describe",
+        "sellerclaw_run",
+    }
 
 
 def test_protected_resource_metadata_points_at_issuer() -> None:

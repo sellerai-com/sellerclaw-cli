@@ -1,8 +1,3 @@
----
-name: sellerclaw-analytics
-description: "Use when the user asks how the business or a store is doing — sales, revenue, profit, margin, best sellers, what isn't selling, trends by week or month, where buyers are, what's out of stock or needs reordering, how much cash is tied up in inventory, or what needs attention today."
----
-
 # SellerClaw — how the business is doing
 
 Everything here is the `analytics` group, read-only. Run the examples directly; reach for

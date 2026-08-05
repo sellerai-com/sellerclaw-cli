@@ -15,7 +15,9 @@ irm https://raw.githubusercontent.com/sellerai-com/sellerclaw-cli/main/scripts/i
 ```
 
 The installer sets up `uv`, installs the CLI, signs the user in via the browser, and wires the MCP
-server into Claude Desktop and Claude Code. After it finishes, **restart Claude Desktop**.
+server into Claude Code. It does **not** configure Claude Desktop — there the extension below is the
+whole setup, and the installer removes a Desktop config entry an older run left behind so the same
+tools don't show up twice.
 
 ## Manual install
 
@@ -35,7 +37,9 @@ the latest published version automatically:
   ```
 - **Desktop Extension (.mcpb):** download from
   https://github.com/sellerai-com/sellerclaw-cli/releases/download/plugin-latest/sellerclaw.mcpb and
-  double-click it (needs `uv` installed).
+  double-click it. **Nothing to install first** — it runs on the Node runtime inside Claude Desktop
+  and talks to the hosted MCP server. Sign in by asking Claude to run its `sellerclaw_login` tool
+  (opens the browser); no terminal, no CLI.
 
 ## Authentication model
 
@@ -45,6 +49,9 @@ the Claude config**. Verify with `sellerclaw auth whoami` — it prints whether 
 the exact config path in use. For headless use, set `SELLERCLAW_TOKEN` (and optionally
 `SELLERCLAW_API_URL`) in the environment instead.
 
+The Desktop extension runs the very same device flow from inside Claude via its `sellerclaw_login`
+tool and writes the same file — so signing in on either side signs in both.
+
 ## Troubleshooting
 
 - **"not signed in" / every `run` fails with auth** → run `sellerclaw auth login` once in a terminal.
@@ -52,7 +59,10 @@ the exact config path in use. For headless use, set `SELLERCLAW_TOKEN` (and opti
 - **Claude Desktop can't start the server / "command not found"** → the desktop app doesn't always
   inherit your shell PATH. Put the **absolute** path in the config: run `which uvx`
   (`where uvx` on Windows) and use that as `"command"`.
-- **`.mcpb` extension won't launch** → it runs the published package via `uvx`, so `uv` must be
-  installed and on PATH. Install from https://docs.astral.sh/uv/ and restart Claude.
+- **`.mcpb` extension shows only `sellerclaw_login`** → that connection is not signed in yet. Run
+  that tool: it opens the browser, and the rest of the tools appear as soon as access is approved
+  (call it again if it reports it is still waiting).
+- **`.mcpb` extension can't reach the server** → it talks to https://mcp.sellerclaw.ai over HTTPS;
+  check the network/proxy. Nothing needs to be installed locally for it to work.
 - **Wrong account / API** → check `sellerclaw auth whoami`; re-run `sellerclaw auth login`, or set
   `SELLERCLAW_API_URL`.

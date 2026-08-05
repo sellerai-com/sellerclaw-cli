@@ -32,7 +32,7 @@
 
 The CLI ships a hand-curated set of typed command groups over the SellerClaw Agent API, with built-in discovery (`groups` / `commands` / `describe` / `guide`) so an agent can explore the surface without external docs. When no curated command fits a Shopify task, a raw Admin GraphQL query/mutation is reachable via `sellerclaw shopify graphql`.
 
-**Use it from Claude.** The same CLI doubles as an **MCP server**, so Claude Desktop, Claude Code, Cursor or any [Model Context Protocol](https://modelcontextprotocol.io) client can drive SellerClaw natively — sign in once in your browser, no API key to copy. See [MCP server](#mcp-server-for-claude-and-other-mcp-agents) for the Claude plugin, the one-line installer, the Claude Desktop extension, and the skill.
+**Use it from Claude.** The same CLI doubles as an **MCP server**, so Claude Desktop, Claude Code, Cursor or any [Model Context Protocol](https://modelcontextprotocol.io) client can drive SellerClaw natively — sign in once in your browser, no API key to copy. See [MCP server](#mcp-server-for-claude-and-other-mcp-agents) for the Claude plugin, the one-line installer, the Claude Desktop extension (a drag-and-drop install that needs no Python and no CLI), and the skill.
 
 ---
 
@@ -477,13 +477,20 @@ fi
 
 Beyond running as a subprocess, the CLI can expose itself over the [Model Context Protocol](https://modelcontextprotocol.io) so **any MCP client — Claude Desktop, Claude Code, the Agent SDK, Cursor, …** — can drive SellerClaw natively.
 
-Rather than emit ~250 tools (one per command), the server mirrors the CLI's own discovery model with **three thin tools** the client composes at runtime:
+Rather than emit ~250 tools (one per command), the server mirrors the CLI's own discovery model with **four thin tools** the client composes at runtime:
 
+- `sellerclaw_guide(topic)` — a short task guide with ready-to-run calls (`listings`, `orders`, `ads`, `research`, `analytics`, plus `start` for the shared conventions);
 - `sellerclaw_groups` — list command groups and their commands;
 - `sellerclaw_describe(group, command)` — full schema: positionals, flags, body fields, plus a ready `call_example`;
 - `sellerclaw_run(group, command, positionals, flags, body)` — invoke a command.
 
 New CLI commands appear automatically — there is nothing per-command to maintain.
+
+The guides live in the package ([`sellerclaw_cli/guides/`](sellerclaw_cli/guides/)) and are the same
+text the Claude plugin ships as skills — `make plugin` compiles each one into its `SKILL.md`, so a
+recipe is written once and reaches both audiences. Clients that have no skills at all (the Claude
+Desktop extension, Cursor, the hosted connector) would otherwise have nothing but tool descriptions
+to work from.
 
 ### Claude plugin (skills + hooks + MCP in one install)
 
@@ -507,14 +514,18 @@ https://github.com/sellerai-com/sellerclaw-cli/releases/download/plugin-latest/s
 Unzip it, then pick the `sellerclaw` folder in the *Upload plugin* dialog. Either way, sign in once
 with `sellerclaw auth login` so the three MCP tools can act on your account.
 
-> All variants are built from one source tree (`plugin/`) with `make plugin`. Claude Code / Desktop
-> run the MCP locally via `uvx`; the web/cowork variant ships the same skills + hooks today and points
-> at a hosted SellerClaw connector that is rolling out separately.
+> All variants are built from one source tree (`plugin/`) with `make plugin`. Claude Code runs the
+> MCP locally via `uvx`; the Desktop extension and the web/cowork variant both talk to the hosted
+> SellerClaw MCP server instead, so they need nothing installed on the machine.
 
-### Easiest: one-line installer
+### One-line installer (CLI + Claude Code)
 
-Installs `uv` + the CLI, signs you in via the browser, and wires the MCP server into Claude Desktop
-and Claude Code automatically. Safe to re-run.
+Installs `uv` + the CLI, signs you in via the browser, and wires the MCP server into Claude Code.
+Safe to re-run.
+
+For **Claude Desktop** you don't need this at all — install [the extension](#claude-desktop-extension-mcpb--nothing-to-install-first)
+instead. The installer no longer writes a Desktop config entry, and removes one an older run left
+behind, so the extension's tools don't appear twice.
 
 ```sh
 # macOS / Linux
@@ -526,7 +537,7 @@ curl -fsSL https://raw.githubusercontent.com/sellerai-com/sellerclaw-cli/main/sc
 irm https://raw.githubusercontent.com/sellerai-com/sellerclaw-cli/main/scripts/install.ps1 | iex
 ```
 
-Then restart Claude Desktop. (Opt-outs: `SELLERCLAW_SKIP_LOGIN=1`, `SELLERCLAW_FORCE_DESKTOP=1`.)
+Then restart Claude Code. (Opt-out: `SELLERCLAW_SKIP_LOGIN=1`.)
 
 ### Manual setup (three steps, no token to copy)
 
@@ -584,19 +595,30 @@ credentials by environment instead — add an `"env": { "SELLERCLAW_TOKEN": "sca
 > (e.g. sending email or marketing campaigns) still require the owner's approval, but most read and
 > management operations do not — only connect clients you trust, and sign in with a per-user account.
 
-### Claude Desktop Extension (.mcpb)
+### Claude Desktop Extension (.mcpb) — nothing to install first
 
 For a click-to-install experience, download the latest bundle and drag it onto Claude Desktop →
 Settings → Extensions:
 
 **[⬇ Download sellerclaw.mcpb](https://github.com/sellerai-com/sellerclaw-cli/releases/download/plugin-latest/sellerclaw.mcpb)**
 
-The bundle launches `sellerclaw-cli[mcp]@latest` via `uvx`, so it **auto-updates to the newest
-release** on its own — the only prerequisite is [`uv`](https://docs.astral.sh/uv/) on PATH (the
-one-line installer above installs it for you). Sign-in still uses `sellerclaw auth login` (or paste a
-token into the extension's optional field). To build the bundle yourself: `make mcpb` (produces
-`dist/sellerclaw.mcpb`); the source lives under
+**No Python, no `uv`, no CLI.** The bundle is a small dependency-free Node script run by the Node
+runtime that ships inside Claude Desktop; it forwards MCP traffic to the hosted server at
+`https://mcp.sellerclaw.ai/mcp`. Because the tools, their schemas and every error text come from
+there, the extension is always current — nothing in it goes stale between releases.
+
+Sign in from inside Claude: ask it to run the **`sellerclaw_login`** tool (it is the only tool the
+extension offers until you are authenticated). Your browser opens, you approve access, and the full
+SellerClaw surface appears — no restart, no token to paste. The credentials land in the same
+`~/.config/sellerclaw/config.toml` the CLI uses, so a terminal `sellerclaw auth login` counts here
+too and vice versa. The extension's optional token field is only for headless setups.
+
+To build the bundle yourself: `make mcpb` (produces `dist/sellerclaw.mcpb`); the source lives under
 [`plugin/targets/claude-desktop/`](plugin/targets/claude-desktop/).
+
+> Prefer no local process at all? The same hosted server can be added directly as a **custom
+> connector** (Claude → Settings → Connectors → Add custom connector), which also covers Claude on
+> the web and mobile. Create the connector credentials in SellerClaw → Settings → Connected apps.
 
 ### Teach Claude to use it (skill)
 

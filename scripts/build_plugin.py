@@ -82,6 +82,33 @@ def _merge_components(layer_dir: Path, out: Path) -> None:
             shutil.copytree(src, out / comp, dirs_exist_ok=True)
 
 
+def default_guides_src(plugin_src: Path) -> Path:
+    """Where the task guides live relative to ``plugin/`` — ``<repo>/sellerclaw_cli/guides``."""
+    return plugin_src.parent / "sellerclaw_cli" / "guides"
+
+
+def _write_guide_skills(out: Path, guides_src: Path) -> None:
+    """Compile every task guide that has a skill counterpart into ``skills/<name>/SKILL.md``.
+
+    The guide bodies live in the Python package because two audiences need the same text: any MCP
+    client reads them through the ``sellerclaw_guide`` tool, and the Claude plugin needs them as
+    skills. Generating the skills from that single source is what keeps the two from drifting — the
+    committed plugin tree is diffed against a fresh build, so a guide edited without a rebuild fails
+    ``--check`` instead of quietly shipping two different versions of the same recipe.
+    """
+    for topic in json.loads((guides_src / "topics.json").read_text()):
+        skill = topic.get("skill")
+        if not skill:
+            continue  # MCP-only guide; the plugin's hand-written core skill covers that ground
+        description = topic["description"]
+        if '"' in description:
+            raise ValueError(f"guide {topic['topic']!r}: description must not contain a double quote")
+        body = (guides_src / topic["file"]).read_text()
+        skill_file = out / "skills" / skill / "SKILL.md"
+        skill_file.parent.mkdir(parents=True, exist_ok=True)
+        skill_file.write_text(f'---\nname: {skill}\ndescription: "{description}"\n---\n\n{body}')
+
+
 def _stamp_version(out: Path, version: str) -> None:
     for rel in MANIFESTS:
         manifest = out / rel
@@ -97,6 +124,7 @@ def assemble(
     out: Path,
     version: str,
     layers: tuple[str, ...] = CLAUDE_LAYERS,
+    guides_src: Path | None = None,
 ) -> Path:
     """Build one target into ``out`` from ``plugin_src``. Pure in its paths (no repo-layout policy)."""
     if out.exists():
@@ -104,6 +132,10 @@ def assemble(
     out.mkdir(parents=True)
     for layer in layers:
         _merge_components(plugin_src / layer, out)
+    if layers:
+        # Only skill-carrying targets get the compiled guides; the Desktop .mcpb has no skills
+        # concept and reaches the same text through the `sellerclaw_guide` tool instead.
+        _write_guide_skills(out, guides_src or default_guides_src(plugin_src))
     shutil.copytree(plugin_src / "targets" / target, out, dirs_exist_ok=True)
     _stamp_version(out, version)
     return out

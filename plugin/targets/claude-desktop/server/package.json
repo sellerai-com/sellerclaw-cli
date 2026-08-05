@@ -1,0 +1,9 @@
+{
+  "name": "sellerclaw-mcp-bridge",
+  "version": "0.0.0",
+  "private": true,
+  "description": "stdio MCP bridge to the hosted SellerClaw MCP server, shipped inside the Claude Desktop extension. No dependencies on purpose: Claude Desktop's bundled Node runs it as-is, with nothing to install.",
+  "type": "commonjs",
+  "main": "index.js",
+  "license": "MIT"
+}

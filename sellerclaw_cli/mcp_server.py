@@ -4,17 +4,23 @@ Why a *proxy*, not one tool per command
 ---------------------------------------
 The CLI carries ~250 commands across ~45 groups. Emitting one MCP tool per command would
 swamp any client (huge tool list, poor selection, wasted context). Instead this mirrors the
-CLI's own agent-first discovery model with **three thin tools**:
+CLI's own agent-first discovery model with **four thin tools**:
 
 * ``sellerclaw_groups``   — list command groups and the commands inside each;
 * ``sellerclaw_describe`` — full schema for one command (positionals, flags, body fields);
-* ``sellerclaw_run``      — invoke a command.
+* ``sellerclaw_run``      — invoke a command;
+* ``sellerclaw_guide``    — a task guide with ready-to-run examples for a whole area of work.
 
 A client (e.g. Claude) discovers commands at runtime exactly as the OpenClaw agent does via
 ``sellerclaw groups`` -> ``describe`` -> invoke. New CLI commands appear automatically with no
 change here, and the MCP surface can never drift from the CLI because both read the same live
 ``REGISTRY`` and execute through the same :class:`~sellerclaw_cli._client.Client` (auth, retries,
 structured errors).
+
+``sellerclaw_guide`` exists because schemas alone do not teach a workflow. Claude Code and claude.ai
+get that knowledge as plugin skills; an MCP client (Claude Desktop's extension, Cursor, the hosted
+connector) has no skills at all and would otherwise re-derive every multi-step job from field lists.
+It serves :mod:`sellerclaw_cli.guides` — the same files the plugin's skills are compiled from.
 
 Running
 -------
@@ -34,6 +40,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from sellerclaw_cli import guides
 from sellerclaw_cli._client import Client
 from sellerclaw_cli._command_group import REGISTRY, Cmd, Flag, GroupSpec, positionals_of
 from sellerclaw_cli._errors import UserInputError
@@ -46,13 +53,19 @@ SERVER_NAME = "sellerclaw"
 
 SERVER_INSTRUCTIONS = (
     "SellerClaw e-commerce control over the seller's stores, orders, listings, ads, suppliers, "
-    "email and research. The surface is large, so discover before you call:\n"
+    "email and research. The surface is large, so start with the guide for the job:\n"
+    "0. `sellerclaw_guide(topic)` — a short guide with ready-to-run calls for publishing and "
+    "maintaining listings, fulfilling orders, running ads and campaigns, market research, or how "
+    "the business is doing. Call it with no topic for the list, and read `start` once for the "
+    "conventions every job shares. Prefer running a guide's example over re-deriving the call.\n"
+    "For anything the guides do not cover, discover it:\n"
     "1. `sellerclaw_groups` — list command groups and their commands.\n"
     "2. `sellerclaw_describe(group)` — every command in that group with its positionals, flags, "
     "JSON body fields and a ready `call_example`. Pass `command` too for just one of them.\n"
     "3. `sellerclaw_run(group, command, positionals, flags, body)` — invoke it.\n"
-    "Always describe a command before running it the first time. Some actions (e.g. sending email "
-    "or marketing campaigns) are gated server-side and need the owner's approval.\n"
+    "Describe a command before running it the first time unless a guide already shows the call. "
+    "Some actions (e.g. sending email or marketing campaigns) are gated server-side and need the "
+    "owner's approval.\n"
     "Finding things: read one row by its SellerClaw id with the channel-agnostic groups — "
     "`listings get`, `orders get`, `catalog get` (the per-channel groups like `shopify-listings` "
     "do not read by id). `listings search` finds listings by product_id (one row per variant), "
@@ -82,6 +95,14 @@ _RUN_TOOL_DESC = (
     "Invoke a SellerClaw command. `positionals` is a {name: value} map for the path arguments, "
     "`flags` a {name: value} map of filters, and `body` the JSON payload for write commands. "
     "Use sellerclaw_describe to learn the exact names. Returns the API response JSON."
+)
+_GUIDE_TOOL_DESC = (
+    "Read the task guide for an area of work: `listings` (publish and maintain marketplace "
+    "listings), `orders` (find, fulfill, ship, cancel), `ads` (Google, Meta, eBay Promoted, Klaviyo "
+    "campaigns), `research` (keywords, trends, competitors, social), `analytics` (how the business "
+    "is doing), or `start` (how a call is shaped and the rules every job shares). Each guide is "
+    "short and carries ready-to-run sellerclaw_run examples — read the relevant one before a "
+    "multi-step job instead of deriving the calls from schemas. Omit `topic` to list them."
 )
 
 
@@ -273,6 +294,26 @@ def list_groups() -> list[dict[str, Any]]:
     ]
 
 
+def show_guide(topic: str | None = None) -> str:
+    """Return one task guide as markdown, or the list of topics when none is given.
+
+    The guides are the workflow knowledge a bare MCP client has no other way to get: schemas say
+    what a command accepts, not which three calls fulfil an order. Unknown topics raise with the
+    list, so a wrong guess costs one turn instead of a silent empty answer.
+
+    Markdown, not a JSON object: the whole payload is prose meant to be read, and wrapping it would
+    only escape every newline in the guide for no reader's benefit.
+    """
+    if topic is None or not str(topic).strip():
+        lines = [f"- `{g.topic}` — {g.description}" for g in guides.topics()]
+        return (
+            "SellerClaw task guides:\n"
+            + "\n".join(lines)
+            + "\n\nCall sellerclaw_guide again with one of these topics to read it."
+        )
+    return guides.read(topic)
+
+
 def _command_schema(group: str, cmd: Cmd) -> dict[str, Any]:
     """Everything needed to build a valid `sellerclaw_run` for one command."""
     return {
@@ -414,7 +455,8 @@ def _import_fastmcp() -> Any:
 
 
 def _register_tools(server: Any) -> None:
-    """Register the three discovery/proxy tools on a FastMCP server."""
+    """Register the four discovery/proxy tools on a FastMCP server."""
+    server.add_tool(show_guide, name="sellerclaw_guide", description=_GUIDE_TOOL_DESC)
     server.add_tool(list_groups, name="sellerclaw_groups", description=_GROUPS_TOOL_DESC)
     server.add_tool(describe_command, name="sellerclaw_describe", description=_DESCRIBE_TOOL_DESC)
     server.add_tool(run_command, name="sellerclaw_run", description=_RUN_TOOL_DESC)

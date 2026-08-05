@@ -1,8 +1,3 @@
----
-name: sellerclaw-orders
-description: "Use when the user wants to view, fulfill, ship, track, or cancel orders across their SellerClaw stores (Shopify, eBay, Amazon) or the internal SellerClaw order list."
----
-
 # SellerClaw — orders
 
 Finding orders and moving them through fulfillment via `sellerclaw_run`. Run the examples directly;

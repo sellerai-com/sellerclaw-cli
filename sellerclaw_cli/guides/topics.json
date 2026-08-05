@@ -1,0 +1,56 @@
+[
+  {
+    "topic": "start",
+    "skill": null,
+    "description": "How to call SellerClaw, when to look a command up, and the rules that apply to every job.",
+    "file": "start.md"
+  },
+  {
+    "topic": "listings",
+    "skill": "sellerclaw-listings",
+    "description": "Use when the user wants to list, publish, update, or withdraw a product on Shopify, eBay, or Amazon through SellerClaw — create a listing, change price or stock, fix a draft, or push a catalog product to a store.",
+    "file": "listings.md"
+  },
+  {
+    "topic": "orders",
+    "skill": "sellerclaw-orders",
+    "description": "Use when the user wants to view, fulfill, ship, track, or cancel orders across their SellerClaw stores (Shopify, eBay, Amazon) or the internal SellerClaw order list.",
+    "file": "orders.md"
+  },
+  {
+    "topic": "catalog",
+    "skill": "sellerclaw-catalog",
+    "description": "Use when the user wants to work with their own SellerClaw product catalog — find a product, add one from a supplier or by hand, edit its name, images or status, set the purchase price, or remove it.",
+    "file": "catalog.md"
+  },
+  {
+    "topic": "suppliers",
+    "skill": "sellerclaw-suppliers",
+    "description": "Use when the user wants to find products at a supplier, check supplier stock or shipping cost, or place and pay for a dropship order through SellerClaw.",
+    "file": "suppliers.md"
+  },
+  {
+    "topic": "email",
+    "skill": "sellerclaw-email",
+    "description": "Use when the user wants to read their connected mailbox or send an email through SellerClaw — reply to a buyer, draft a message, or check what arrived.",
+    "file": "email.md"
+  },
+  {
+    "topic": "ads",
+    "skill": "sellerclaw-ads",
+    "description": "Use when the user wants to view, launch, adjust, or report on advertising — Google Ads, Meta/Facebook ads, eBay Promoted Listings — or run email marketing campaigns via Klaviyo through SellerClaw.",
+    "file": "ads.md"
+  },
+  {
+    "topic": "research",
+    "skill": "sellerclaw-research",
+    "description": "Use when the user wants market, keyword, trend, competitor, or social research before listing or pricing — SEO/SERP, Google Trends, marketplace catalog, social/ad-library research, or scraping a single page through SellerClaw.",
+    "file": "research.md"
+  },
+  {
+    "topic": "analytics",
+    "skill": "sellerclaw-analytics",
+    "description": "Use when the user asks how the business or a store is doing — sales, revenue, profit, margin, best sellers, what isn't selling, trends by week or month, where buyers are, what's out of stock or needs reordering, how much cash is tied up in inventory, or what needs attention today.",
+    "file": "analytics.md"
+  }
+]

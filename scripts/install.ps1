@@ -3,10 +3,12 @@
 #   irm https://raw.githubusercontent.com/sellerai-com/sellerclaw-cli/main/scripts/install.ps1 | iex
 #
 # Installs uv (if missing), installs the sellerclaw CLI with the MCP extra, signs you in via your
-# browser (no API token to copy), and wires the MCP server into Claude Code and Claude Desktop
-# (whichever it finds). Safe to re-run. Opt-outs via env vars before running:
-#   $env:SELLERCLAW_SKIP_LOGIN=1     don't run `auth login`
-#   $env:SELLERCLAW_FORCE_DESKTOP=1  write the Claude Desktop config even if the app isn't detected
+# browser (no API token to copy), and wires the MCP server into Claude Code. Safe to re-run.
+#
+# Claude Desktop is deliberately NOT configured here any more: its own extension needs no Python and
+# no uv and signs in from inside Claude, so an entry in claude_desktop_config.json would only add a
+# second, worse copy of the same tools. Opt-outs via env vars before running:
+#   $env:SELLERCLAW_SKIP_LOGIN=1  don't run `auth login`
 #Requires -Version 5.1
 $ErrorActionPreference = 'Stop'
 $Pkg = 'sellerclaw-cli[mcp]'
@@ -18,6 +20,18 @@ function Add-LocalBinToPath {
   foreach ($d in @("$env:USERPROFILE\.local\bin", "$env:USERPROFILE\.cargo\bin")) {
     if ((Test-Path $d) -and ($env:Path -notlike "*$d*")) { $env:Path = "$d;$env:Path" }
   }
+}
+
+# Run a Python snippet (piped to stdin), preferring a system interpreter and falling back to uv's.
+# The installer edits the user's Claude config through this rather than through PowerShell's own JSON
+# support: install.sh runs the identical snippet, so both platforms share one behaviour that is
+# covered by tests — and ConvertTo-Json would silently reshape parts of the file we never touched.
+function Invoke-Py {
+  param([string]$Code, [string[]]$Arguments = @())
+  $exe = Get-Command python -ErrorAction SilentlyContinue
+  if (-not $exe) { $exe = Get-Command python3 -ErrorAction SilentlyContinue }
+  if ($exe) { return ($Code | & $exe.Source - @Arguments) }
+  return ($Code | & uv run python - @Arguments)
 }
 
 Add-LocalBinToPath
@@ -69,29 +83,38 @@ if (Get-Command claude -ErrorAction SilentlyContinue) {
 }
 
 # 5. Claude Desktop -----------------------------------------------------------
+# Nothing is written here. Desktop's own extension is the better path in every way — it installs with
+# no prerequisites, signs in from inside Claude and updates itself — so this step only cleans up: a
+# `sellerclaw` server left in the config by an older run of this installer would show up alongside
+# the extension as a second, identical set of tools, and would still fail on a machine without uv.
 $Cfg = Join-Path $env:APPDATA "Claude\claude_desktop_config.json"
 $Dir = Split-Path $Cfg
-if ((Test-Path $Dir) -or ($env:SELLERCLAW_FORCE_DESKTOP -eq '1')) {
-  Info "Claude Desktop: writing config at $Cfg"
-  New-Item -ItemType Directory -Force -Path $Dir | Out-Null
+$ExtensionUrl = 'https://github.com/sellerai-com/sellerclaw-cli/releases/download/plugin-latest/sellerclaw.mcpb'
+# Kept character-for-character identical to the snippet in install.sh — a unit test compares the two,
+# so the cleanup cannot behave one way on macOS and another on Windows.
+$CleanupPy = @'
+import json, pathlib, sys
+cfg = pathlib.Path(sys.argv[1])
+try:
+    data = json.loads(cfg.read_text() or "{}")
+except Exception:
+    raise SystemExit(0)
+if not isinstance(data, dict):
+    raise SystemExit(0)
+servers = data.get("mcpServers")
+if isinstance(servers, dict) and servers.pop("sellerclaw", None) is not None:
+    cfg.write_text(json.dumps(data, indent=2) + "\n")
+    print("removed")
+'@
+
+if (Test-Path $Dir) {
   if (Test-Path $Cfg) {
-    try { $data = Get-Content -Raw $Cfg | ConvertFrom-Json -ErrorAction Stop } catch { $data = [pscustomobject]@{} }
-  } else {
-    $data = [pscustomobject]@{}
+    if ((Invoke-Py $CleanupPy @($Cfg)) -match 'removed') {
+      Info "Claude Desktop: removed the old SellerClaw entry from $Cfg (the extension replaces it)."
+    }
   }
-  if (-not ($data.PSObject.Properties.Name -contains 'mcpServers')) {
-    $data | Add-Member -NotePropertyName mcpServers -NotePropertyValue ([pscustomobject]@{})
-  }
-  $server = [pscustomobject]@{ command = $Uvx; args = @('--from', 'sellerclaw-cli[mcp]@latest', 'sellerclaw', 'mcp') }
-  if ($data.mcpServers.PSObject.Properties.Name -contains 'sellerclaw') {
-    $data.mcpServers.sellerclaw = $server
-  } else {
-    $data.mcpServers | Add-Member -NotePropertyName sellerclaw -NotePropertyValue $server
-  }
-  ($data | ConvertTo-Json -Depth 10) | Set-Content -Path $Cfg -Encoding UTF8
-  Info "Done — restart Claude Desktop to load SellerClaw."
-} else {
-  Warn "Claude Desktop not detected ($Dir missing). Skipped. Set `$env:SELLERCLAW_FORCE_DESKTOP=1 to configure anyway."
+  Info "Claude Desktop: install the extension — nothing else to set up:"
+  Info "  $ExtensionUrl"
 }
 
 Info "All set. In Claude, try: 'list my SellerClaw stores'."

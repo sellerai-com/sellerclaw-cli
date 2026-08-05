@@ -1,8 +1,3 @@
----
-name: sellerclaw-research
-description: "Use when the user wants market, keyword, trend, competitor, or social research before listing or pricing — SEO/SERP, Google Trends, marketplace catalog, social/ad-library research, or scraping a single page through SellerClaw."
----
-
 # SellerClaw — research
 
 Gathering market signal to inform listings, pricing, and content via `sellerclaw_run`. Run the examples
@@ -20,9 +15,9 @@ sellerclaw_run(group="research-trends", command="related-queries", flags={"keywo
 sellerclaw_run(group="research-seo", command="keyword-ideas",    body={"keyword": "wireless mouse"})
 sellerclaw_run(group="research-seo", command="serp-competitors", body={"keyword": "wireless mouse"})
 
-# Scrape one specific page (consumes credits — use deliberately)
-sellerclaw_run(group="web", command="scrape",
-  flags={"url": "https://example.com/product", "max_chars": 5000})
+# What the marketplace itself already lists (query or gtin)
+sellerclaw_run(group="research-catalog", command="ebay-search",
+  body={"query": "wireless mouse", "marketplace_id": "EBAY_US", "limit": 20})
 ```
 
 ## Where to look
@@ -32,12 +27,14 @@ sellerclaw_run(group="web", command="scrape",
 - `research-seo` — `keyword-ideas`, `keyword-volume`, `autocomplete`, `people-also-ask`,
   `serp-competitors`, `amazon-products`, `amazon-reviews`, `product-search`, `content-sentiment`.
 - `research-social` — ad-library / Reddit / TikTok / YouTube research.
-- `research-catalog` — marketplace catalog research.
+- `research-catalog` — `ebay-search` over the marketplace's own catalog.
 - `kb` — search the shared knowledge base (read-only).
 
 ## Watch for
 
-- **`web` scrape and some research calls consume credits** — be deliberate; don't loop over many URLs
-  without reason.
+- **Research calls consume credits** — be deliberate; don't loop over dozens of keywords or pages
+  without a reason to.
+- **Reading one specific page** is not part of this surface — use whatever web browsing the client
+  itself has, or the `sellerclaw web scrape` CLI command outside it.
 - Research is read-only — it informs the listing/pricing decision, it doesn't change the store. Turn
   raw rows into a recommendation rather than dumping them.
