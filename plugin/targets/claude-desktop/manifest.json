@@ -4,7 +4,7 @@
   "display_name": "SellerClaw",
   "version": "0.1.0",
   "description": "Operate your SellerClaw e-commerce and marketing channels from Claude — eBay, Shopify, Amazon, Meta Ads, Google Ads and more.",
-  "long_description": "SellerClaw connects your e-commerce and marketing channels — eBay, Shopify, Amazon, Meta Ads, Google Ads and more — and this extension lets you operate them from Claude. Connect your integrations once on SellerClaw, then browse command groups, read a command's schema, and run it through three discovery tools. Sign in once with `sellerclaw auth login` — no API key to copy. Some actions (e.g. sending email or launching ad campaigns) still require the owner's approval, enforced server-side.",
+  "long_description": "SellerClaw connects your e-commerce and marketing channels — eBay, Shopify, Amazon, Meta Ads, Google Ads and more — and this extension lets you operate them from Claude. Nothing to install first: the extension talks to SellerClaw's hosted MCP server, so there is no Python, no uv and no CLI to set up. Ask Claude to sign in (the `sellerclaw_login` tool opens your browser to approve access — no API key to copy), then browse command groups, read a command's schema, and run it through three discovery tools. Some actions (e.g. sending email or launching ad campaigns) still require the owner's approval, enforced server-side.",
   "author": {
     "name": "SellerAI",
     "email": "hello@sellerai.com",
@@ -45,22 +45,21 @@
     "screenshots/screenshot-4.png"
   ],
   "server": {
-    "type": "python",
-    "entry_point": "server/main.py",
+    "type": "node",
+    "entry_point": "server/index.js",
     "mcp_config": {
-      "command": "uvx",
-      "args": ["--from", "sellerclaw-cli[mcp]@latest", "sellerclaw", "mcp"],
+      "command": "node",
+      "args": ["${__dirname}/server/index.js"],
       "env": {
         "SELLERCLAW_TOKEN": "${user_config.token}"
-      },
-      "platform_overrides": {
-        "win32": {
-          "command": "uvx.exe"
-        }
       }
     }
   },
   "tools": [
+    {
+      "name": "sellerclaw_guide",
+      "description": "Read a task guide with ready-to-run examples: listings, orders, ads, research, analytics."
+    },
     {
       "name": "sellerclaw_groups",
       "description": "List SellerClaw command groups and the commands inside each."
@@ -72,6 +71,10 @@
     {
       "name": "sellerclaw_run",
       "description": "Run a SellerClaw command and return the API response."
+    },
+    {
+      "name": "sellerclaw_login",
+      "description": "Sign in to SellerClaw by approving access in the browser."
     }
   ],
   "tools_generated": false,
@@ -79,7 +82,7 @@
     "token": {
       "type": "string",
       "title": "SellerClaw token (optional)",
-      "description": "Leave empty if you have signed in with `sellerclaw auth login` in a terminal. Otherwise paste an agent token (starts with `sca_`).",
+      "description": "Leave this empty — ask Claude to sign you in and approve access in the browser. Fill it in only for headless setups: an agent token (starts with `sca_`), or one you already have from `sellerclaw auth login`.",
       "sensitive": true,
       "required": false
     }
@@ -87,7 +90,7 @@
   "compatibility": {
     "platforms": ["darwin", "win32", "linux"],
     "runtimes": {
-      "python": ">=3.11,<4.0"
+      "node": ">=18.0.0"
     }
   }
 }

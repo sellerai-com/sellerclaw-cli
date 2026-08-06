@@ -28,6 +28,14 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
 
+      # The Claude Desktop bundle is a Node script, and its end-to-end tests spawn a real `node`.
+      # Without one on PATH they skip themselves — leaving the extension untested exactly where it
+      # matters most, since nothing else exercises it before users drag it into Claude.
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
       # --locked: install exactly the committed uv.lock, and fail if it no longer matches
       # pyproject.toml instead of silently re-resolving. Without it, a dependency edit pushed without
       # its lock update passes here, and a third-party release cut minutes ago can redden a run that

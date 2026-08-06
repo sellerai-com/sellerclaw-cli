@@ -1,8 +1,3 @@
----
-name: sellerclaw-ads
-description: "Use when the user wants to view, launch, adjust, or report on advertising — Google Ads, Meta/Facebook ads, eBay Promoted Listings — or run email marketing campaigns via Klaviyo through SellerClaw."
----
-
 # SellerClaw — ads & marketing
 
 Running and reporting on paid campaigns via `sellerclaw_run`. Reads are direct; launching a campaign

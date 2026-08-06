@@ -274,12 +274,18 @@ def test_run_command_rejects_body_on_command_without_one() -> None:
 # --------------------------------------------------------------------------- wiring
 
 
-def test_build_server_registers_exactly_the_three_proxy_tools() -> None:
+def test_build_server_registers_exactly_the_four_proxy_tools() -> None:
     server = build_server()
     tools = asyncio.run(server.list_tools())
     by_name = {t.name: t for t in tools}
-    assert set(by_name) == {"sellerclaw_groups", "sellerclaw_describe", "sellerclaw_run"}
+    assert set(by_name) == {
+        "sellerclaw_guide",
+        "sellerclaw_groups",
+        "sellerclaw_describe",
+        "sellerclaw_run",
+    }
     run_props = set(by_name["sellerclaw_run"].inputSchema["properties"])
     assert {"group", "command", "positionals", "flags", "body"} <= run_props
     describe_props = set(by_name["sellerclaw_describe"].inputSchema["properties"])
     assert {"group", "command"} <= describe_props
+    assert "topic" in by_name["sellerclaw_guide"].inputSchema["properties"]

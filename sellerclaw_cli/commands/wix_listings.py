@@ -146,7 +146,8 @@ SPECS = (
         summary=(
             "Edit a Wix listing group — local only, nothing reaches Wix here. The "
             "change is recorded as owed and the next publish delivers it "
-            '(body: {"title"?, "description"?, "sell_prices"?: {sku: price}, "quantities"?: {sku: qty}}).'
+            '(body: {"title"?, "description"?, "sell_prices"?: {sku: price}, '
+            '"quantities"?: {sku: qty}, "category_id"?}).'
         ),
         body=(
             body_field("title", help="New product title."),
@@ -160,6 +161,17 @@ SPECS = (
                 "quantities",
                 type=dict,
                 help="New stock quantities keyed by listing SKU, e.g. {\"SKU-1\": 5}.",
+            ),
+            body_field(
+                "category_id",
+                help=(
+                    "Which of the shop's own categories to file the product under. Ids come "
+                    "from `sellerclaw categories used|search --store-id <id>` — an id the shop "
+                    "does not have is refused. Omit to leave the category alone; pass \"\" to "
+                    "file it under nothing. Wix files a product by a call of its own, which the "
+                    "shop can refuse separately: then the edit stays owed and the 'published "
+                    "without a category' warning stands."
+                ),
             ),
         ),
     ),

@@ -140,6 +140,11 @@ class BodyField:
     # as nothing sent and refuses the call — so a setting only ``null`` can clear stays unclearable
     # from the CLI however well the API supports it.
     nullable: bool = False
+    # The empty string is a real value for this field: it asks the API to clear what is stored and
+    # fall back to its own default. Declared because it interacts with ``choices`` — "" is never one
+    # of the listed options, so without this the local check refuses the one value that unsets a
+    # setting, and the caller has no way back from a choice it already made.
+    clearable: bool = False
 
 
 def body_field(
@@ -152,6 +157,7 @@ def body_field(
     choices: tuple[str, ...] = (),
     example: object | None = None,
     nullable: bool = False,
+    clearable: bool = False,
 ) -> BodyField:
     """Concise constructor for a JSON body field inside a ``Cmd``."""
     return BodyField(
@@ -163,6 +169,7 @@ def body_field(
         choices=choices,
         example=example,
         nullable=nullable,
+        clearable=clearable,
     )
 
 
@@ -404,9 +411,14 @@ def validate_body(group: str, cmd: Cmd, body: Any) -> None:
                 problems.append(f"{field_name}: expected {type_name}, got {got}")
                 break
         if spec.choices:
-            bad = [i for i in items if isinstance(i, str) and i not in spec.choices]
+            allowed_values = set(spec.choices) | ({""} if spec.clearable else set())
+            bad = [i for i in items if isinstance(i, str) and i not in allowed_values]
             if bad:
-                problems.append(f"{field_name}: must be one of {', '.join(spec.choices)} (got {bad[0]!r})")
+                clears = ', or "" to clear it' if spec.clearable else ""
+                problems.append(
+                    f"{field_name}: must be one of {', '.join(spec.choices)}{clears} "
+                    f"(got {bad[0]!r})"
+                )
 
     if problems:
         emit_error(UserInputError("; ".join(problems) + f". Allowed field(s): {', '.join(allowed)}. {hint}"))

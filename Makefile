@@ -77,9 +77,11 @@ plugin-check:
 	$(UV) run python scripts/build_plugin.py --check
 
 # Build the Claude Desktop Extension bundle (.mcpb). Assembles the desktop target from plugin/
-# (stamps the version into manifest.json), then packs it -> dist/sellerclaw.mcpb. The bundle launches
-# the *published* sellerclaw-cli[mcp] via uvx, so rebuild and re-upload it after a release that
-# changes the desktop manifest.
+# (stamps the version into manifest.json), then packs it -> dist/sellerclaw.mcpb. The bundle is a
+# dependency-free Node bridge to the hosted MCP server (mcp.sellerclaw.ai): Claude Desktop's own
+# bundled Node runs it, so the extension installs with nothing preinstalled, and the tool surface
+# still comes from the one Python implementation on the server. Independent of the CLI/PyPI release —
+# rebuild and re-upload when plugin/targets/claude-desktop/ changes (make plugin-bump does both).
 mcpb:
 	$(UV) run python scripts/build_plugin.py --target claude-desktop
 	npx -y @anthropic-ai/mcpb pack dist/plugins/claude-desktop dist/sellerclaw.mcpb

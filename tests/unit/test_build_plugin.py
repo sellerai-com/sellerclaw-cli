@@ -16,6 +16,7 @@ from scripts.build_plugin import (
     build_target,
     check_target,
     committed_targets,
+    default_guides_src,
     pack_zip,
     read_version,
 )
@@ -142,9 +143,14 @@ COMMITTED_OUT = TARGETS["claude-code"].out
 
 @pytest.fixture
 def repo(tmp_path: Path) -> Path:
-    """A throwaway repo: the plugin/ source plus a freshly built, in-sync committed plugins/ tree."""
+    """A throwaway repo: the plugin/ source plus a freshly built, in-sync committed plugins/ tree.
+
+    The task guides come along because the recipe skills are compiled from them — a repo without
+    them is not a repo the plugin can be built from.
+    """
     root = tmp_path / "repo"
     shutil.copytree(PLUGIN_SRC, root / "plugin")
+    shutil.copytree(default_guides_src(PLUGIN_SRC), root / "sellerclaw_cli" / "guides")
     build_target("claude-code", root)
     return root
 
