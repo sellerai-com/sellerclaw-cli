@@ -210,6 +210,25 @@ def test_binding_nothing_is_caught_before_the_request(
     assert "product_ids" in result.output
 
 
+@respx.mock
+def test_list_inbound_reads_what_is_on_its_way_in(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """Live from Amazon, so the answer is never a stored copy of a workflow we do not own."""
+    route = respx.get(f"{fake_api_url}/agent/amazon/stores/{STORE}/fba/inbound").mock(
+        return_value=httpx.Response(
+            200, json={"items": [{"plan_id": "ip-1", "name": "Restock", "status": "SHIPPED"}]}
+        )
+    )
+
+    result = runner.invoke(app, ["amazon-fba", "list-inbound", STORE, "--limit", "5"])
+
+    assert result.exit_code == 0, result.output
+    assert route.calls.last.request.url.params["limit"] == "5"
+    assert "SHIPPED" in result.output
+
+
 def test_the_group_reads_the_warehouse_before_it_writes_anything() -> None:
     """Ordering is documentation: link, look, then bind — and the destructive one is last of its pair."""
     from sellerclaw_cli.commands.amazon_fba import SPECS
@@ -220,6 +239,7 @@ def test_the_group_reads_the_warehouse_before_it_writes_anything() -> None:
         "disconnect",
         "list-stock",
         "refresh-stock",
+        "list-inbound",
         "preview-binding",
         "bind",
     ]

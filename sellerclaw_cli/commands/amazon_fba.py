@@ -67,6 +67,20 @@ SPECS = (
         ),
     ),
     Cmd(
+        "list-inbound",
+        "GET",
+        "/agent/amazon/stores/{store_id}/fba/inbound",
+        summary=(
+            "What the seller is sending into Amazon's warehouse — read live from Amazon on every "
+            "call, so it is never stale and never stored. The status is Amazon's own word, matching "
+            "what Seller Central shows; pass it on as it stands. Use it to answer 'when will I have "
+            "stock again' next to what is on the shelf now."
+        ),
+        flags=(
+            flag("limit", type=int, help="Consignments to return.", minimum=1, maximum=20, default=20),
+        ),
+    ),
+    Cmd(
         "preview-binding",
         "GET",
         "/agent/amazon/fba/binding",

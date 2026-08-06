@@ -161,6 +161,26 @@ SPECS = (
             ),
         ),
     ),
+    Cmd(
+        "set-amazon-fulfilment",
+        "PATCH",
+        "/agent/sales-channels/{sales_channel_id}",
+        summary=(
+            "Let Amazon's warehouse ship this store's orders by itself, or stop it. Off by default, "
+            "and refused until an Amazon store is connected as the warehouse that fulfils. Only "
+            "whole orders ship, the first one always asks the owner, and after that a fee above the "
+            "ceiling asks too."
+        ),
+        body=(
+            body_field(
+                "amazon_fulfils_orders",
+                type=bool,
+                required=True,
+                help="true to let Amazon ship this store's orders, false to stop.",
+                example=True,
+            ),
+        ),
+    ),
 )
 
 app = build_group(NAME, "Connected sales channels (stores).", SPECS)
