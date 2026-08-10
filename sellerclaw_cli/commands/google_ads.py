@@ -302,14 +302,39 @@ SPECS = (
             flag(
                 "level",
                 help=(
-                    "campaign | ad_group | ad | asset_group (Performance Max) | product_group. "
-                    "Any other value is refused, not silently read as campaign."
+                    "campaign | ad_group | ad | keyword (spend per keyword) | asset_group "
+                    "(Performance Max) | product_group. Any other value is refused, not silently "
+                    "read as campaign."
                 ),
             ),
             flag("ids", help="Comma-separated resource ids, matching the level."),
             flag("date_from", help="YYYY-MM-DD."),
             flag("date_to", help="YYYY-MM-DD."),
             flag("breakdown", help="Breakdown dimension."),
+        ),
+    ),
+    Cmd(
+        "search-terms",
+        "GET",
+        "/agent/ads/google/search-terms",
+        summary="List the queries people typed, with what each one cost.",
+        flags=(
+            flag("campaign_id", help="Narrow to one campaign."),
+            flag("adgroup_id", help="Narrow to one ad group."),
+            flag("date_from", help="YYYY-MM-DD. Defaults to 7 days ago."),
+            flag("date_to", help="YYYY-MM-DD. Defaults to today."),
+            flag("order", help="spend (default) | clicks | impressions | conversions."),
+            flag("limit", type=int, help="Rows to return (1-500, default 50)."),
+        ),
+    ),
+    Cmd(
+        "targeting",
+        "GET",
+        "/agent/ads/google/targeting",
+        summary="Get targeting criteria: places, languages, devices, schedule, audiences.",
+        flags=(
+            flag("campaign_id", help="Campaign id. Pass exactly one of campaign_id / adgroup_id."),
+            flag("adgroup_id", help="Ad group id. Pass exactly one of campaign_id / adgroup_id."),
         ),
     ),
     Cmd(

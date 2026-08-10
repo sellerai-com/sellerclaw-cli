@@ -439,3 +439,30 @@ def test_channels_set_markup_patches_markup_percent() -> None:
     markup_field = next(f for f in set_markup.body if f.name == "markup_percent")
     assert markup_field.required is True
     assert markup_field.type is float
+
+
+def test_google_ads_reads_what_the_money_was_spent_on() -> None:
+    """`search-terms` answers what keywords cannot: which queries actually took the budget.
+
+    It is a read, so it must stay a GET with plain flags — a body here would make it unusable
+    from `describe` and from the MCP surface.
+    """
+    search_terms = next(
+        c for g in REGISTRY if g.name == "google-ads" for c in g.commands if c.name == "search-terms"
+    )
+    assert search_terms.method == "GET"
+    assert search_terms.path == "/agent/ads/google/search-terms"
+    assert not search_terms.takes_body
+    names = {f.name for f in search_terms.flags}
+    assert {"campaign_id", "adgroup_id", "date_from", "date_to", "order", "limit"} <= names
+
+
+def test_google_ads_targeting_takes_either_level() -> None:
+    """Campaign and ad group carry different criteria, so both ids are offered; the server
+    refuses a call that names neither or both."""
+    targeting = next(
+        c for g in REGISTRY if g.name == "google-ads" for c in g.commands if c.name == "targeting"
+    )
+    assert targeting.method == "GET"
+    assert targeting.path == "/agent/ads/google/targeting"
+    assert {f.name for f in targeting.flags} == {"campaign_id", "adgroup_id"}
