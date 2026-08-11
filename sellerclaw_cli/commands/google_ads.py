@@ -96,11 +96,24 @@ SPECS = (
         "/agent/ads/google/campaigns/launch-search",
         summary="Launch a SEARCH campaign for a product (one call).",
         body=(
-            body_field("product_id", required=True, help="SellerClaw product id (UUID). Drives copy and keywords."),
+            body_field("product_id", required=True, help="SellerClaw product id (UUID). Drives keywords and the landing page."),
             body_field("daily_budget", type=float, required=True, help="Daily budget in account currency major units. > 0."),
+            body_field(
+                "headlines",
+                repeatable=True,
+                help="Write these: 3-15 ad headlines, <=30 chars each. Omitted = product title cut to 30 chars + filler.",
+            ),
+            body_field(
+                "descriptions",
+                repeatable=True,
+                help="Write these: 2-4 description lines, <=90 chars each. Omitted = first sentences of the product description.",
+            ),
             body_field("country", help="Target country (ISO code, English name, or geoTargetConstant id). Default US."),
             body_field("language", help="Ad language (ISO 639-1 / name). Defaults to the user's preferred language."),
-            body_field("final_url", help="Landing page URL. Auto-resolved from a published Shopify listing if omitted."),
+            body_field(
+                "final_url",
+                help="Landing page. Omit it: resolved to the product's page on a channel it is live on. Never build one from a domain + guessed path.",
+            ),
             body_field("objective", help="What to optimize for: 'traffic' (clicks) or 'sales' (conversions).", example="traffic"),
             body_field("name", help="Campaign name. Defaults to 'Search: {product name}'."),
             body_field(
@@ -121,11 +134,25 @@ SPECS = (
         body=(
             body_field("product_id", required=True, help="SellerClaw product id (UUID)."),
             body_field("daily_budget", type=float, required=True, help="Daily budget in account currency major units. > 0."),
-            body_field("business_name", required=True, help="Brand / shop name shown alongside the ad (<=25 chars)."),
+            body_field(
+                "business_name",
+                required=True,
+                help="Brand / shop name shown alongside the ad, <=25 chars. Longer is refused, not shortened.",
+            ),
             body_field("logo_url", required=True, help="URL of a square (1:1) logo image (>=128x128 px)."),
+            body_field(
+                "headlines",
+                repeatable=True,
+                help="Write these: >=3 headlines, <=30 chars each. Omitted = product title cut to length + filler.",
+            ),
+            body_field("long_headlines", repeatable=True, help="Write these: >=1 long headline, <=90 chars each."),
+            body_field("descriptions", repeatable=True, help="Write these: >=2 description lines, <=90 chars each."),
             body_field("country", help="Target country (ISO code / name / constant id). Default US."),
             body_field("language", help="Ad language (ISO 639-1 / name). Defaults to the user's preferred language."),
-            body_field("final_url", help="Landing page URL. Auto-resolved from a published Shopify listing if omitted."),
+            body_field(
+                "final_url",
+                help="Landing page. Omit it: resolved to the product's page on a channel it is live on. Never build one from a domain + guessed path.",
+            ),
             body_field("call_to_action", help="Call-to-action enum (SHOP_NOW / LEARN_MORE / SIGN_UP / ...).", example="SHOP_NOW"),
             body_field("name", help="Campaign name. Defaults to 'PMax: {product name}'."),
             body_field("square_image_url", help="Optional explicit square (1:1) marketing image URL — overrides auto-pick."),
