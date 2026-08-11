@@ -112,7 +112,11 @@ SPECS = (
             body_field("language", help="Ad language (ISO 639-1 / name). Defaults to the user's preferred language."),
             body_field(
                 "final_url",
-                help="Landing page. Omit it: resolved to the product's page on a channel it is live on. Never build one from a domain + guessed path.",
+                help=(
+                    "Landing page. Omit it: resolved to the product's page on a channel it is live on. "
+                    "Never build one from a domain + guessed path; the launch opens the page first and "
+                    "refuses a 404 (final_url_not_reachable)."
+                ),
             ),
             body_field("objective", help="What to optimize for: 'traffic' (clicks) or 'sales' (conversions).", example="traffic"),
             body_field("name", help="Campaign name. Defaults to 'Search: {product name}'."),
@@ -151,7 +155,11 @@ SPECS = (
             body_field("language", help="Ad language (ISO 639-1 / name). Defaults to the user's preferred language."),
             body_field(
                 "final_url",
-                help="Landing page. Omit it: resolved to the product's page on a channel it is live on. Never build one from a domain + guessed path.",
+                help=(
+                    "Landing page. Omit it: resolved to the product's page on a channel it is live on. "
+                    "Never build one from a domain + guessed path; the launch opens the page first and "
+                    "refuses a 404 (final_url_not_reachable)."
+                ),
             ),
             body_field("call_to_action", help="Call-to-action enum (SHOP_NOW / LEARN_MORE / SIGN_UP / ...).", example="SHOP_NOW"),
             body_field("name", help="Campaign name. Defaults to 'PMax: {product name}'."),
