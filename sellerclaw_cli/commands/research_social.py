@@ -18,7 +18,10 @@ SPECS = (
                 "platform",
                 required=True,
                 choices=("facebook", "google", "tiktok", "linkedin"),
-                help="Ad library vendor.",
+                help=(
+                    "Ad library vendor. TikTok reads Creative Center Top Ads, which is often down — "
+                    "an empty result there means 'unknown', not 'no ads'."
+                ),
             ),
             body_field("query", required=True, help="Search text (brand, product, keyword)."),
             body_field("region", help="TikTok/Google: country code, e.g. US."),
