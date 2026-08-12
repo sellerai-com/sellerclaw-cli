@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typer
 
-from sellerclaw_cli._command_group import Cmd, LONG_TIMEOUT_SECONDS, body_field, build_group, flag
+from sellerclaw_cli._command_group import Cmd, LONG_TIMEOUT_SECONDS, SYNC_STOCK_PARTIAL_HELP, body_field, build_group, flag
 
 NAME = "amazon-listings"
 
@@ -77,7 +77,8 @@ SPECS = (
                 "items",
                 type=dict,
                 repeatable=True,
-                help="Offers to update, each {sku (required), quantity?, price?, remote_id?}.",
+                help="Offers to update, each {sku, quantity?, price?} (remote_id works for an "
+                "offer we already mirror). " + SYNC_STOCK_PARTIAL_HELP,
             ),
         ),
     ),

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typer
 
-from sellerclaw_cli._command_group import Cmd, LONG_TIMEOUT_SECONDS, body_field, build_group, flag
+from sellerclaw_cli._command_group import Cmd, LONG_TIMEOUT_SECONDS, SYNC_STOCK_PARTIAL_HELP, body_field, build_group, flag
 
 NAME = "shopify-listings"
 
@@ -211,14 +211,19 @@ SPECS = (
         "sync-stock",
         "POST",
         "/agent/stores/{store_id}/listings/sync-stock",
-        summary="Sync stock to Shopify.",
+        summary=(
+            "Update price and/or stock on existing Shopify variants "
+            '(body: {"items": [{"sku": "...", "quantity": 5, "price": 19.99}]}). '
+            "Identify each item by sku or remote_id (the variant id)."
+        ),
         body=(
             body_field(
                 "items",
                 type=dict,
                 repeatable=True,
-                help="Stock updates. Each: sku (required), quantity (required), and optionally "
-                "remote_id, price, compare_at_price.",
+                help="Variants to update, each {sku?, remote_id?, quantity?, price?, "
+                "compare_at_price?} (sku or remote_id, and quantity and/or price). "
+                + SYNC_STOCK_PARTIAL_HELP,
             ),
         ),
     ),

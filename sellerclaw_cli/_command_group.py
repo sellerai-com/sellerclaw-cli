@@ -36,6 +36,14 @@ from sellerclaw_cli._runtime import BODY_OPTION_HELP, emit_error, parse_json_bod
 #: Declared per command and reported by ``describe``, so the caller sizes its own wait to match.
 LONG_TIMEOUT_SECONDS = 180.0
 
+#: Every channel's ``sync-stock`` takes the same shape, so it is described in the same words:
+#: one identifier, and only the fields you actually mean to change. Restating a value you did not
+#: mean to touch is how a reprice used to carry a stale stock number to the marketplace.
+SYNC_STOCK_PARTIAL_HELP = (
+    "Only what you send changes: a price with no quantity leaves the stock alone, and the "
+    "other way round."
+)
+
 _PATH_PARAM_RE = re.compile(r"\{([^}]+)\}")
 # A short id prefix worth expanding against the task list: hex (UUID) fragments, optionally
 # dash-separated, and shorter than a full 36-char UUID. This deliberately excludes non-hex tokens

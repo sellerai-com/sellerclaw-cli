@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typer
 
-from sellerclaw_cli._command_group import Cmd, LONG_TIMEOUT_SECONDS, body_field, build_group, flag
+from sellerclaw_cli._command_group import Cmd, LONG_TIMEOUT_SECONDS, SYNC_STOCK_PARTIAL_HELP, body_field, build_group, flag
 
 NAME = "tiktok-shop-listings"
 
@@ -80,7 +80,8 @@ SPECS = (
                 "items",
                 type=dict,
                 repeatable=True,
-                help="Products to update, each {sku?, remote_id?, quantity?, price?} (sku or remote_id).",
+                help="Products to update, each {sku?, remote_id?, quantity?, price?} (sku or remote_id, and "
+                "quantity and/or price). " + SYNC_STOCK_PARTIAL_HELP,
             ),
         ),
     ),

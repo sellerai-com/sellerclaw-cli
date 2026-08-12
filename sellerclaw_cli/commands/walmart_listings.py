@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typer
 
-from sellerclaw_cli._command_group import Cmd, LONG_TIMEOUT_SECONDS, body_field, build_group, flag
+from sellerclaw_cli._command_group import Cmd, LONG_TIMEOUT_SECONDS, SYNC_STOCK_PARTIAL_HELP, body_field, build_group, flag
 
 NAME = "walmart-listings"
 
@@ -69,14 +69,14 @@ SPECS = (
         summary=(
             "Update price and/or stock on existing Walmart items "
             '(body: {"items": [{"sku": "...", "quantity": 5, "price": 19.99}]}). '
-            "Identify each item by sku."
+            "Identify each item by sku (or by remote_id for an item we already mirror)."
         ),
         body=(
             body_field(
                 "items",
                 type=dict,
                 repeatable=True,
-                help="Items to update, each {sku, quantity?, price?}.",
+                help="Items to update, each {sku, quantity?, price?}. " + SYNC_STOCK_PARTIAL_HELP,
             ),
         ),
     ),
