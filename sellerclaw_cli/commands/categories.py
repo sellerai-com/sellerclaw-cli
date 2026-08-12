@@ -17,6 +17,12 @@ NAME = "categories"
 # `refresh` is for one situation only: the owner says they *just* made a category on their own store
 # (WooCommerce, Wix, BigCommerce) and wants it used now. Drafting reads our copy of their store, which
 # updates itself daily, so every other time it is a wasted call.
+#
+# `create` and `rename` write to the owner's own store, so they exist only for those three: a
+# marketplace hands every seller the same fixed tree, and Shopify's category is free text. Create a
+# category when the OWNER asks for one — not because a product matched nothing. A shop's pages are
+# built on the categories it already has, and a second near-identical one is a page nobody links to
+# (which is why a name the store already keeps comes back as `created: false` instead).
 SPECS = (
     Cmd(
         "suggest",
@@ -107,6 +113,38 @@ SPECS = (
                 required=True,
                 help="The store whose own categories to re-read (from `channels list`).",
             ),
+        ),
+    ),
+    Cmd(
+        "create",
+        "POST",
+        "/agent/categories/create",
+        summary=(
+            "Make a new category on your own store (WooCommerce, Wix, BigCommerce). "
+            "A name the store already has is returned instead of a duplicate."
+        ),
+        body=(
+            body_field("store_id", required=True, help="Your store (from `channels list`)."),
+            body_field("name", required=True, help="What the category is called."),
+            body_field(
+                "parent_id",
+                help="Category to nest this one under (an `external_id`); omit for a top-level one.",
+            ),
+        ),
+    ),
+    Cmd(
+        "rename",
+        "POST",
+        "/agent/categories/rename",
+        summary="Rename one of your own store's categories. What is filed in it stays filed.",
+        body=(
+            body_field("store_id", required=True, help="Your store (from `channels list`)."),
+            body_field(
+                "category_id",
+                required=True,
+                help="The `external_id` of the category to rename (from `search`/`used`).",
+            ),
+            body_field("name", required=True, help="The new name."),
         ),
     ),
 )
