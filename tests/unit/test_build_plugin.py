@@ -242,3 +242,18 @@ def test_check_target_writes_nothing(repo: Path) -> None:
     before = snapshot()
     assert check_target("claude-code", repo) == []
     assert snapshot() == before
+
+
+def test_the_desktop_extension_and_the_server_ship_the_same_logo() -> None:
+    """One brand, two shipping routes — and nothing else keeps them in step.
+
+    The extension takes its icon from the plugin tree; the MCP server serves its own copy from the
+    package (a wheel cannot reach outside it). A rebrand that updates one and forgets the other
+    would leave Claude Desktop and the hosted connector wearing different logos.
+    """
+    extension_icon = PLUGIN_SRC / "targets" / "claude-desktop" / "icon.png"
+    served_icon = REPO_ROOT / "sellerclaw_cli" / "assets" / "icon.png"
+
+    assert extension_icon.read_bytes() == served_icon.read_bytes(), (
+        "icon.png differs between plugin/targets/claude-desktop and sellerclaw_cli/assets"
+    )

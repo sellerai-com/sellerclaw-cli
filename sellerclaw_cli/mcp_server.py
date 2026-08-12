@@ -51,6 +51,14 @@ if TYPE_CHECKING:
 
 SERVER_NAME = "sellerclaw"
 
+# Where someone can read what this server is, and the logo to show beside it. Both are standard
+# server metadata (``websiteUrl`` / ``icons`` in the initialize response): a client that renders
+# them shows SellerClaw's own branding instead of a generic tile, and a client that does not —
+# claude.ai's custom connectors today — ignores them at no cost.
+SERVER_WEBSITE_URL = "https://sellerclaw.ai"
+_ICON_MIME_TYPE = "image/png"
+_ICON_SIZES = ["512x512"]
+
 SERVER_INSTRUCTIONS = (
     "SellerClaw e-commerce control over the seller's stores, orders, listings, ads, suppliers, "
     "email and research. The surface is large, so start with the guide for the job:\n"
@@ -454,12 +462,82 @@ def _import_fastmcp() -> Any:
     return FastMCP
 
 
+def _server_branding() -> dict[str, Any]:
+    """The website and logo a client can show for this server, as FastMCP keyword arguments.
+
+    The icon travels as a data URI rather than a link: a permission dialog that renders it should
+    not depend on our web host being reachable, and 11 KB rides along once per session. Read here
+    rather than at import time so the core CLI never touches it.
+    """
+    import base64
+    from importlib.resources import files
+
+    from mcp.types import Icon
+
+    try:
+        # Addressed through the package, not as ``sellerclaw_cli.assets``: the folder holds data,
+        # not code, and has no ``__init__.py`` to be imported as a package of its own.
+        png = (files("sellerclaw_cli") / "assets" / "icon.png").read_bytes()
+    except OSError:
+        # A build that shipped without the asset loses a logo, nothing more. Refusing to start the
+        # hosted server over a decoration would turn a cosmetic regression into an outage.
+        return {"website_url": SERVER_WEBSITE_URL}
+    data_uri = f"data:{_ICON_MIME_TYPE};base64,{base64.b64encode(png).decode('ascii')}"
+    return {
+        "website_url": SERVER_WEBSITE_URL,
+        "icons": [Icon(src=data_uri, mimeType=_ICON_MIME_TYPE, sizes=_ICON_SIZES)],
+    }
+
+
+def _apply_server_version(server: Any) -> None:
+    """Report SellerClaw's version in the handshake instead of the SDK's.
+
+    FastMCP takes no version argument and lets the low-level server default to the ``mcp`` package
+    version, so a client that shows "SellerClaw 1.29.0" would be quoting the SDK back at us — and
+    at anyone asking a user which version they are on.
+
+    Reached through a private attribute for want of a public one, so it gives way rather than
+    crashes if a future SDK moves it: the hosted image installs the SDK unpinned within 1.x (see the
+    ``mcp`` extra), and the worst honest outcome of a rename is the old, wrong version number.
+    """
+    from sellerclaw_cli import __version__
+
+    low_level = getattr(server, "_mcp_server", None)
+    if low_level is not None:
+        low_level.version = __version__
+
+
 def _register_tools(server: Any) -> None:
-    """Register the four discovery/proxy tools on a FastMCP server."""
-    server.add_tool(show_guide, name="sellerclaw_guide", description=_GUIDE_TOOL_DESC)
-    server.add_tool(list_groups, name="sellerclaw_groups", description=_GROUPS_TOOL_DESC)
-    server.add_tool(describe_command, name="sellerclaw_describe", description=_DESCRIBE_TOOL_DESC)
-    server.add_tool(run_command, name="sellerclaw_run", description=_RUN_TOOL_DESC)
+    """Register the four discovery/proxy tools on a FastMCP server.
+
+    Each carries a title as well as a name: the name is what a caller types, the title is what a
+    person reads in a permission dialog, where "Sellerclaw run" says a good deal less than "Run a
+    SellerClaw command".
+    """
+    server.add_tool(
+        show_guide,
+        name="sellerclaw_guide",
+        title="Read a SellerClaw guide",
+        description=_GUIDE_TOOL_DESC,
+    )
+    server.add_tool(
+        list_groups,
+        name="sellerclaw_groups",
+        title="List SellerClaw commands",
+        description=_GROUPS_TOOL_DESC,
+    )
+    server.add_tool(
+        describe_command,
+        name="sellerclaw_describe",
+        title="Describe a SellerClaw command",
+        description=_DESCRIBE_TOOL_DESC,
+    )
+    server.add_tool(
+        run_command,
+        name="sellerclaw_run",
+        title="Run a SellerClaw command",
+        description=_RUN_TOOL_DESC,
+    )
 
 
 def build_server() -> Any:
@@ -471,7 +549,8 @@ def build_server() -> Any:
     fast_mcp = _import_fastmcp()
     import sellerclaw_cli.cli  # noqa: F401 — importing registers every group into REGISTRY
 
-    server = fast_mcp(SERVER_NAME, instructions=SERVER_INSTRUCTIONS)
+    server = fast_mcp(SERVER_NAME, instructions=SERVER_INSTRUCTIONS, **_server_branding())
+    _apply_server_version(server)
     _register_tools(server)
     return server
 
@@ -544,7 +623,9 @@ def build_http_server(
         stateless_http=True,
         host=host,
         port=port,
+        **_server_branding(),
     )
+    _apply_server_version(server)
     _register_tools(server)
     return server
 
