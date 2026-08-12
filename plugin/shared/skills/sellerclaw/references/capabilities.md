@@ -48,9 +48,9 @@ Many groups take an id as the **first positional** (e.g. a store id for `shopify
 | Group | What |
 | --- | --- |
 | `research-seo` | SEO / SERP / marketplace keyword & product research. |
-| `research-social` | Social / ad-library / Reddit / TikTok / YouTube research. |
+| `research-social` | Ad libraries, Reddit, TikTok/YouTube trends, and a competitor's public social presence (profile stats, posts, comments, audience split). |
 | `research-trends` | Google Trends: interest, related queries/topics, comparisons. |
-| `research-catalog` | Marketplace catalog research. |
+| `research-catalog` | Marketplace catalog research, including a scan of one seller's storefront. |
 | `kb` | Shared knowledge base (read-only search). |
 | `web` | Single-page web scrape. |
 

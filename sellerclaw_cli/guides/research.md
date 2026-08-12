@@ -15,9 +15,16 @@ sellerclaw_run(group="research-trends", command="related-queries", flags={"keywo
 sellerclaw_run(group="research-seo", command="keyword-ideas",    body={"keyword": "wireless mouse"})
 sellerclaw_run(group="research-seo", command="serp-competitors", body={"keyword": "wireless mouse"})
 
-# What the marketplace itself already lists (query or gtin)
+# What the marketplace itself already lists (query, gtin, or a competitor's storefront)
 sellerclaw_run(group="research-catalog", command="ebay-search",
   body={"query": "wireless mouse", "marketplace_id": "EBAY_US", "limit": 20})
+sellerclaw_run(group="research-catalog", command="ebay-search",
+  body={"sellers": ["rival_store"], "limit": 50})
+
+# A competitor's social presence: the account, then what it publishes
+sellerclaw_run(group="research-social", command="instagram-profile", body={"handle": "rivalbrand"})
+sellerclaw_run(group="research-social", command="tiktok-profile-videos",
+  body={"handle": "rivalbrand", "sort_by": "popular"})
 ```
 
 ## Where to look
@@ -26,8 +33,12 @@ sellerclaw_run(group="research-catalog", command="ebay-search",
   `related-topics`, `trending`, `compare`.
 - `research-seo` — `keyword-ideas`, `keyword-volume`, `autocomplete`, `people-also-ask`,
   `serp-competitors`, `amazon-products`, `amazon-reviews`, `product-search`, `content-sentiment`.
-- `research-social` — ad-library / Reddit / TikTok / YouTube research.
-- `research-catalog` — `ebay-search` over the marketplace's own catalog.
+- `research-social` — ad libraries (Facebook, Google, TikTok, LinkedIn), Reddit, TikTok/YouTube
+  trends, and a named account's public presence: `<platform>-profile` for follower counts and bio,
+  `…-posts` / `…-videos` for what it publishes, `…-comments` for what its audience says,
+  `tiktok-audience-demographics` for where that audience sits.
+- `research-catalog` — `ebay-search` over the marketplace's own catalog; pass `sellers` to scan a
+  competitor's storefront instead of the whole marketplace.
 - `kb` — search the shared knowledge base (read-only).
 
 ## Watch for
