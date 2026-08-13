@@ -18,16 +18,24 @@ recipes carry ready-to-run examples. Run them directly.
 - **Neither** → set it up: [references/setup.md](references/setup.md).
 
 `sellerclaw_run` takes the group, the command, `positionals` as a `{name: value}` map for path
-arguments, `flags` as a `{name: value}` map of filters, and `body` as the JSON payload. The CLI is the
-same surface 1:1 — the call below is `sellerclaw <group> <command> <positionals…> [--flag v] -b '<json>'`
-if you're going through the shell instead.
+arguments, `flags` as a `{name: value}` map of filters, and `body` as the JSON payload. Every call
+maps to the same shell form — `sellerclaw <group> <command> <positionals…> [--flag v] -b '<json>'`.
+
+**The CLI carries more groups than this skill lists, and the extras are not yours to drive.** The
+same binary serves the user's own SellerClaw agent, so it also holds that agent's machinery: its
+task tree, its goal lifecycle, the approvals it raises *to* the user, its chat history. You are
+talking to the user directly — asking them to approve something, or closing one of those approvals
+on their behalf, is inverted here. Stay on the groups in
+[references/capabilities.md](references/capabilities.md); through the MCP tools that is the only
+surface there is.
 
 ## Run directly; describe only as a fallback
 
 For common jobs the task recipes give concrete example calls — use them, don't re-derive every command
 with `sellerclaw_describe` first. That round-trip is only worth it when:
 
-- you need a command no recipe covers — find it with `sellerclaw_groups` / `sellerclaw groups`, then
+- you need a command no recipe covers — find it with `sellerclaw_groups` (in a shell,
+  `sellerclaw groups` lists the agent-internal groups too; ignore those), then
   `sellerclaw_describe(group, command)` for its exact fields; or
 - a call fails with a field error — the error names the allowed fields and the closest match; read it
   and retry.
