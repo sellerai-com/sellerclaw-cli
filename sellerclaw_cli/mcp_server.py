@@ -513,30 +513,61 @@ def _register_tools(server: Any) -> None:
     Each carries a title as well as a name: the name is what a caller types, the title is what a
     person reads in a permission dialog, where "Sellerclaw run" says a good deal less than "Run a
     SellerClaw command".
+
+    Each also carries annotations, because a client told nothing has to assume the worst: ChatGPT
+    labels every unannotated tool "destructive" and "public write", so reading a guide came out
+    looking exactly as dangerous as withdrawing a listing — and a warning that fires on everything
+    stops being read. Three of the four only read this process's own command registry and the
+    bundled guides; ``sellerclaw_run`` is the one that reaches the account and can change or
+    remove things in it.
     """
+    from mcp.types import ToolAnnotations
+
+    def _reads_only(title: str) -> ToolAnnotations:
+        return ToolAnnotations(
+            title=title,
+            readOnlyHint=True,
+            destructiveHint=False,
+            idempotentHint=True,
+            openWorldHint=False,
+        )
+
     server.add_tool(
         show_guide,
         name="sellerclaw_guide",
         title="Read a SellerClaw guide",
         description=_GUIDE_TOOL_DESC,
+        annotations=_reads_only("Read a SellerClaw guide"),
     )
     server.add_tool(
         list_groups,
         name="sellerclaw_groups",
         title="List SellerClaw commands",
         description=_GROUPS_TOOL_DESC,
+        annotations=_reads_only("List SellerClaw commands"),
     )
     server.add_tool(
         describe_command,
         name="sellerclaw_describe",
         title="Describe a SellerClaw command",
         description=_DESCRIBE_TOOL_DESC,
+        annotations=_reads_only("Describe a SellerClaw command"),
     )
     server.add_tool(
         run_command,
         name="sellerclaw_run",
         title="Run a SellerClaw command",
         description=_RUN_TOOL_DESC,
+        # The honest reading of the one tool that fronts every command: it writes, it can destroy
+        # (withdraw a listing, cancel an order), running it twice is not the same as running it
+        # once, and it reaches the outside world.
+        annotations=ToolAnnotations(
+            title="Run a SellerClaw command",
+            readOnlyHint=False,
+            destructiveHint=True,
+            idempotentHint=False,
+            openWorldHint=True,
+        ),
     )
 
 

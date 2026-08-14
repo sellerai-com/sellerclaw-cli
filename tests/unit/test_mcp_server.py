@@ -306,6 +306,31 @@ def test_every_tool_carries_a_human_title() -> None:
     }
 
 
+def test_only_run_is_advertised_as_writing_and_reaching_the_outside_world() -> None:
+    """An unannotated tool is treated as destructive, which made reading a guide look dangerous.
+
+    A client renders these hints in the dialog where someone decides whether to allow the call, so
+    a warning on all four is a warning on none. Discovery reads this process's own registry; only
+    ``sellerclaw_run`` touches the account.
+    """
+    by_name = {t.name: t.annotations for t in asyncio.run(build_server().list_tools())}
+
+    for name in ("sellerclaw_guide", "sellerclaw_groups", "sellerclaw_describe"):
+        annotations = by_name[name]
+        assert annotations is not None, name
+        assert annotations.readOnlyHint is True, name
+        assert annotations.destructiveHint is False, name
+        assert annotations.idempotentHint is True, name
+        assert annotations.openWorldHint is False, name
+
+    run = by_name["sellerclaw_run"]
+    assert run is not None
+    assert run.readOnlyHint is False
+    assert run.destructiveHint is True
+    assert run.idempotentHint is False
+    assert run.openWorldHint is True
+
+
 def test_the_handshake_carries_our_branding_and_our_version() -> None:
     """Clients that render server metadata should get SellerClaw's logo, site and version.
 
