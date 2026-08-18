@@ -57,6 +57,10 @@ sellerclaw_run(group="catalog", command="delete", positionals={"product_id": PRO
   in the `listings` guide.
 - **`set-prices` is the cost you pay the supplier**, which feeds margin and profit reporting. The
   buyer-facing price lives on the listing.
+- **`weight_grams` is what a marketplace prices postage from.** eBay refuses a listing outright under
+  a calculated-rate shipping policy without one. Set it on creation, or afterwards with `catalog
+  update` (it applies to every variation); send `null` to clear a wrong one. Leave it out when the
+  weight is genuinely unknown — a `0` or a guess is charged to a real buyer at checkout.
 - **`list` with no criteria returns the whole catalog.** Pass `limit` (or a filter) — `total` still
   reports the full match count, so a small page is enough to answer "how many".
 - Sourcing the same supplier product twice creates a duplicate. Check with

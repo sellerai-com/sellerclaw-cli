@@ -79,6 +79,27 @@ _LAZY_DRAFT_BODY = (
     body_field("sell_prices", type=dict, help="Override sell prices keyed by SKU/variant."),
 )
 
+# The parcel, shared by the two edit commands. eBay prices calculated postage from it and refuses a
+# listing that carries no weight — and it lives on the listing, so this is how an existing draft or a
+# live listing is fixed, without deleting and re-creating anything.
+_PACKAGE_BODY = (
+    body_field(
+        "package_weight_grams",
+        type=int,
+        help=(
+            "What one packed unit weighs, in grams. Required by eBay under a calculated-rate "
+            "shipping policy; omit it if nobody knows, never send 0 or a guess."
+        ),
+    ),
+    body_field(
+        "package_length_mm",
+        type=int,
+        help="Package length in millimetres. Send all three sides or none — eBay refuses a partial box.",
+    ),
+    body_field("package_width_mm", type=int, help="Package width in millimetres."),
+    body_field("package_height_mm", type=int, help="Package height in millimetres."),
+)
+
 SPECS = (
     Cmd(
         "list",
@@ -264,6 +285,7 @@ SPECS = (
             body_field("return_policy_id", help="Return policy id from `ebay-store list-policies`."),
             body_field("images", repeatable=True, help="List of image URLs (max 24)."),
             body_field("aspects", type=dict, help="Item specifics, e.g. {\"Color\": [\"Black\"]}."),
+            *_PACKAGE_BODY,
         ),
     ),
     Cmd("delete", "DELETE", "/agent/stores/{store_id}/ebay-listings/{listing_id}", summary="Delete a published eBay listing."),
@@ -374,6 +396,7 @@ SPECS = (
             body_field("return_policy_id", help="Return policy id from `ebay-store list-policies`."),
             body_field("images", repeatable=True, help="List of image URLs (max 24)."),
             body_field("aspects", type=dict, help="Item specifics, e.g. {\"Color\": [\"Black\"]}."),
+            *_PACKAGE_BODY,
         ),
     ),
     Cmd(

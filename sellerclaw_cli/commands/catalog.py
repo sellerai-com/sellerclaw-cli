@@ -77,11 +77,14 @@ SPECS = (
                 help=(
                     "Array of products to create. Each item: name*, description*, category*, "
                     "variations* (array of {supplier_variant_id, sku, name, available_quantity, "
-                    "shipping_cost, purchase_price?, images?, attributes?, barcode?}), and "
-                    "optional images. barcode is the variation's GTIN/UPC/EAN — marketplaces "
-                    "identify the item by it and Walmart refuses a listing without one. Supplier "
-                    "binding (supplier_id, supplier_product_id, supplier_provider) must be all set "
-                    "together or all omitted."
+                    "shipping_cost, purchase_price?, images?, attributes?, barcode?, "
+                    "weight_grams?}), and optional images. barcode is the variation's GTIN/UPC/EAN "
+                    "— marketplaces identify the item by it and Walmart refuses a listing without "
+                    "one. weight_grams is what one packed unit weighs; eBay refuses a listing under "
+                    "a calculated-rate shipping policy without it. Omit it when the weight is "
+                    "unknown — never send 0 or a guess. Supplier binding (supplier_id, "
+                    "supplier_product_id, supplier_provider) must be all set together or all "
+                    "omitted."
                 ),
             ),
         ),
@@ -124,6 +127,19 @@ SPECS = (
             body_field(
                 "country_of_origin",
                 help="Two-letter country code where the goods were made, e.g. 'PT'.",
+            ),
+            body_field(
+                "weight_grams",
+                type=int,
+                # ``null`` is a real instruction here — "back to unknown" — and is the only way to
+                # undo a wrong weight. Omitting the key means something different (leave it alone).
+                nullable=True,
+                help=(
+                    "What one packed unit weighs, in grams, applied to every variation. eBay prices "
+                    "calculated-rate postage from it and refuses a listing that carries none. Send "
+                    "null to clear it back to unknown; omit the field to leave it alone. Never send "
+                    "0 or a guess — a buyer is charged real postage from this number."
+                ),
             ),
         ),
     ),

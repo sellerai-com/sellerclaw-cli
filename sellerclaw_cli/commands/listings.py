@@ -295,7 +295,11 @@ SPECS = (
                     "List of {listing_id, patch}. patch keys: title, description, sell_prices "
                     "(SKU->price), quantities (SKU->qty), images (the listing's whole gallery in "
                     "publish order — the first is the cover, and the list replaces what was "
-                    "there), variation_images (variation listing id -> photo URL, null clears one)."
+                    "there), variation_images (variation listing id -> photo URL, null clears one), "
+                    "package_weight_grams (what one packed unit weighs, in grams — eBay prices "
+                    "calculated postage from it and refuses a listing without it) and "
+                    "package_length_mm / package_width_mm / package_height_mm (the box; all three "
+                    "or none)."
                 ),
                 example=[
                     {"listing_id": "<uuid>", "patch": {"title": "New title"}},
@@ -303,6 +307,7 @@ SPECS = (
                         "listing_id": "<uuid>",
                         "patch": {"images": ["https://.../front.jpg", "https://.../back.jpg"]},
                     },
+                    {"listing_id": "<uuid>", "patch": {"package_weight_grams": 28}},
                 ],
             ),
         ),
