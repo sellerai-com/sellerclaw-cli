@@ -84,6 +84,7 @@ SPECS = (
         "draft",
         "POST",
         "/agent/walmart/stores/{store_id}/listings/draft",
+        job_poll_path="/agent/stores/{store_id}/bulk-listing-jobs/{job_id}",
         timeout=LONG_TIMEOUT_SECONDS,
         summary=(
             "Create local DRAFT listings from catalog products before publishing. A Walmart "

@@ -333,6 +333,60 @@ SPECS = (
         ),
     ),
     Cmd(
+        "create-drafts",
+        "POST",
+        "/agent/stores/{store_id}/create-drafts",
+        job_poll_path="/agent/stores/{store_id}/bulk-listing-jobs/{job_id}",
+        summary=(
+            "Draft catalog products onto ANY store — one command for every marketplace. Body: "
+            "'products' is a list of {product_id, title?, description?, images?, attributes?, "
+            "category_id?} — everything describing the goods is stated per product, so a batch of "
+            "ten gets ten descriptions, not one repeated. 'product_ids' is the shorthand when the "
+            "catalog's own text will do. 'channel' carries what belongs to the account rather than "
+            "the goods (eBay policies and api_kind, Etsy who_made, Walmart item spec) and is "
+            "validated against this store's platform. Returns the job; poll 'listings bulk-job'."
+        ),
+        body=(
+            body_field(
+                "products",
+                type=list,
+                help=(
+                    "List of {product_id, title?, description?, images?, attributes?, category_id?}. "
+                    "The description is the listing's own copy — the catalog product's text is a "
+                    "seed, not a description. images is the whole gallery in publish order, first "
+                    "one the cover. category_id is where to file this one product; omit it and the "
+                    "product is placed for you."
+                ),
+                example=[
+                    {
+                        "product_id": "<uuid>",
+                        "description": "<the listing's own copy>",
+                        "category_id": "<marketplace category id>",
+                    },
+                    {"product_id": "<uuid>"},
+                ],
+            ),
+            body_field(
+                "product_ids",
+                repeatable=True,
+                help="Shorthand: catalog product UUIDs to draft with the catalog's own copy.",
+            ),
+            body_field(
+                "channel",
+                type=dict,
+                help=(
+                    "This marketplace's own fields, settled once for the batch — eBay: api_kind, "
+                    "fulfillment_policy_id, payment_policy_id, return_policy_id, "
+                    "merchant_location_key, condition, sell_prices; Etsy: taxonomy_id, "
+                    "shipping_profile_id, return_policy_id, who_made, when_made, is_supply; "
+                    "Walmart: the item spec; TikTok: category_id; Amazon: asins, condition_type. A "
+                    "field another marketplace uses is refused by name."
+                ),
+                example={"api_kind": "trading"},
+            ),
+        ),
+    ),
+    Cmd(
         "bulk-publish",
         "POST",
         "/agent/stores/{store_id}/bulk-listing-jobs",

@@ -144,6 +144,7 @@ _LISTINGS_COMMANDS = {
     "check",
     "bulk-update",
     "delete-drafts",
+    "create-drafts",
     "bulk-publish",
     "bulk-jobs",
     "bulk-job",
