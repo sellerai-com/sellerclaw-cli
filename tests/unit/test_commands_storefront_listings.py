@@ -115,3 +115,32 @@ def test_an_undeclared_field_is_still_refused_before_the_request(
 
     assert result.exit_code != 0
     assert "categoryId" in result.stderr
+
+
+@respx.mock
+def test_wix_delete_posts_the_listing_ids_to_the_wix_delete_endpoint(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """Deleting is irreversible, so the call must land on `delete` and not on `withdraw`."""
+    route = respx.post(f"{fake_api_url}/agent/wix/stores/{STORE_ID}/listings/delete").mock(
+        return_value=httpx.Response(200, json={"results": [], "errors": []})
+    )
+
+    result = runner.invoke(
+        app,
+        ["wix-listings", "delete", STORE_ID, "-b", json.dumps({"listing_ids": [LISTING_ID]})],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls[0].request.content) == {"listing_ids": [LISTING_ID]}
+
+
+def test_wix_delete_without_listing_ids_is_refused_before_the_request(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+) -> None:
+    """An empty delete would be a no-op round trip at best; a missing required field is caught here."""
+    result = runner.invoke(app, ["wix-listings", "delete", STORE_ID, "-b", json.dumps({})])
+
+    assert result.exit_code != 0
+    assert "listing_ids" in result.stderr

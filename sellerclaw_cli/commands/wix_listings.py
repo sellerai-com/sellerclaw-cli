@@ -141,6 +141,27 @@ SPECS = (
         ),
     ),
     Cmd(
+        "delete",
+        "POST",
+        "/agent/wix/stores/{store_id}/listings/delete",
+        summary=(
+            "Permanently delete the Wix products behind these listings (irreversible) "
+            '(body: {"listing_ids": ["<uuid>", ...]}). The product, its page address and the SEO '
+            "built on it are gone, and re-listing makes a new product — so this needs the owner's "
+            "explicit say-so. To take a listing off sale reversibly use 'withdraw'. The rows are "
+            "kept as REMOVED for history; a group already deleted reports success with nothing "
+            "done, and a DRAFT is refused (Wix holds nothing to delete)."
+        ),
+        body=(
+            body_field(
+                "listing_ids",
+                repeatable=True,
+                required=True,
+                help="Listing UUIDs whose Wix products to delete.",
+            ),
+        ),
+    ),
+    Cmd(
         "update",
         "PATCH",
         "/agent/wix/stores/{store_id}/listings/{listing_id}",
@@ -180,7 +201,7 @@ SPECS = (
 
 app = build_group(
     NAME,
-    "Wix listings: read (mirror, --live on search), sync price/stock, and publish/withdraw.",
+    "Wix listings: read (mirror, --live on search), sync price/stock, and publish/withdraw/delete.",
     SPECS,
 )
 
