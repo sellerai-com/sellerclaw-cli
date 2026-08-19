@@ -48,6 +48,10 @@ class Client:
             base_url=self.base_url,
             headers=headers,
             timeout=self.timeout,
+            # Direct to the SellerClaw API — ignore *_proxy from the shell. A developer's SOCKS
+            # proxy (all_proxy=socks://...) crashes httpx at construction unless socksio is
+            # installed, and routing API calls through it is never intended anyway.
+            trust_env=False,
         )
 
     @classmethod

@@ -603,7 +603,9 @@ class SellerclawTokenVerifier:
         from mcp.server.auth.provider import AccessToken
 
         try:
-            async with httpx.AsyncClient(base_url=self._api_url, timeout=10.0) as client:
+            async with httpx.AsyncClient(
+                base_url=self._api_url, timeout=10.0, trust_env=False
+            ) as client:
                 response = await client.get(
                     "/agent/me", headers={"Authorization": f"Bearer {token}"}
                 )
