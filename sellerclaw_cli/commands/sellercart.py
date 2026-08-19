@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import typer
 
-from sellerclaw_cli._command_group import Cmd, body_field, build_group, flag
+from sellerclaw_cli._command_group import (
+    LONG_TIMEOUT_SECONDS,
+    Cmd,
+    body_field,
+    build_group,
+    flag,
+)
 
 NAME = "sellercart"
 
@@ -155,6 +161,54 @@ SPECS = (
             "before going live. Append the token to any page as '?preview=<token>'. Asking again "
             "returns the same token, so a preview tab they left open keeps working."
         ),
+    ),
+    Cmd(
+        "screenshot",
+        "POST",
+        "/agent/sellercart/screenshot",
+        summary=(
+            "A picture of one page of this shop, drafts included — look at what you built instead of "
+            "imagining it. The preview secret is added server-side, so nothing has to be published "
+            "first. Costs credits, so shoot when the answer matters (before publishing, after a "
+            "theme change), not routinely."
+        ),
+        body=(
+            body_field(
+                "page",
+                help="Page slug to shoot: home, catalog, delivery... Defaults to home.",
+                example="home",
+            ),
+            body_field(
+                "path",
+                help=(
+                    "Any path on the shop instead of a page slug — a product page, say. Mutually "
+                    "exclusive with page."
+                ),
+                example="/products/42",
+            ),
+            body_field(
+                "width",
+                type=int,
+                help=(
+                    "Viewport width in pixels, 320-2560 (default 1280). 390 photographs the shop as "
+                    "a phone receives it, layout and all."
+                ),
+                example=1280,
+            ),
+            body_field(
+                "full",
+                type=bool,
+                help=(
+                    "Capture the whole page instead of the first screen. For a picture the SELLER "
+                    "opens: a full-page shot of a long page is too tall for you to read back, and "
+                    "comes back as nothing. Scroll the viewport instead when you need to look."
+                ),
+                example=False,
+            ),
+        ),
+        # A render is a page load in somebody else's browser: the default budget refuses a call
+        # that is still working.
+        timeout=LONG_TIMEOUT_SECONDS,
     ),
     Cmd(
         "blocks",
