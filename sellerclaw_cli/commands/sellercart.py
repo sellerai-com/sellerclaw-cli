@@ -44,9 +44,9 @@ SPECS = (
         "GET",
         "/agent/sellercart/options",
         summary=(
-            "What a shop may be created with: the address suffix every shop ends in, and every "
-            "currency `create` accepts. Read it before offering the seller a currency — the currency "
-            "is permanent once the shop exists."
+            "What a shop may be created with: the address suffix every shop ends in, every currency "
+            "`create` accepts, and every language it can be served in. Read it before offering the "
+            "seller a currency — the currency is permanent once the shop exists."
         ),
     ),
     Cmd(
@@ -81,6 +81,18 @@ SPECS = (
             ),
             body_field("currency", help="ISO currency the shop prices in. Permanent — ask first.", example="USD"),
             body_field(
+                "language",
+                help=(
+                    "What the shop says to buyers in its own words — the cart, the buttons, the "
+                    "checkout, the empty shelf — and the titles of the six pages it starts with. "
+                    "ISO 639-1; `options` lists what is accepted. Read it off the seller rather "
+                    "than asking: the language they write to you in is the one their buyers read. "
+                    "Omitted, the shop speaks English, so a Russian shop gets English buttons over "
+                    "Russian pages. Changeable later, unlike the currency."
+                ),
+                example="ru",
+            ),
+            body_field(
                 "markup_percent",
                 type=float,
                 help=(
@@ -96,12 +108,25 @@ SPECS = (
         "PATCH",
         "/agent/sellercart",
         summary=(
-            "Rename the shop, change the markup its prices are computed from, or stop it selling "
-            "online. The address and the currency are deliberately not changeable: buyers and search "
-            "engines already hold the one, and every price on the shelf is denominated in the other."
+            "Rename the shop, change the language it speaks, change the markup its prices are "
+            "computed from, or stop it selling online. The address and the currency are deliberately "
+            "not changeable: buyers and search engines already hold the one, and every price on the "
+            "shelf is denominated in the other."
         ),
         body=(
             body_field("name", help="Shop name shown to buyers.", example="Acme Gear"),
+            body_field(
+                "language",
+                help=(
+                    "What the shop says to buyers from the next page load: the cart, the buttons, "
+                    "the checkout, the empty shelf. ISO 639-1; `options` lists what is accepted. It "
+                    "rewrites nothing the seller already wrote — pages, blocks and menus stay in the "
+                    "language they were authored in — so switching a shop whose pages are English to "
+                    "'ru' leaves Russian buttons over English copy until the pages are redone. Say "
+                    "that when you switch it."
+                ),
+                example="ru",
+            ),
             body_field(
                 "markup_percent",
                 type=float,
