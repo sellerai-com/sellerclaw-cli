@@ -59,17 +59,28 @@ SPECS = (
         body=(
             body_field("campaign_id", required=True, help="Parent campaign id."),
             body_field("name", required=True, help="Ad set name."),
+            # Budget lives at exactly one level: on the campaign (budget optimization) or on the
+            # ad set. Demanding the pair here made an ad set under a budgeted campaign impossible
+            # to create at all — every attempt was one Meta rejects.
             body_field(
                 "daily_budget",
                 type=float,
-                required=True,
-                help="Daily budget in account currency minor units (e.g. cents).",
+                help="Daily budget in the account currency (50 = $50). Omit under campaign budget optimization.",
             ),
             body_field(
                 "bid_strategy",
-                required=True,
-                help="Bid strategy, e.g. LOWEST_COST_WITHOUT_CAP, COST_CAP, LOWEST_COST_WITH_BID_CAP.",
+                help="Bid strategy, e.g. LOWEST_COST_WITHOUT_CAP, COST_CAP, LOWEST_COST_WITH_BID_CAP. Goes with daily_budget.",
                 example="LOWEST_COST_WITHOUT_CAP",
+            ),
+            body_field(
+                "bid_amount",
+                type=float,
+                help="Bid cap / cost target in the account currency. Required for COST_CAP and LOWEST_COST_WITH_BID_CAP.",
+            ),
+            body_field(
+                "billing_event",
+                help="What Meta charges for: IMPRESSIONS (default), LINK_CLICKS, THRUPLAY.",
+                example="IMPRESSIONS",
             ),
             body_field(
                 "optimization_goal",
@@ -78,11 +89,18 @@ SPECS = (
                 example="OFFSITE_CONVERSIONS",
             ),
             body_field(
+                "promoted_object",
+                type=dict,
+                help='What to optimize towards: {"pixel_id": ..., "custom_event_type": "PURCHASE"} or {"page_id": ...}.',
+            ),
+            body_field(
                 "targeting",
                 type=dict,
                 required=True,
-                help="Full targeting spec (geo_locations, age_min/age_max, genders, interests, ...).",
+                help="Targeting spec: geo_locations.countries, age_min/age_max, interests, genders ([1] men, [2] women).",
             ),
+            body_field("start_time", help="ISO-8601 start, e.g. 2026-09-01T00:00:00-0700."),
+            body_field("end_time", help="ISO-8601 end. Meta requires it with a lifetime budget."),
             body_field("status", help="Ignored — ad sets are always created paused."),
         ),
         body_strict=False,
@@ -105,7 +123,7 @@ SPECS = (
             body_field(
                 "daily_budget",
                 type=float,
-                help="Override daily budget for the copy (account currency minor units).",
+                help="Override daily budget for the copy, in the account currency (50 = $50).",
             ),
         ),
         body_strict=False,

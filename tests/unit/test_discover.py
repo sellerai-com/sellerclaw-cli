@@ -442,6 +442,26 @@ def test_channels_set_markup_patches_markup_percent() -> None:
     assert markup_field.type is float
 
 
+def test_facebook_create_adset_lets_the_budget_live_on_the_campaign() -> None:
+    """Meta puts the budget on the campaign or on the ad set, never both.
+
+    Demanding `daily_budget` and `bid_strategy` here made an ad set under a budget-optimized
+    campaign impossible to send: the only body the CLI accepted was the one Meta rejects. The
+    fields Meta itself insists on — `billing_event`, and `promoted_object` for conversion goals —
+    are declared instead of riding along as undocumented extras.
+    """
+    create_adset = next(
+        c for g in REGISTRY if g.name == "facebook-ads" for c in g.commands if c.name == "create-adset"
+    )
+    fields = {f.name: f for f in create_adset.body}
+    required = {name for name, field in fields.items() if field.required}
+
+    assert required == {"campaign_id", "name", "optimization_goal", "targeting"}
+    assert {"billing_event", "promoted_object", "bid_amount", "start_time", "end_time"} <= set(fields)
+    assert fields["daily_budget"].type is float
+    assert fields["promoted_object"].type is dict
+
+
 def test_google_ads_reads_what_the_money_was_spent_on() -> None:
     """`search-terms` answers what keywords cannot: which queries actually took the budget.
 
