@@ -105,7 +105,10 @@ SPECS = (
         "list",
         "GET",
         "/agent/stores/{store_id}/listings",
-        summary="List the store's eBay listings from the SellerClaw mirror.",
+        summary=(
+            "List the store's eBay listings from the SellerClaw mirror. `total` is the filter-aware match "
+            "count, not the size of this page — page through the rest with `--offset`."
+        ),
         flags=(
             flag(
                 "status",
@@ -122,6 +125,7 @@ SPECS = (
                 default=100,
                 help="Max results.",
             ),
+            flag("offset", type=int, minimum=0, default=0, help="Results to skip (paging)."),
         ),
     ),
     Cmd(
