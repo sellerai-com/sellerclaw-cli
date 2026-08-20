@@ -56,6 +56,7 @@ SPECS = (
         flags=(
             flag("q", required=True, help="Search text (matched as a substring of the name or any variation SKU)."),
             flag("limit", type=int, minimum=1, maximum=500, default=100, help="Max results."),
+            flag("offset", type=int, minimum=0, default=0, help="Results to skip (paging)."),
             flag(
                 "status",
                 help="Also filter by status.",
@@ -67,7 +68,12 @@ SPECS = (
         "create",
         "POST",
         "/agent/products",
-        summary="Create products (batch; the body accepts an array of products).",
+        summary=(
+            "Create products (batch; the body accepts an array of products). The answer is "
+            "`{results, errors}`, not the `{items, total}` the read commands return: `results` "
+            "holds one entry per created product and `errors` one per item that was refused, so a "
+            "partly-accepted batch is readable without a follow-up read."
+        ),
         body=(
             body_field(
                 "items",
@@ -94,8 +100,10 @@ SPECS = (
         "PATCH",
         "/agent/products/{product_id}",
         summary=(
-            "Update product metadata (name, description, images, category, status). Catalog only — "
-            "a listing built from this product keeps its own copy of the text and pictures, so this "
+            "Update ONE product's metadata (name, description, images, category, status) — the "
+            "product id is a positional, so a set of products needs `catalog bulk-update` (up to "
+            "200 in one call) or, for a whole catalog, the `catalog-file` import. Catalog only — a "
+            "listing built from this product keeps its own copy of the text and pictures, so this "
             "changes nothing already on a marketplace. To change what a store shows, edit the "
             "listing (`listings bulk-update`) and publish."
         ),
@@ -140,6 +148,40 @@ SPECS = (
                     "null to clear it back to unknown; omit the field to leave it alone. Never send "
                     "0 or a guess — a buyer is charged real postage from this number."
                 ),
+            ),
+        ),
+    ),
+    Cmd(
+        "bulk-update",
+        "POST",
+        "/agent/products/bulk-update",
+        summary=(
+            "Update the metadata of many catalog products in ONE call — the batch answer to "
+            "`catalog update`, which takes a single product id. Use it to fix a set of names, "
+            "brands, categories or statuses at once (up to 200 products); a whole-catalog load "
+            "belongs in the `catalog-file` import instead. Items are isolated: a stale id or "
+            "somebody else's product is reported on its own line while the rest still apply, so "
+            "the reply is `{items: [{product_id, ok, error, product}]}` in the order sent — never "
+            "one 404 that loses the whole batch. Catalog only, and purely local: a listing built "
+            "from a product keeps its own copy of the content until it is republished."
+        ),
+        body=(
+            body_field(
+                "items",
+                type=dict,
+                repeatable=True,
+                required=True,
+                help=(
+                    "Array of {product_id*, patch*}. `patch` takes the same fields as `catalog "
+                    "update`: name, description, images, category, status, brand, "
+                    "country_of_origin, weight_grams. Omit a field to leave it unchanged; "
+                    "weight_grams accepts an explicit null to clear it back to unknown."
+                ),
+                example=[
+                    {"product_id": "<uuid>", "patch": {"name": "Cat Litter Mat"}},
+                    {"product_id": "<uuid>", "patch": {"brand": "ACME", "category": "Pet Supplies > Cats"}},
+                    {"product_id": "<uuid>", "patch": {"weight_grams": None}},
+                ],
             ),
         ),
     ),
