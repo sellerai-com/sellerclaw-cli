@@ -32,8 +32,9 @@ SPECS = (
         "PATCH",
         "/agent/sales-channels/{sales_channel_id}",
         summary=(
-            "Set this store's dropshipping markup (percent, e.g. 30 = +30%), or send null to "
-            "remove it and put the store back to having none."
+            "Propose this store's markup (percent, e.g. 30 = +30%), or send null to propose "
+            "removing it. Goes to the owner: answers 202 with status pending_approval, and the "
+            "store prices by it once they approve."
         ),
         body=(
             body_field(
@@ -42,10 +43,16 @@ SPECS = (
                 required=True,
                 nullable=True,
                 help=(
-                    "Markup percent applied over the product cost when pricing listings "
-                    "(0-500; 15 = +15%). A store starts with no markup set — until you set one, "
-                    "new listings are created without a price and cannot be published. Send "
-                    "`null` to go back to that state — the way to undo a markup set on the wrong "
+                    "Markup percent applied over what a product costs, when this store prices it "
+                    "(0-500; 15 = +15%). It applies to every product listed on this store from the "
+                    "catalog, however it is sourced. Because it is what the owner earns on each "
+                    "sale, this does not write the number: it raises an approval for them, and the "
+                    "response `status` says whether it is waiting (`pending_approval`) or was "
+                    "answered by their standing approval setting (`approved_queued`) — repeat that "
+                    "back, never the other one. Send it on its own; mixed with other settings the "
+                    "call is refused. A store starts with no markup — until one exists, new "
+                    "listings are created without a price and cannot be published. Send `null` to "
+                    "propose going back to that state — the way to undo a markup put on the wrong "
                     "store. Do not reach for 0 instead: 0 is a real markup that prices every "
                     "future listing at cost."
                 ),

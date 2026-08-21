@@ -108,7 +108,7 @@ SPECS = (
         "PATCH",
         "/agent/sellercart",
         summary=(
-            "Rename the shop, change the language it speaks, change the markup its prices are "
+            "Rename the shop, change the language it speaks, propose the markup its prices are "
             "computed from, or stop it selling online. The address and the currency are deliberately "
             "not changeable: buyers and search engines already hold the one, and every price on the "
             "shelf is denominated in the other."
@@ -130,7 +130,13 @@ SPECS = (
             body_field(
                 "markup_percent",
                 type=float,
-                help="Markup percent over catalog cost, e.g. 30 for +30% (0-500).",
+                help=(
+                    "Markup percent over catalog cost, e.g. 30 for +30% (0-500). Because it is what "
+                    "the owner earns on everything the shop sells, this does not change it: it "
+                    "raises an approval for them and answers 202 with status pending_approval, and "
+                    "the shop prices by it once they approve. Send it on its own — mixed with a "
+                    "rename or sells_online the call is refused."
+                ),
                 example=45,
             ),
             body_field(

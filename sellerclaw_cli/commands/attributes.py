@@ -69,7 +69,7 @@ SPECS = (
                 "q",
                 help="Keep only values containing this text, case-insensitive. Omit for the first page.",
             ),
-            body_field("limit", help="How many values to return (1-200, default 50)."),
+            body_field("limit", type=int, help="How many values to return (1-200, default 50)."),
         ),
     ),
 )
