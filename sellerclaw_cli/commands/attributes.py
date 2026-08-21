@@ -10,7 +10,9 @@ NAME = "attributes"
 # variation axes (Colour/Size) vs shared vs per-variation, and often fixes their allowed values.
 # `map` does all of that for you: hand it a product and the category you chose, get back the product's
 # attributes already matched to the marketplace's system attributes and sorted into those buckets, so
-# you never have to guess item specifics. `schema` just shows what a category expects.
+# you never have to guess item specifics. `schema` just shows what a category expects — with each
+# attribute's values when the list is short enough to read. The long ones (Brand runs to ~13 800
+# entries, Country of Origin to 244) come back as a count instead; `values` searches those.
 #
 # Flow: `categories suggest` -> pick a category -> `attributes map` -> build the listing from the
 # result. Put `common_attributes` (+ `custom_attributes`) on the listing, declare
@@ -44,6 +46,30 @@ SPECS = (
                 required=True,
                 help="Marketplace category id (the `external_id` from `categories suggest`/`search`).",
             ),
+        ),
+    ),
+    Cmd(
+        "values",
+        "POST",
+        "/agent/attributes/values",
+        summary="Search one attribute's allowed values (Brand, Country of Origin, Model).",
+        body=(
+            body_field("store_id", required=True, help="Store whose marketplace to read."),
+            body_field(
+                "category_external_id",
+                required=True,
+                help="Marketplace category id (the `external_id` from `categories suggest`/`search`).",
+            ),
+            body_field(
+                "attribute",
+                required=True,
+                help="Attribute name, spelled as `schema` reports it (e.g. \"Country of Origin\").",
+            ),
+            body_field(
+                "q",
+                help="Keep only values containing this text, case-insensitive. Omit for the first page.",
+            ),
+            body_field("limit", help="How many values to return (1-200, default 50)."),
         ),
     ),
 )
