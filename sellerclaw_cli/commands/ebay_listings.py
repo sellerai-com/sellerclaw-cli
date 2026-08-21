@@ -297,8 +297,20 @@ SPECS = (
         "list-drafts",
         "GET",
         "/agent/stores/{store_id}/ebay-draft-listings",
-        summary="List eBay draft listings.",
-        flags=(flag("status", help="Filter by status."),),
+        summary=(
+            "List this store's eBay listings — despite the name, every status, not only drafts "
+            "(filter with --status). ONE ENTRY PER LISTING, not per variation: each carries "
+            "'listing_ids' (every variation's id — what publish and update-draft take), "
+            "'variation_count', the price range, the total stock and the statuses it spans. 'sku' "
+            "and 'remote_id' appear only on a listing with exactly one variation. 'total' counts "
+            "listings, 'variation_rows' the rows behind them; page with --limit / --offset. For "
+            "each variation's own price and stock use 'listings variable'."
+        ),
+        flags=(
+            flag("status", help="Filter by status."),
+            flag("limit", type=int, minimum=1, maximum=200, default=50, help="Max listings."),
+            flag("offset", type=int, minimum=0, default=0, help="Listings to skip (paging)."),
+        ),
     ),
     Cmd(
         "create-drafts",
@@ -311,8 +323,9 @@ SPECS = (
             "reaches eBay: publishing is a separate step, after you have read the drafts back. Runs "
             "in the background: the answer is the queued job and the command that reads it. Read "
             "that once the work has plausibly finished — `drafted` says what was decided per "
-            "product (category, item specifics, price range), `results` gives the rows with their "
-            "readiness — or add `--wait` to hold on until then."
+            "product (category, item specifics, price range, the `listing_ids` it became and "
+            "`ready` for the group), `not_ready` names only the rows a publish would refuse and "
+            "why — or add `--wait` to hold on until then."
         ),
         # Only product_ids is required, matching every other channel's draft command and the server,
         # which fills the rest: it places the category, resolves the item specifics off the product,

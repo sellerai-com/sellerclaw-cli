@@ -235,8 +235,20 @@ SPECS = (
         "list-drafts",
         "GET",
         "/agent/stores/{store_id}/draft-listings",
-        summary="List draft listings staged for Shopify.",
-        flags=(flag("status", help="Filter by status."),),
+        summary=(
+            "List this store's Shopify listings — every status, not only drafts (filter with "
+            "--status). ONE ENTRY PER LISTING, not per variation: each carries 'listing_ids' "
+            "(every variation's id — what publish-drafts takes), 'variation_count', the price "
+            "range, the total stock and the statuses it spans. 'sku' and 'remote_id' appear only "
+            "on a listing with exactly one variation. 'total' counts listings, 'variation_rows' "
+            "the rows behind them; page with --limit / --offset. For each variation's own price "
+            "and stock use 'listings variable'."
+        ),
+        flags=(
+            flag("status", help="Filter by status."),
+            flag("limit", type=int, minimum=1, maximum=200, default=50, help="Max listings."),
+            flag("offset", type=int, minimum=0, default=0, help="Listings to skip (paging)."),
+        ),
     ),
     Cmd(
         "create-drafts",
@@ -248,8 +260,9 @@ SPECS = (
         "is a separate step, after you have read the drafts back. Stock is taken from the catalog "
         "and the channel is the Online Store — you never set them; the optional fields only tweak "
         "content. Runs in the background: the answer is the queued job and the command that reads "
-        "it. Reading it gives `drafted` (what was decided per product), the created rows with their "
-        "readiness, and any category a product introduced; `--wait` holds on until then instead.",
+        "it. Reading it gives `drafted` (what was decided per product, with the `listing_ids` it "
+        "became and `ready` for the group), `not_ready` (only the rows a publish would refuse, with "
+        "their issues), and any category a product introduced; `--wait` holds on until then instead.",
         body=(
             body_field(
                 "product_ids",

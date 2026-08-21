@@ -151,9 +151,10 @@ def guide_cmd(ctx: typer.Context) -> None:
             "By SellerClaw id: `listings get <listing_id>`, `orders get <order_id>`, "
             "`catalog get <product_id>` — these work across every store; the per-channel groups "
             "(`shopify-listings`, `ebay-orders`, …) do not read a row by id.",
-            "Listings of a catalog product (a multi-variant publish makes one listing per variant): "
-            "`listings search --product-id <product_id>`. Also `--store-id`, `--sku`, `--remote-id`, "
-            "`--platform`, `--status`.",
+            "Listings of a catalog product: `listings search --product-id <product_id>`. Also "
+            "`--store-id`, `--sku`, `--remote-id`, `--platform`, `--status`. One entry per listing, "
+            "not per variation — a multi-variant product is one result carrying every variation's "
+            "id in `listing_ids`; `listings variable` gives each variation's own price and stock.",
             "Catalog product by name/SKU/supplier item: `catalog search --q <text>`, "
             "`catalog list --sku <sku>`, `catalog list --supplier-provider cj "
             "--supplier-product-id <id>` (the 'do I already have this?' check).",

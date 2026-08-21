@@ -43,18 +43,23 @@ SPECS = (
         summary=(
             "Find listings across every connected store by any mix of criteria (all AND-combined). "
             "Free text (--q: title / SKU / marketplace id), the catalog product they were published "
-            "from (--product-id — one listing row per variant, so a 4-variant product returns 4), "
-            "an exact --sku or --remote-id, one store (--store-id), a whole channel (--platform), "
-            "or a lifecycle --status. No criteria = the most recently updated listings. Each result "
-            "carries its listing id for a 'get' follow-up; 'total' is the full match count."
+            "from (--product-id), an exact --sku or --remote-id, one store (--store-id), a whole "
+            "channel (--platform), or a lifecycle --status. No criteria = the most recently updated "
+            "listings. ONE ENTRY PER LISTING, not per variation: a 4-variant product is one result, "
+            "carrying 'listing_ids' (every variation's id — what a publish or an update takes), "
+            "'variation_count', the price range and the total stock, plus 'ready' / "
+            "'blocking_fields' / 'not_ready_listing_ids' for the group as a whole. A matched listing "
+            "comes back whole, so searching one SKU returns that listing with all its variations "
+            "named. 'total' counts listings; 'variation_rows' counts the rows behind them. For each "
+            "variation's own price and stock use 'listings variable'."
         ),
         flags=(
             flag("q", help="Free text: substring of the title, SKU, or marketplace id."),
             flag(
                 "product_id",
                 help=(
-                    "Catalog product id: returns every listing published from it, one row per "
-                    "variant. The only product -> listings route there is."
+                    "Catalog product id: returns every listing published from it, one entry each "
+                    "with its variations folded. The only product -> listings route there is."
                 ),
             ),
             flag("store_id", help="Restrict to one store (sales channel id, see `channels list`)."),
@@ -163,12 +168,11 @@ SPECS = (
         summary=(
             "Get one WHOLE variable listing on one store — every variation folded under a single "
             "header (status span, price range, total stock) plus each variation's own price / "
-            "stock / sale-blockers, and the listing's open problems. A multi-variant publish makes "
-            "one storefront product with N variations; 'search' returns them as N flat rows, this "
-            "returns them as the one listing they are. Name it with --group-id (every row of one "
-            "listing carries the same group_id — take it from any search row) plus --store-id (its "
-            "id or its domain). Report it to the owner as ONE variable listing (one card), never "
-            "as N separate rows."
+            "stock / sale-blockers, and the listing's open problems. 'search' also answers one "
+            "entry per listing, but only the header of it; this is where each variation's own "
+            "figures and the listing's problems are. Name it with --group-id (every row and every "
+            "search entry carries it) plus --store-id (its id or its domain). Report it to the "
+            "owner as ONE variable listing (one card), never as N separate rows."
         ),
         flags=(
             flag(
@@ -211,11 +215,13 @@ SPECS = (
         "GET",
         "/agent/listings/drafts",
         summary=(
-            "List one store's draft listings — the ones prepared locally but not yet published. Each "
-            "row carries a quick 'ready' flag plus 'issue_count' and 'blocking_fields', so you can see "
-            "which drafts still need work before a bulk publish. Scoped to one store (--store-id is "
-            "required): you work a store at a time, and a store already fixes the channel. For the "
-            "full, product-group-aware readiness (the same one a publish enforces) use "
+            "List one store's draft listings — the ones prepared locally but not yet published. One "
+            "entry per listing with its variations folded, carrying a quick 'ready' flag plus "
+            "'blocking_fields' and 'not_ready_listing_ids', so you can see which drafts still need "
+            "work before a bulk publish. 'ready' is true only when EVERY variation would publish, "
+            "because that is what a publish judges. Scoped to one store (--store-id is required): "
+            "you work a store at a time, and a store already fixes the channel. For the full, "
+            "product-group-aware readiness (the same one a publish enforces) use "
             "'listings readiness'."
         ),
         flags=(
