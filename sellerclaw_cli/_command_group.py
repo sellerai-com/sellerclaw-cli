@@ -153,6 +153,18 @@ class BodyField:
     # of the listed options, so without this the local check refuses the one value that unsets a
     # setting, and the caller has no way back from a choice it already made.
     clearable: bool = False
+    # This field is also reachable as a real ``--kebab-option``, so a short value never has to be
+    # hand-written as JSON inside shell quotes. The caller of this CLI is usually an agent driving a
+    # POSIX shell, and a plan step reading "Search CJ for men's leather belts" ends a ``-b '{...}'``
+    # string at the apostrophe: the shell fails before the CLI is even reached, so no error message
+    # here could have helped. Declared per field rather than for every body, because only short
+    # scalars belong on a command line — a Markdown report still goes in a file.
+    option: str | None = None
+    # For a list-typed field whose items are single-key objects: each occurrence of ``option``
+    # becomes ``{item_key: value}`` and they append in order. ``set-plan`` is the case — a plan is
+    # ``[{"text": ...}, ...]``, and asking a caller to spell that out is asking for the quoting
+    # trouble again.
+    item_key: str | None = None
 
 
 def body_field(
@@ -166,6 +178,8 @@ def body_field(
     example: object | None = None,
     nullable: bool = False,
     clearable: bool = False,
+    option: str | None = None,
+    item_key: str | None = None,
 ) -> BodyField:
     """Concise constructor for a JSON body field inside a ``Cmd``."""
     return BodyField(
@@ -178,6 +192,8 @@ def body_field(
         example=example,
         nullable=nullable,
         clearable=clearable,
+        option=option,
+        item_key=item_key,
     )
 
 
