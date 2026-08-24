@@ -272,3 +272,118 @@ def test_team_task_pause_refuses_to_park_a_job_without_saying_why(env: str) -> N
     assert result.exit_code != 0
     assert "reason" in result.stderr
     assert route.call_count == 0  # caught before the network call
+
+
+@respx.mock
+@pytest.mark.parametrize(("group", "path"), _GROUPS)
+def test_plan_check_takes_the_item_status_and_note_as_options(
+    env: str, group: str, path: str
+) -> None:
+    """The same body, without hand-writing JSON. A note is a sentence in the owner's language, and
+    a sentence inside `-b '{...}'` ends at its first apostrophe — the shell fails before the CLI
+    is reached, so nothing here could report it."""
+    route = respx.post(f"{env}/agent/goals/{path}/{TASK_ID}/plan/check").mock(
+        return_value=httpx.Response(200, json={"id": TASK_ID})
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            group, "plan-check", TASK_ID,
+            "--item-id", "3",
+            "--status", "failed",
+            "--note", "Drafted 3 of 3, but the owner's policy choice is still open",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {
+        "item_id": "3",
+        "status": "failed",
+        "note": "Drafted 3 of 3, but the owner's policy choice is still open",
+    }
+
+
+@respx.mock
+@pytest.mark.parametrize(("group", "path"), _GROUPS)
+def test_set_plan_builds_the_plan_from_repeated_step_options(
+    env: str, group: str, path: str
+) -> None:
+    """Step texts are prose too, and parentheses break a single-quoted body just as apostrophes do."""
+    route = respx.post(f"{env}/agent/goals/{path}/{TASK_ID}/plan").mock(
+        return_value=httpx.Response(200, json={"id": TASK_ID})
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            group, "set-plan", TASK_ID,
+            "--step", "Search CJ for men's leather belts",
+            "--step", "Shortlist 3 candidates (genuine leather, in stock)",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {
+        "plan": [
+            {"text": "Search CJ for men's leather belts"},
+            {"text": "Shortlist 3 candidates (genuine leather, in stock)"},
+        ]
+    }
+
+
+@respx.mock
+def test_add_note_takes_the_message_as_an_option(env: str) -> None:
+    """`add-note` exists on subagent tasks only, and its whole body is one sentence."""
+    route = respx.post(f"{env}/agent/goals/agent-tasks/{TASK_ID}/progress").mock(
+        return_value=httpx.Response(200, json={"id": TASK_ID})
+    )
+
+    result = runner.invoke(
+        app,
+        ["subagent-tasks", "add-note", TASK_ID, "--message", "CJ's search returned 3 belts"],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {
+        "message": "CJ's search returned 3 belts"
+    }
+
+
+@respx.mock
+@pytest.mark.parametrize(("group", "path"), _GROUPS)
+def test_plan_check_refuses_a_status_the_server_would_reject(
+    env: str, group: str, path: str
+) -> None:
+    """Checked locally against the same choices the body form uses, so a bad status costs no call."""
+    route = respx.post(f"{env}/agent/goals/{path}/{TASK_ID}/plan/check").mock(
+        return_value=httpx.Response(200, json={"id": TASK_ID})
+    )
+
+    result = runner.invoke(
+        app, [group, "plan-check", TASK_ID, "--item-id", "3", "--status", "blocked"]
+    )
+
+    assert result.exit_code == 1
+    assert "must be one of" in json.loads(result.stderr)["error"]["message"]
+    assert route.call_count == 0
+
+
+@respx.mock
+@pytest.mark.parametrize(("group", "path"), _GROUPS)
+def test_set_plan_without_a_plan_names_the_option_as_well_as_the_body(
+    env: str, group: str, path: str
+) -> None:
+    """A refusal that offers only -b sends the caller back to writing JSON in shell quotes — which
+    is the failure the option exists to remove."""
+    route = respx.post(f"{env}/agent/goals/{path}/{TASK_ID}/plan").mock(
+        return_value=httpx.Response(200, json={"id": TASK_ID})
+    )
+
+    result = runner.invoke(app, [group, "set-plan", TASK_ID])
+
+    assert result.exit_code == 1
+    message = json.loads(result.stderr)["error"]["message"]
+    assert "--step" in message
+    assert "-b/--body" in message
+    assert route.call_count == 0

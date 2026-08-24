@@ -487,3 +487,30 @@ def test_google_ads_targeting_takes_either_level() -> None:
     assert targeting.method == "GET"
     assert targeting.path == "/agent/ads/google/targeting"
     assert {f.name for f in targeting.flags} == {"campaign_id", "adgroup_id"}
+
+
+def test_describe_names_the_option_a_body_field_can_be_sent_as() -> None:
+    """A caller reading the schema has to be able to see that a short value goes on the command
+    line — otherwise it builds JSON in shell quotes and loses the call to an apostrophe."""
+    result = runner.invoke(app, ["describe", "subagent-tasks", "plan-check"])
+    assert result.exit_code == 0, result.output
+    detail = _data(result.stdout)
+    fields = {f["field"]: f for f in detail["body_fields"]}
+    assert fields["item_id"]["option"] == "--item-id"
+    assert fields["status"]["option"] == "--status"
+    assert fields["note"]["option"] == "--note"
+    # An object field keeps to -b: it has no sensible command-line spelling.
+    assert "option" not in fields["metadata"]
+
+
+def test_describe_shows_a_repeated_option_and_the_key_it_fills() -> None:
+    """`set-plan` takes a list of single-key objects, so its option repeats and says which key."""
+    result = runner.invoke(app, ["describe", "team-tasks", "set-plan"])
+    assert result.exit_code == 0, result.output
+    detail = _data(result.stdout)
+    fields = {f["field"]: f for f in detail["body_fields"]}
+    assert fields["plan"]["option"] == "--step"
+    assert fields["plan"]["option_item_key"] == "text"
+    # The runnable example prefers the spelling that survives prose.
+    assert "--step" in detail["example"]
+    assert "-b" not in detail["example"]

@@ -53,6 +53,42 @@ def _body_app() -> typer.Typer:
     return root
 
 
+def _option_body_app() -> typer.Typer:
+    """A group whose body fields are also reachable as real options (for the flag-body tests)."""
+    specs = (
+        Cmd(
+            "check",
+            "POST",
+            "/agent/things/{thing_id}/check",
+            summary="Update one item.",
+            body=(
+                body_field("item_id", option="--item-id", help="Which item."),
+                body_field(
+                    "status", choices=("done", "failed"), option="--status", help="New status."
+                ),
+                body_field("note", option="--note", help="Owner-facing line."),
+                body_field("metadata", type=dict, help="No option: objects stay in -b."),
+            ),
+        ),
+        Cmd(
+            "plan",
+            "POST",
+            "/agent/things/{thing_id}/plan",
+            summary="Replace the plan.",
+            body=(
+                body_field(
+                    "plan", type=list, required=True, option="--step", item_key="text",
+                    help="Ordered steps.",
+                ),
+            ),
+        ),
+    )
+    group = build_group("things", "Synthetic body-option group.", specs)
+    root = typer.Typer()
+    root.add_typer(group, name="things")
+    return root
+
+
 def _app() -> typer.Typer:
     """A bare root app with one synthetic group covering every command shape."""
     specs = (
@@ -440,3 +476,134 @@ def test_freeform_body_skips_validation(
     result = runner.invoke(_body_app(), ["things", "raw", "t1", "-b", '{"anything": [1, 2, 3]}'])
     assert result.exit_code == 0, result.stderr
     assert json.loads(route.calls.last.request.content) == {"anything": [1, 2, 3]}
+
+
+@respx.mock
+def test_body_options_assemble_the_body_without_any_json(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """The point of the whole mechanism: a value with an apostrophe in it reaches the API intact,
+    because it never has to survive being JSON inside shell quotes."""
+    route = respx.post(f"{fake_api_url}/agent/things/t1/check").mock(
+        return_value=httpx.Response(200, json={"ok": True})
+    )
+    result = runner.invoke(
+        _option_body_app(),
+        [
+            "things", "check", "t1",
+            "--item-id", "3",
+            "--status", "done",
+            "--note", "Search CJ for men's leather belts (30 variants)",
+        ],
+    )
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {
+        "item_id": "3",
+        "status": "done",
+        "note": "Search CJ for men's leather belts (30 variants)",
+    }
+
+
+@respx.mock
+def test_body_options_send_only_what_was_given(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """An option left off is absent from the body, not sent as null — the API tells "set this to
+    nothing" from "don't touch this" by whether the key is there."""
+    route = respx.post(f"{fake_api_url}/agent/things/t1/check").mock(
+        return_value=httpx.Response(200, json={"ok": True})
+    )
+    result = runner.invoke(_option_body_app(), ["things", "check", "t1", "--item-id", "3"])
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {"item_id": "3"}
+
+
+@respx.mock
+def test_repeated_option_with_an_item_key_builds_the_array_in_order(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """A plan is a list of single-key objects, and spelling that out by hand is what the quoting
+    trouble was made of."""
+    route = respx.post(f"{fake_api_url}/agent/things/t1/plan").mock(
+        return_value=httpx.Response(200, json={"ok": True})
+    )
+    result = runner.invoke(
+        _option_body_app(),
+        ["things", "plan", "t1", "--step", "Search CJ for men's belts", "--step", "Shortlist 3"],
+    )
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {
+        "plan": [{"text": "Search CJ for men's belts"}, {"text": "Shortlist 3"}]
+    }
+
+
+@respx.mock
+def test_body_options_are_checked_against_choices_before_the_call(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """One validation path for both spellings: the option builds a body, and the body is checked."""
+    route = respx.post(f"{fake_api_url}/agent/things/t1/check").mock(
+        return_value=httpx.Response(200, json={"ok": True})
+    )
+    result = runner.invoke(
+        _option_body_app(), ["things", "check", "t1", "--item-id", "3", "--status", "nope"]
+    )
+    assert result.exit_code == 1
+    message = json.loads(result.stderr)["error"]["message"]
+    assert "must be one of done, failed" in message
+    assert route.call_count == 0
+
+
+@respx.mock
+def test_mixing_the_body_and_its_options_is_refused(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """Both build the same body, so a caller that sent both meant one of them. Guessing which
+    would send half a body and report success."""
+    route = respx.post(f"{fake_api_url}/agent/things/t1/check").mock(
+        return_value=httpx.Response(200, json={"ok": True})
+    )
+    result = runner.invoke(
+        _option_body_app(),
+        ["things", "check", "t1", "--note", "hi", "-b", '{"item_id": "3"}'],
+    )
+    assert result.exit_code == 1
+    message = json.loads(result.stderr)["error"]["message"]
+    assert "not both" in message
+    assert "--note" in message
+    assert route.call_count == 0
+
+
+@respx.mock
+def test_the_body_still_works_when_no_option_is_used(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """Options are an addition, not a replacement: -b keeps working, including for the fields that
+    have no option of their own."""
+    route = respx.post(f"{fake_api_url}/agent/things/t1/check").mock(
+        return_value=httpx.Response(200, json={"ok": True})
+    )
+    body = {"item_id": "3", "status": "done", "metadata": {"job_id": "j-1"}}
+    result = runner.invoke(_option_body_app(), ["things", "check", "t1", "-b", json.dumps(body)])
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == body
+
+
+@respx.mock
+def test_body_options_never_leak_into_the_query_string(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """They are body fields that happen to have an option — not query filters."""
+    route = respx.post(f"{fake_api_url}/agent/things/t1/check").mock(
+        return_value=httpx.Response(200, json={"ok": True})
+    )
+    result = runner.invoke(_option_body_app(), ["things", "check", "t1", "--item-id", "3"])
+    assert result.exit_code == 0, result.stderr
+    assert dict(route.calls.last.request.url.params) == {}

@@ -54,3 +54,20 @@ def test_adopt_marketplace_version_requires_listing_id(
     result = runner.invoke(app, ["listings", "adopt-marketplace-version"])
 
     assert result.exit_code != 0
+
+
+@respx.mock
+def test_search_filters_by_the_variation_group(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """The group id is what drafting and publishing hand back, so it has to be searchable."""
+    group_id = "33333333-3333-4333-8333-333333333333"
+    route = respx.get(f"{fake_api_url}/agent/listings/search").mock(
+        return_value=httpx.Response(200, json={"data": {"items": [], "total": 0}})
+    )
+
+    result = runner.invoke(app, ["listings", "search", "--group-id", group_id])
+
+    assert result.exit_code == 0, result.stderr
+    assert route.calls.last.request.url.params["group_id"] == group_id
