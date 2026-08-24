@@ -18,7 +18,9 @@ SPECS = (
         "/agent/listings/{listing_id}",
         summary=(
             "Get one listing by its SellerClaw id, from any connected store. Use this to resolve "
-            "a listing the owner referenced (e.g. an @-mentioned listing card carries this id)."
+            "a listing the owner referenced (e.g. an @-mentioned listing card carries this id). "
+            "A variation group id works too and answers with the whole listing (its 'variants' "
+            "array) — that is the id drafting and publishing hand back."
         ),
     ),
     Cmd(
@@ -60,6 +62,13 @@ SPECS = (
                 help=(
                     "Catalog product id: returns every listing published from it, one entry each "
                     "with its variations folded. The only product -> listings route there is."
+                ),
+            ),
+            flag(
+                "group_id",
+                help=(
+                    "Variation group id: the whole listing that group names, as one entry. This is "
+                    "the id drafting and publishing hand back, so it is the one you already hold."
                 ),
             ),
             flag("store_id", help="Restrict to one store (sales channel id, see `channels list`)."),
@@ -346,7 +355,8 @@ SPECS = (
         summary=(
             "Draft catalog products onto ANY store — one command for every marketplace. Body: "
             "'products' is a list of {product_id, title?, description?, images?, attributes?, "
-            "category_id?} — everything describing the goods is stated per product, so a batch of "
+            "category_external_id?} — everything describing the goods is stated per product, so a "
+            "batch of "
             "ten gets ten descriptions, not one repeated. 'product_ids' is the shorthand when the "
             "catalog's own text will do. 'channel' carries what belongs to the account rather than "
             "the goods (eBay policies and api_kind, Etsy who_made, Walmart item spec) and is "
@@ -357,17 +367,19 @@ SPECS = (
                 "products",
                 type=list,
                 help=(
-                    "List of {product_id, title?, description?, images?, attributes?, category_id?}. "
-                    "The description is the listing's own copy — the catalog product's text is a "
-                    "seed, not a description. images is the whole gallery in publish order, first "
-                    "one the cover. category_id is where to file this one product; omit it and the "
-                    "product is placed for you."
+                    "List of {product_id, title?, description?, images?, attributes?, "
+                    "category_external_id?}. The description is the listing's own copy — the "
+                    "catalog product's text is a seed, not a description. images is the whole "
+                    "gallery in publish order, first one the cover. category_external_id is where "
+                    "to file this one product, in the marketplace's own id (the `external_id` from "
+                    "`categories`, not our `category_id`); omit it and the product is placed for "
+                    "you."
                 ),
                 example=[
                     {
                         "product_id": "<uuid>",
                         "description": "<the listing's own copy>",
-                        "category_id": "<marketplace category id>",
+                        "category_external_id": "<marketplace category id>",
                     },
                     {"product_id": "<uuid>"},
                 ],
