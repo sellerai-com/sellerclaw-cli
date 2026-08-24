@@ -243,3 +243,32 @@ def test_report_can_close_a_phase_as_failed(
 
     assert result.exit_code == 0, result.stderr
     assert json.loads(route.calls.last.request.content) == {"outcome": "3 of 5 live.", "plan": plan}
+
+
+@respx.mock
+def test_team_task_pause_sends_the_reason_verbatim(env: str) -> None:
+    """The reason is what the owner reads on the task, so it must reach the API unchanged."""
+    route = respx.post(f"{env}/agent/goals/team-tasks/{TASK_ID}/pause").mock(
+        return_value=httpx.Response(200, json={"id": TASK_ID})
+    )
+    body = {"reason": "Waiting for you to pick the eBay shipping and return policies."}
+
+    result = runner.invoke(app, ["team-tasks", "pause", TASK_ID, "-b", json.dumps(body)])
+
+    assert result.exit_code == 0, result.stderr
+    assert route.call_count == 1
+    assert json.loads(route.calls.last.request.content) == body
+
+
+@respx.mock
+def test_team_task_pause_refuses_to_park_a_job_without_saying_why(env: str) -> None:
+    """A parked job that does not say what it waits for is the whole failure this command fixes."""
+    route = respx.post(f"{env}/agent/goals/team-tasks/{TASK_ID}/pause").mock(
+        return_value=httpx.Response(200, json={"id": TASK_ID})
+    )
+
+    result = runner.invoke(app, ["team-tasks", "pause", TASK_ID, "-b", json.dumps({})])
+
+    assert result.exit_code != 0
+    assert "reason" in result.stderr
+    assert route.call_count == 0  # caught before the network call

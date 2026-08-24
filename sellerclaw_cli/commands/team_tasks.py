@@ -272,6 +272,25 @@ SPECS = (
         resolve_list_path=_LIST,
     ),
     Cmd(
+        "pause",
+        "POST",
+        "/agent/goals/team-tasks/{task_id}/pause",
+        summary="Park a team task until the owner answers, and say what it is waiting for.",
+        body=(
+            body_field(
+                "reason",
+                required=True,
+                help=(
+                    "What the job is waiting on, in the owner's own words — they read this on the "
+                    "task. No ids, no statuses."
+                ),
+                example="Waiting for you to pick the eBay shipping and return policies.",
+            ),
+        ),
+        active_slot=_SLOT,
+        resolve_list_path=_LIST,
+    ),
+    Cmd(
         "cancel",
         "POST",
         "/agent/goals/team-tasks/{task_id}/cancel",
