@@ -214,6 +214,16 @@ def _flag_help(f: Flag) -> str:
     return " ".join(parts)
 
 
+def _body_option_help(field: BodyField) -> str:
+    """Help for a body field's option — its own words, plus the choices it accepts."""
+    parts = [field.help.strip()] if field.help.strip() else []
+    if field.choices:
+        parts.append(f"[one of: {', '.join(field.choices)}]")
+    if field.item_key:
+        parts.append("[repeat for each entry, in order]")
+    return " ".join(parts)
+
+
 def _validate_flag(f: Flag, value: object) -> None:
     """Reject out-of-range / out-of-choice values locally (clear error, no server round-trip)."""
     if value is None or value == [] or value is False:
@@ -290,6 +300,11 @@ class Cmd:
     def takes_body(self) -> bool:
         """Whether this command accepts a ``-b``/``--body`` JSON payload."""
         return self.has_body or self.body_freeform or bool(self.body) or self.query_body
+
+    @property
+    def body_options(self) -> tuple[BodyField, ...]:
+        """Body fields this command also exposes as real ``--options``, in declaration order."""
+        return tuple(f for f in self.body if f.option)
 
 
 @dataclass(frozen=True)
@@ -377,9 +392,20 @@ def validate_body(group: str, cmd: Cmd, body: Any) -> None:
     if body is None:
         if required:
             names = ", ".join(f.name for f in required)
+            # Name the options too, where the command has them. A refusal that offers only -b sends
+            # the caller straight back to writing JSON in shell quotes — the thing the options are
+            # here to avoid — so the message has to know about both routes.
+            routes = ", ".join(f.option for f in required if f.option) or ", ".join(
+                f.option for f in cmd.body_options if f.option
+            )
+            opening = (
+                f"this command needs a body: pass {routes}, or JSON via -b/--body"
+                if routes
+                else "this command needs a JSON body via -b/--body"
+            )
             emit_error(
                 UserInputError(
-                    f"this command needs a JSON body via -b/--body. Required field(s): {names}. "
+                    f"{opening}. Required field(s): {names}. "
                     f"Allowed field(s): {', '.join(allowed)}. {hint}"
                 )
             )
