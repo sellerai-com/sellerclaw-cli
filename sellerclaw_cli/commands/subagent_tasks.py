@@ -80,6 +80,7 @@ SPECS = (
             body_field(
                 "message",
                 required=True,
+                option="--message",
                 help="Progress note with concrete data points, not just a status label.",
             ),
         ),
@@ -109,6 +110,8 @@ SPECS = (
                     {"text": "Save chosen product to catalog"},
                     {"text": "Publish to Shopify"},
                 ],
+                option="--step",
+                item_key="text",
             ),
         ),
         active_slot=_SLOT,
@@ -137,11 +140,13 @@ SPECS = (
             ),
             body_field(
                 "item_id",
+                option="--item-id",
                 help="Id of the plan item to update (read it from `get`). Single-item shorthand.",
             ),
             body_field(
                 "status",
                 choices=("pending", "in_progress", "done", "skipped", "failed"),
+                option="--status",
                 help=(
                     "New status for the item. A step you worked that did not land is `failed`, "
                     "never `done` — partial counts as failed. `skipped` and `failed` need a `note`."
@@ -149,6 +154,7 @@ SPECS = (
             ),
             body_field(
                 "note",
+                option="--note",
                 help=(
                     "Short plain-language line the owner reads under this step in their plan view "
                     '(e.g. "Saved the folding organizer to the catalog"). No raw ids.'

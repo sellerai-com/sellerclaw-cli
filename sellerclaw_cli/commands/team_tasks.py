@@ -171,6 +171,8 @@ SPECS = (
                     {"text": "Source a pet product from the supplier"},
                     {"text": "Publish the chosen product to Shopify"},
                 ],
+                option="--step",
+                item_key="text",
             ),
         ),
         active_slot=_SLOT,
@@ -199,11 +201,13 @@ SPECS = (
             ),
             body_field(
                 "item_id",
+                option="--item-id",
                 help="Id of the plan item to update (read it from `get`). Single-phase shorthand.",
             ),
             body_field(
                 "status",
                 choices=("pending", "in_progress", "done", "skipped", "failed"),
+                option="--status",
                 help=(
                     "New status for the phase. A phase you worked that did not land is `failed`, "
                     "never `done` — partial counts as failed. `skipped` and `failed` need a `note`."
@@ -211,6 +215,7 @@ SPECS = (
             ),
             body_field(
                 "note",
+                option="--note",
                 help=(
                     "Short plain-language line the owner reads under this phase in their plan view "
                     '(e.g. "Sourced the folding organizer ($4.20) from CJ"). No raw ids.'
