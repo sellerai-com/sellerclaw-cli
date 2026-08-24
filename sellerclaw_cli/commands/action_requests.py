@@ -17,7 +17,7 @@ SPECS = (
         "get",
         "GET",
         "/agent/goals/action-requests/{request_id}",
-        summary="Get one action request by id (check its status).",
+        summary="Get one action request by id (check its status, and which option was chosen).",
     ),
     Cmd(
         "create",
@@ -49,6 +49,31 @@ SPECS = (
                 help=(
                     "Optional one-line statement of exactly what you're asking, shown to the owner "
                     "above the details (e.g. 'Approve sending this email before it goes out')."
+                ),
+            ),
+            body_field(
+                "options",
+                type=dict,
+                repeatable=True,
+                help=(
+                    "Turn the ask into a CHOICE instead of a yes/no — an array of "
+                    '{"label": "...", "description"?: "..."}. Use it when the blocker has several '
+                    "right answers (which shipping policy, which markup): two to eight of them, "
+                    "`label` is the button and `description` the one line the owner decides on. "
+                    "Ids are issued by the server (\"1\", \"2\", ...) — read them off the reply. "
+                    'Needs mode "decision" and cannot be combined with staged work.'
+                ),
+                example=[
+                    {"label": "Musurok Shipping", "description": "4 days, free — on 101 listings"},
+                    {"label": "Chulkov Shipping from US", "description": "4 days, flat rate"},
+                ],
+            ),
+            body_field(
+                "allow_custom_option",
+                type=bool,
+                help=(
+                    "With `options`, let the owner answer in their own words instead of picking "
+                    "one. Their wording comes back in `resolution_note` with no selected option."
                 ),
             ),
             body_field("goal_id", help="Related goal id (UUID), if any."),
