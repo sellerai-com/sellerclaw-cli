@@ -91,7 +91,14 @@ SPECS = (
         summary="Walk the category tree one level down. Rarely needed — prefer `suggest`.",
         flags=(
             flag("store_id", required=True, help="Store whose marketplace to walk."),
-            flag("parent_id", help="Marketplace category id; omit for the top level."),
+            flag(
+                "parent_external_id",
+                aliases=("--parent-id",),
+                help=(
+                    "The marketplace's own id for the parent (an `external_id`); omit for the top "
+                    "level. `--parent-id` is the old spelling."
+                ),
+            ),
             flag("tree_id", help="Which tree, when the store has several (e.g. eBay Motors)."),
         ),
     ),
@@ -127,8 +134,15 @@ SPECS = (
             body_field("store_id", required=True, help="Your store (from `channels list`)."),
             body_field("name", required=True, help="What the category is called."),
             body_field(
+                "parent_external_id",
+                help=(
+                    "Category to nest this one under, in the shop's own id (`external_id`); omit "
+                    "for a top-level one."
+                ),
+            ),
+            body_field(
                 "parent_id",
-                help="Category to nest this one under (an `external_id`); omit for a top-level one.",
+                help="Deprecated spelling of `parent_external_id`; send one or the other.",
             ),
         ),
     ),
@@ -140,9 +154,15 @@ SPECS = (
         body=(
             body_field("store_id", required=True, help="Your store (from `channels list`)."),
             body_field(
+                "external_id",
+                help=(
+                    "The shop's own id for the category to rename (from `search`/`used`). Not our "
+                    "mirror row's `category_id` — this call has only ever taken the shop's."
+                ),
+            ),
+            body_field(
                 "category_id",
-                required=True,
-                help="The `external_id` of the category to rename (from `search`/`used`).",
+                help="Deprecated spelling of `external_id`; send one or the other.",
             ),
             body_field("name", required=True, help="The new name."),
         ),
