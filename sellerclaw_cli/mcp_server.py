@@ -38,11 +38,12 @@ launch. Authentication is inherited from the usual CLI config — ``SELLERCLAW_T
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from sellerclaw_cli import guides
 from sellerclaw_cli._client import Client
-from sellerclaw_cli._command_group import REGISTRY, Cmd, Flag, GroupSpec, positionals_of
+from sellerclaw_cli._command_group import REGISTRY, Cmd, Flag, GroupSpec, positionals_of, upload_payload
 from sellerclaw_cli._errors import UserInputError
 from sellerclaw_cli.commands._discover import _body_example
 
@@ -332,6 +333,9 @@ def _command_schema(group: str, cmd: Cmd) -> dict[str, Any]:
         "path": cmd.path,
         "summary": cmd.summary,
         "positionals": positionals_of(cmd.path),
+        # A command that sends a file: pass the local path as positionals["file"]. It is not a path
+        # placeholder, so it is announced on its own rather than in the list above.
+        **({"upload_file": True} if cmd.upload_file else {}),
         "flags": [_flag_schema(f) for f in cmd.flags],
         "takes_body": cmd.takes_body,
         "body_freeform": cmd.takes_body and not cmd.body,
@@ -419,8 +423,18 @@ def run_command(
     if body is not None and not cmd.takes_body:
         raise UserInputError(f"{group} {command} does not take a body; drop the `body` argument.")
 
+    files = None
+    if cmd.upload_file:
+        local_path = str(positionals.get("file") or "").strip()
+        if not local_path:
+            raise UserInputError(
+                f"{group} {command} uploads a file: pass its local path as positionals: "
+                '{"file": "/path/to/image.jpg"}.'
+            )
+        files = upload_payload(Path(local_path), filename=params.get("filename"))
+
     with _client_for_tool(cmd.effective_timeout) as client:
-        return client.request(cmd.method, path, params=params or None, json=body)
+        return client.request(cmd.method, path, params=params or None, json=body, files=files)
 
 
 def _map_flags(group: str, command: str, cmd: Cmd, flags: dict[str, Any]) -> dict[str, Any]:

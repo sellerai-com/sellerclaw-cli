@@ -16,9 +16,11 @@ from __future__ import annotations
 
 import difflib
 import inspect
+import mimetypes
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import Any
 
 import typer
@@ -282,6 +284,11 @@ class Cmd:
     # model call, publishing then waits on the marketplace) — there, the default refuses a call that
     # is still working. ``describe`` reports the effective value so the caller can size its own wait.
     timeout: float | None = None
+    # A command that sends a file rather than JSON: it takes the local path as its first argument
+    # and posts the bytes as multipart/form-data. Declared here rather than hand-written as a
+    # separate Typer command so the command still appears in ``describe`` and in the surface
+    # snapshot the agent's skills are checked against.
+    upload_file: bool = False
 
     @property
     def effective_timeout(self) -> float:
@@ -605,6 +612,24 @@ def _resolve_active_id(cmd: Cmd, positionals: dict[str, Any], raw: Any) -> str:
     return value
 
 
+def upload_payload(file_path: Path, *, filename: str | None = None) -> dict[str, tuple[str, bytes, str]]:
+    """The multipart field for a file being uploaded, read off disk.
+
+    Shared by the CLI command and the MCP tool so both send the picture itself. Posting the file as
+    a JSON body — the shape every other command takes — is what an upload command that took ``-b``
+    invited, and it ended with the text of a JSON document stored as an ad image.
+    """
+    name = filename or file_path.name
+    content_type, _ = mimetypes.guess_type(name)
+    try:
+        content = file_path.read_bytes()
+    except OSError as exc:
+        raise UserInputError(f"failed to read file {file_path}: {exc}") from exc
+    if not content:
+        raise UserInputError(f"{file_path} is empty — nothing to upload.")
+    return {"file": (name, content, content_type or "application/octet-stream")}
+
+
 def _make_callback(group: str, cmd: Cmd):
     """Build a callback with a synthetic signature Typer can introspect.
 
@@ -617,6 +642,12 @@ def _make_callback(group: str, cmd: Cmd):
     def _callback(**kwargs: Any) -> None:
         ctx = kwargs.pop("ctx")
         values = {name: kwargs.pop(name) for name in positionals}
+        files: dict[str, tuple[str, bytes, str]] | None = None
+        if cmd.upload_file:
+            try:
+                files = upload_payload(kwargs.pop("file"), filename=kwargs.get("filename"))
+            except CliError as err:
+                emit_error(err)
         resolved_active: str | None = None
         if cmd.active_positional is not None:
             resolved_active = _resolve_active_id(
@@ -666,6 +697,7 @@ def _make_callback(group: str, cmd: Cmd):
             path,
             params=params or None,
             json_body=body,
+            files=files,
             timeout=cmd.effective_timeout,
             job_poll_path=poll_path,
         )
@@ -699,6 +731,17 @@ def _make_callback(group: str, cmd: Cmd):
             )
         )
         annotations[name] = annotation
+
+    if cmd.upload_file:
+        parameters.append(
+            inspect.Parameter(
+                "file",
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                default=typer.Argument(..., help="Path to the local file to upload."),
+                annotation=Path,
+            )
+        )
+        annotations["file"] = Path
 
     for f in cmd.flags:
         annotation = _flag_annotation(f)

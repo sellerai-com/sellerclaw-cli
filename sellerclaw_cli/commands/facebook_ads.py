@@ -141,7 +141,13 @@ SPECS = (
                 "creative",
                 type=dict,
                 required=True,
-                help="Ad creative spec, e.g. {title, body, link_url, image_hash, call_to_action} or {object_story_spec}.",
+                help=(
+                    "The words and picture: {title, body, description, link_url, image_hash, "
+                    'call_to_action} — a plain button name like "SHOP_NOW" is fine. Assembled into '
+                    "the object_story_spec Meta requires; pass one yourself to control the whole "
+                    "shape. page_id names the Page the ad runs from (list-pages); omit it and the "
+                    "ad account's own Page is used. image_hash comes from upload-image."
+                ),
             ),
             body_field("status", help="Ignored — ads are always created paused."),
         ),
@@ -155,6 +161,12 @@ SPECS = (
         body_freeform=True,
     ),
     # Creatives, audiences, images, targeting
+    Cmd(
+        "list-pages",
+        "GET",
+        "/agent/ads/facebook/pages",
+        summary="List the Meta Pages this ad account can advertise from (an ad runs as a Page).",
+    ),
     Cmd("list-creatives", "GET", "/agent/ads/facebook/adcreatives", summary="List ad creatives."),
     Cmd("list-audiences", "GET", "/agent/ads/facebook/audiences", summary="List custom audiences."),
     Cmd(
@@ -178,8 +190,12 @@ SPECS = (
         "upload-image",
         "POST",
         "/agent/ads/facebook/images",
-        summary="Upload an image to the ad account.",
-        body_freeform=True,
+        summary="Upload an image file to the ad account; returns the image_hash a creative needs.",
+        # The picture itself, not a description of it. Declared as an upload rather than a JSON
+        # body: sending the file as JSON is what a `-b` body invited, and every real image died on
+        # its first byte before the request was ever made.
+        upload_file=True,
+        flags=(flag("filename", help="Name to store it under (default: the local file's name)."),),
     ),
     Cmd(
         "search-interests",

@@ -116,6 +116,8 @@ def _body_example(cmd: Cmd) -> dict[str, object]:
 def _example(group: str, cmd: Cmd) -> str:
     parts = [f"sellerclaw {group} {cmd.name}"]
     parts += [f"<{p}>" for p in positionals_of(cmd.path)]
+    if cmd.upload_file:
+        parts.append("<path to the file>")
     parts += [f"--{f.name.replace('_', '-')} <{f.name}>" for f in cmd.flags if f.required]
     if cmd.query_body:
         parts.append("-q '<graphql document>'")
@@ -254,6 +256,8 @@ def _command_detail(group: str, cmd: Cmd) -> dict[str, object]:
         "path": cmd.path,
         "summary": cmd.summary,
         "positionals": positionals_of(cmd.path),
+        # This command sends a file, given as a local path in the first argument — not a JSON body.
+        "upload_file": cmd.upload_file,
         "flags": _flag_repr(group, cmd),
         "body": cmd.takes_body,
         "body_fields": _body_repr(cmd),
