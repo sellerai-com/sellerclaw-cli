@@ -636,6 +636,11 @@ def _make_callback(group: str, cmd: Cmd):
                         variables=kwargs.pop("variables", None),
                         raw_body=raw_body,
                     )
+                elif cmd.body_options:
+                    option_values = {
+                        f.name: kwargs.pop(f.name, None) for f in cmd.body_options
+                    }
+                    body = _build_option_body(cmd, option_values, raw_body=raw_body)
                 else:
                     body = parse_json_body(raw_body)
             except CliError as err:
@@ -738,6 +743,26 @@ def _make_callback(group: str, cmd: Cmd):
             )
         )
         annotations["variables"] = str | None
+
+    for field in cmd.body:
+        option = field.option
+        if option is None:
+            continue
+        field_annotation: Any = list[str] if (field.item_key or field.repeatable) else str | None
+        field_default = (
+            typer.Option([], option, help=_body_option_help(field))
+            if (field.item_key or field.repeatable)
+            else typer.Option(None, option, help=_body_option_help(field))
+        )
+        parameters.append(
+            inspect.Parameter(
+                field.name,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                default=field_default,
+                annotation=field_annotation,
+            )
+        )
+        annotations[field.name] = field_annotation
 
     if cmd.takes_body:
         body_annotation: Any = str | None
