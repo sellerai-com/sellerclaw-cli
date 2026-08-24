@@ -37,7 +37,8 @@ SPECS = (
                     "Who acts after the owner responds. 'decision': you can do it yourself but "
                     "need a go-ahead (owner approves/rejects, then you act). 'delegation': only "
                     "the owner can do it (they do it and report back). Omit to default from kind "
-                    "(approval/review -> decision, else delegation)."
+                    "(approval/review -> decision, else delegation) \u2014 or, with `options`, to decision, "
+                    "the only mode a choice can have."
                 ),
                 choices=("decision", "delegation"),
                 example="decision",
@@ -61,7 +62,7 @@ SPECS = (
                     "right answers (which shipping policy, which markup): two to eight of them, "
                     "`label` is the button and `description` the one line the owner decides on. "
                     "Ids are issued by the server (\"1\", \"2\", ...) — read them off the reply. "
-                    'Needs mode "decision" and cannot be combined with staged work.'
+                    'Only a decision can offer them, and they cannot be combined with staged work.'
                 ),
                 example=[
                     {"label": "Musurok Shipping", "description": "4 days, free — on 101 listings"},
