@@ -16,6 +16,24 @@ sellerclaw_run(group="suppliers", command="search-products",
 sellerclaw_run(group="suppliers", command="resolve-url", flags={"url": "https://…"})
 ```
 
+**Asking for a kind of product? Use the category, not the keyword.** A supplier catalogue is
+enormous and its search matches product *names*, so "leather belt" comes back full of belted dresses
+and pet leashes and no re-phrasing separates them. Find the category once, then filter by it:
+
+```text
+sellerclaw_run(group="suppliers", command="categories",
+  positionals={"provider": "cj"}, flags={"search": "belt"})     # → id of "…> Men's Accessories > Belts"
+
+sellerclaw_run(group="suppliers", command="search-products",
+  positionals={"provider": "cj"}, flags={"category": CATEGORY_ID, "sort": "listings", "order_by": "desc"})
+```
+
+`query` is optional once `category` is set — that browses the category whole, sorted by how many
+shops already sell each item. Rows whose `is_searchable` is false are branches to browse into
+(`flags={"parent": "…"}`), not ids to filter by. Add `country` only to *narrow* a result set you
+already have: it drops everything without a warehouse in that country, which for dropship goods is
+most of the catalogue.
+
 ## Read one product properly
 
 ```text

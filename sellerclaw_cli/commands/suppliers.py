@@ -21,20 +21,66 @@ SPECS = (
         flags=(flag("url", required=True, help="Public supplier product URL."),),
     ),
     Cmd(
+        "categories",
+        "GET",
+        "/agent/suppliers/{provider}/categories",
+        summary="Browse or search the supplier's own category tree (ids for --category).",
+        flags=(
+            flag(
+                "search",
+                help=(
+                    "Find every category whose breadcrumb contains this text, at any depth — the "
+                    "quickest way to the id for 'belts'."
+                ),
+            ),
+            flag(
+                "parent",
+                help=(
+                    "List the children of this category (its name, breadcrumb or id). Omit both "
+                    "flags for the top level."
+                ),
+            ),
+            flag(
+                "limit",
+                type=int,
+                minimum=1,
+                maximum=500,
+                default=50,
+                help="Most categories to return; the reply's `total` says how many matched.",
+            ),
+        ),
+    ),
+    Cmd(
         "search-products",
         "GET",
         "/agent/suppliers/{provider}/products",
-        summary="Search a supplier's catalog, with optional warehouse / price / sort filters.",
+        summary="Search a supplier's catalog by keyword and/or category, with warehouse / price / sort filters.",
         flags=(
-            flag("query", required=True, help="Search text."),
+            flag(
+                "query",
+                help=(
+                    "Search text. Optional when --category is given: that browses the whole "
+                    "category, which is how you ask for a kind of product rather than for a word "
+                    "that happens to be in its name."
+                ),
+            ),
+            flag(
+                "category",
+                param="category_id",
+                help=(
+                    "Only products in this category of the supplier's own tree. Get the id from "
+                    "`suppliers categories <provider> --search <text>`."
+                ),
+            ),
             flag("page", type=int, help="Page number."),
             flag("page_size", type=int, help="Results per page."),
             flag(
                 "country",
                 param="country_code",
                 help=(
-                    "Only products with a warehouse in this country (ISO alpha-2, e.g. US) — "
-                    "a local warehouse ships cheaper and faster than China."
+                    "Only products with a warehouse in this country (ISO alpha-2, e.g. US). A hard "
+                    "filter — most dropship goods ship from China and are dropped by it, so search "
+                    "without it first and add it once there is something to narrow."
                 ),
             ),
             flag(
