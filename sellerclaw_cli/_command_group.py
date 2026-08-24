@@ -519,6 +519,41 @@ def _build_query_body(*, query: str | None, variables: str | None, raw_body: str
     )
 
 
+def _build_option_body(cmd: Cmd, values: dict[str, Any], *, raw_body: str | None) -> Any:
+    """Assemble the body from the per-field ``--options``, or fall back to the literal ``-b``.
+
+    Refuses the mix rather than guessing a precedence: a caller that sent both meant one of them,
+    and silently dropping half a body is the kind of "it ran, and did something else" an agent
+    cannot see. Same shape as the ``-q``/``-b`` refusal for GraphQL.
+    """
+    given = {f.name: values[f.name] for f in cmd.body_options if _option_given(f, values[f.name])}
+    if not given:
+        return parse_json_body(raw_body)
+    if raw_body is not None:
+        names = ", ".join(f.option or "" for f in cmd.body_options if f.name in given)
+        raise UserInputError(
+            f"pass either -b/--body or the field options ({names}), not both — "
+            f"they build the same body."
+        )
+    body: dict[str, Any] = {}
+    for field in cmd.body_options:
+        if field.name not in given:
+            continue
+        value = given[field.name]
+        if field.item_key:
+            body[field.name] = [{field.item_key: item} for item in value]
+        else:
+            body[field.name] = value
+    return body
+
+
+def _option_given(field: BodyField, value: Any) -> bool:
+    """Whether this field's option carries something to send."""
+    if field.item_key or field.repeatable:
+        return bool(value)
+    return value is not None
+
+
 def _expand_id_prefix(cmd: Cmd, positionals: dict[str, Any], prefix: str) -> str | None:
     """Expand a short id ``prefix`` to a full id via the command's ``resolve_list_path``.
 
