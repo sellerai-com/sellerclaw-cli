@@ -32,6 +32,30 @@ SPECS = (
                 help="Campaign objective, e.g. OUTCOME_SALES, OUTCOME_TRAFFIC, OUTCOME_LEADS.",
                 example="OUTCOME_SALES",
             ),
+            # Where the budget sits is decided here, not later: a campaign budget (CBO) means every
+            # ad set under it is created without one, and no budget here means each ad set brings
+            # its own. Undeclared, this choice was invisible and every campaign came out budgetless.
+            body_field(
+                "daily_budget",
+                type=float,
+                help=(
+                    "Daily budget in the account currency (50 = $50). Sets campaign budget "
+                    "optimization: ad sets under it then carry no budget of their own."
+                ),
+            ),
+            body_field(
+                "lifetime_budget",
+                type=float,
+                help="Lifetime budget in the account currency, instead of daily_budget. Same CBO effect.",
+            ),
+            body_field(
+                "special_ad_categories",
+                type=list,
+                help=(
+                    'Regulated categories, e.g. ["HOUSING"], ["CREDIT"], ["EMPLOYMENT"]. Defaults '
+                    "to none — send it only when the ads really are in one."
+                ),
+            ),
             body_field("status", help="Ignored — campaigns are always created paused; activate via PATCH."),
         ),
         body_strict=False,
