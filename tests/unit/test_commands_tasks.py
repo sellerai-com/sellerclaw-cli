@@ -160,3 +160,86 @@ def test_set_plan_carries_per_item_notes(env: str, group: str, path: str) -> Non
 
     assert result.exit_code == 0, result.stderr
     assert json.loads(route.calls.last.request.content) == {"plan": plan}
+
+
+@respx.mock
+@pytest.mark.parametrize(("group", "path"), _GROUPS)
+@pytest.mark.parametrize(
+    "status",
+    [
+        pytest.param("pending", id="pending"),
+        pytest.param("in_progress", id="in_progress"),
+        pytest.param("done", id="done"),
+        pytest.param("skipped", id="skipped"),
+        pytest.param("failed", id="failed"),
+    ],
+)
+def test_plan_check_sends_every_server_status(
+    env: str, group: str, path: str, status: str
+) -> None:
+    """The single-item form must carry the same statuses the batch form and the server accept.
+
+    Regression guard: `failed` was missing from the local `choices`, so a phase that was worked and
+    did not land was refused before the request left the machine — while the very same value went
+    through untouched inside `items`. The supervisor filed it as `skipped` ("nobody tried") instead.
+    """
+    route = respx.post(f"{env}/agent/goals/{path}/{TASK_ID}/plan/check").mock(
+        return_value=httpx.Response(200, json={"id": TASK_ID})
+    )
+    body = {"item_id": "4", "status": status, "note": "1 of 3 live; two blocked on the owner"}
+
+    result = runner.invoke(app, [group, "plan-check", TASK_ID, "-b", json.dumps(body)])
+
+    assert result.exit_code == 0, result.stderr
+    assert route.call_count == 1
+    assert json.loads(route.calls.last.request.content) == body
+
+
+@respx.mock
+@pytest.mark.parametrize(("group", "path"), _GROUPS)
+def test_plan_check_rejects_a_status_the_server_does_not_have(
+    env: str, group: str, path: str
+) -> None:
+    """The choice list still guards — it is the stale list that was the bug, not the checking."""
+    route = respx.post(f"{env}/agent/goals/{path}/{TASK_ID}/plan/check").mock(
+        return_value=httpx.Response(200, json={"id": TASK_ID})
+    )
+
+    result = runner.invoke(
+        app,
+        [group, "plan-check", TASK_ID, "-b", json.dumps({"item_id": "1", "status": "blocked"})],
+    )
+
+    assert result.exit_code != 0
+    assert "must be one of" in result.stderr
+    assert "failed" in result.stderr
+    assert route.call_count == 0
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    ("group", "path", "review_path"),
+    [
+        pytest.param("subagent-tasks", "agent-tasks", "request-review", id="subagent-request-review"),
+        pytest.param("team-tasks", "team-tasks", "request-review", id="team-request-review"),
+        pytest.param("team-tasks", "team-tasks", "complete", id="team-complete"),
+    ],
+)
+def test_report_can_close_a_phase_as_failed(
+    env: str, group: str, path: str, review_path: str
+) -> None:
+    route = respx.post(f"{env}/agent/goals/{path}/{TASK_ID}/{review_path}").mock(
+        return_value=httpx.Response(200, json={"id": TASK_ID})
+    )
+    plan = [
+        {"item_id": "1", "status": "done"},
+        {"item_id": "2", "status": "failed", "note": "Drafts ready; publish blocked on the policy choice"},
+    ]
+
+    result = runner.invoke(
+        app,
+        [group, review_path, TASK_ID, "-b", json.dumps({"outcome": "3 of 5 live.", "plan": plan})],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {"outcome": "3 of 5 live.", "plan": plan}

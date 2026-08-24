@@ -20,11 +20,15 @@ _PLAN_CLOSE_FIELD = body_field(
     repeatable=True,
     help=(
         "Close the plan in this same call — an array of "
-        '{"item_id": "...", "status": "done"|"skipped", "note"?: ...}. '
-        "Every phase must end `done` or `skipped`, or the report is rejected and names what is "
-        "still open."
+        '{"item_id": "...", "status": "done"|"skipped"|"failed", "note"?: ...}. '
+        "Every phase must end `done`, `skipped` or `failed`, or the report is rejected and names "
+        "what is still open. A phase that was worked and did not land is `failed`, never `done` — "
+        "partial counts as failed. `skipped` and `failed` need a `note` saying what stopped it."
     ),
-    example=[{"item_id": "1", "status": "done"}, {"item_id": "2", "status": "skipped"}],
+    example=[
+        {"item_id": "1", "status": "done"},
+        {"item_id": "2", "status": "failed", "note": "1 of 3 live; two blocked by the publish limit"},
+    ],
 )
 
 SPECS = (
@@ -157,7 +161,7 @@ SPECS = (
                 required=True,
                 help=(
                     "Ordered list of phases. Each item is an object with `text` (required) and "
-                    "optional `status` (pending|in_progress|done|skipped), `id`, `note` (the "
+                    "optional `status` (pending|in_progress|done|skipped|failed), `id`, `note` (the "
                     "owner-facing progress line) and `metadata` (private). "
                     "Omit `id` for a new phase (the server assigns one); re-send an existing `id` "
                     "to keep its history. Lay out every phase up front, including ones whose agent "
@@ -199,8 +203,11 @@ SPECS = (
             ),
             body_field(
                 "status",
-                choices=("pending", "in_progress", "done", "skipped"),
-                help="New status for the phase.",
+                choices=("pending", "in_progress", "done", "skipped", "failed"),
+                help=(
+                    "New status for the phase. A phase you worked that did not land is `failed`, "
+                    "never `done` — partial counts as failed. `skipped` and `failed` need a `note`."
+                ),
             ),
             body_field(
                 "note",

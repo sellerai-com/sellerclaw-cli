@@ -98,7 +98,7 @@ SPECS = (
                 required=True,
                 help=(
                     "Ordered list of steps. Each item is an object with `text` (required) and "
-                    "optional `status` (pending|in_progress|done|skipped), `id`, `note` (the "
+                    "optional `status` (pending|in_progress|done|skipped|failed), `id`, `note` (the "
                     "owner-facing progress line) and `metadata` (private). Omit `id` for a new "
                     "step (the server assigns one); re-send an existing `id` to keep that item's "
                     "history when restructuring."
@@ -141,8 +141,11 @@ SPECS = (
             ),
             body_field(
                 "status",
-                choices=("pending", "in_progress", "done", "skipped"),
-                help="New status for the item.",
+                choices=("pending", "in_progress", "done", "skipped", "failed"),
+                help=(
+                    "New status for the item. A step you worked that did not land is `failed`, "
+                    "never `done` — partial counts as failed. `skipped` and `failed` need a `note`."
+                ),
             ),
             body_field(
                 "note",
@@ -192,11 +195,15 @@ SPECS = (
                 repeatable=True,
                 help=(
                     "Close the plan in this same call — an array of "
-                    '{"item_id": "...", "status": "done"|"skipped", "note"?: ...}. '
-                    "Every step must end `done` or `skipped`, or the report is rejected and names "
-                    "what is still open."
+                    '{"item_id": "...", "status": "done"|"skipped"|"failed", "note"?: ...}. '
+                    "Every step must end `done`, `skipped` or `failed`, or the report is rejected "
+                    "and names what is still open. A step you worked that did not land is `failed`, "
+                    "never `done` — partial counts as failed. `skipped` and `failed` need a `note`."
                 ),
-                example=[{"item_id": "1", "status": "done"}, {"item_id": "2", "status": "skipped"}],
+                example=[
+                    {"item_id": "1", "status": "done"},
+                    {"item_id": "2", "status": "failed", "note": "1 of 3 published; two refused by the marketplace"},
+                ],
             ),
         ),
         active_slot=_SLOT,
