@@ -171,6 +171,35 @@ def test_suppliers_expose_per_product_stock() -> None:
     assert detail["example"].startswith("sellerclaw suppliers check-stock-by-product <provider> <product_id>")
 
 
+def test_suppliers_expose_a_batch_product_read() -> None:
+    """``inspect-batch`` reads a whole shortlist in one call.
+
+    The command exists so a candidate pool costs the caller one turn instead of one per product —
+    the per-product loop is what made a nine-product search expensive.
+    """
+    result = runner.invoke(app, ["commands", "--group", "suppliers"])
+    assert result.exit_code == 0, result.output
+    cmds = {row["command"] for row in _data(result.stdout)}
+    assert "inspect-batch" in cmds
+
+    detail = _data(runner.invoke(app, ["describe", "suppliers", "inspect-batch"]).stdout)
+    assert detail["method"] == "POST"
+    assert detail["positionals"] == ["provider"]
+    assert detail["body"] is True
+    body_fields = {field["field"] for field in detail["body_fields"]}
+    assert {"product_ids", "destination", "include"} <= body_fields
+
+
+def test_inspect_does_not_offer_a_shipping_method_to_pin() -> None:
+    """Quotes list every method the provider offers; pinning one never reached the provider.
+
+    The flag taught agents to "retry with another method" on a refusal — changing a field CJ's
+    freight endpoint is not even sent.
+    """
+    detail = _data(runner.invoke(app, ["describe", "suppliers", "inspect"]).stdout)
+    assert "--shipping-method" not in {flag["flag"] for flag in detail["flags"]}
+
+
 def test_catalog_and_orders_expose_search() -> None:
     """Products and orders are findable by name/number/SKU without dumping the whole list."""
     for group in ("catalog", "orders"):

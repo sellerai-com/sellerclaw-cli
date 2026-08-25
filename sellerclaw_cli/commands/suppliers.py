@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import typer
 
-from sellerclaw_cli._command_group import Cmd, body_field, build_group, flag
+from sellerclaw_cli._command_group import (
+    LONG_TIMEOUT_SECONDS,
+    Cmd,
+    body_field,
+    build_group,
+    flag,
+)
 
 NAME = "suppliers"
 
@@ -111,14 +117,64 @@ SPECS = (
         "GET",
         "/agent/suppliers/{provider}/products/{product_id}/inspect",
         summary=(
-            "One-shot product card: get-product + variants "
-            "+ optional shipping quote. Prefer this over chaining the individual commands."
+            "One-shot card for ONE product: details + variants + real per-warehouse stock + "
+            "optional shipping quote. Stock comes with it, so no check-stock call afterwards. "
+            "For several products at once use inspect-batch."
         ),
         flags=(
             flag("country", help="ISO-3166 alpha-2; if set, a shipping quote is included."),
             flag("zip", help="Postal code; required when --country is set."),
             flag("max_variants", type=int, help="Cap variants returned (default 20)."),
-            flag("shipping_method", help="Pin a shipping method; otherwise the provider's default."),
+        ),
+    ),
+    Cmd(
+        "inspect-batch",
+        "POST",
+        "/agent/suppliers/{provider}/products/inspect-batch",
+        summary=(
+            "Read a WHOLE shortlist in one call: price, per-warehouse stock and shipping for up "
+            "to 20 products. Prefer this over looping inspect / check-stock-by-product per "
+            "product. Descriptions and variant lists are omitted unless --include asks for them."
+        ),
+        # Up to 20 products x ~4 rate-limited supplier calls: minutes are possible, so this gets
+        # the long client timeout rather than the 30s default.
+        timeout=LONG_TIMEOUT_SECONDS,
+        body=(
+            body_field(
+                "product_ids",
+                type=str,
+                repeatable=True,
+                required=True,
+                help="Supplier product ids to read (1-20).",
+            ),
+            body_field(
+                "destination",
+                type=dict,
+                help=(
+                    "Where the goods would ship to: {country_code*, zip_code*}. Omit to skip "
+                    "shipping entirely."
+                ),
+                example={"country_code": "US", "zip_code": "90001"},
+            ),
+            body_field(
+                "quantity",
+                type=int,
+                help="Units per product to quote shipping for (default 1).",
+            ),
+            body_field(
+                "max_variants",
+                type=int,
+                help="Cap variants counted per product (default 5); the real total is reported.",
+            ),
+            body_field(
+                "include",
+                type=str,
+                repeatable=True,
+                help=(
+                    "Heavy fields to add per product: description, attributes, variants. "
+                    "All omitted by default."
+                ),
+            ),
         ),
     ),
     Cmd(
@@ -162,7 +218,8 @@ SPECS = (
         summary=(
             "Quote shipping to a region from country + zip only — the cheapest in-stock warehouse "
             "wins (not always China). Use this for a quick 'what would shipping cost to X' check; "
-            "use calculate-shipping once the full delivery address is known."
+            "use calculate-shipping once the full delivery address is known. Answers "
+            "{quotes, unavailable}: no method on offer is an answer, not an empty result."
         ),
         body=(
             body_field(
@@ -186,15 +243,17 @@ SPECS = (
         "POST",
         "/agent/suppliers/{provider}/shipping/calculate",
         summary=(
-            "Calculate shipping for a supplier order. The cheapest in-stock warehouse is chosen "
-            "automatically; pass from_country_code to pin a specific origin."
+            "Quote shipping to a full delivery address. The cheapest in-stock warehouse is chosen "
+            "automatically; pass from_country_code to pin a specific origin. Answers "
+            "{quotes, unavailable} — a shipment the supplier will not price says so, with a "
+            "retryable flag, instead of coming back empty."
         ),
         body=(
             body_field(
                 "items",
                 type=dict,
                 repeatable=True,
-                help="Lines to ship: array of {variant_id*, quantity*, shipping_method*}.",
+                help="Lines to ship: array of {variant_id*, quantity*}.",
             ),
             body_field(
                 "shipping_address",
@@ -211,11 +270,6 @@ SPECS = (
                     "Ship-from country (ISO alpha-2) — pins the origin warehouse; omit to "
                     "auto-pick the cheapest in-stock warehouse."
                 ),
-            ),
-            body_field("pay_type", type=int, help="Supplier pay type (1-3, default 2)."),
-            body_field(
-                "internal_order_id",
-                help="SellerClaw order this fulfills (UUID); makes the call idempotent.",
             ),
         ),
     ),
