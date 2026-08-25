@@ -35,6 +35,21 @@ sellerclaw_run(group="shopify-orders", command="cancel",
   positionals={"store_id": STORE_ID, "order_id": ORDER_ID})
 ```
 
+## Close the SellerClaw order (always, on every channel)
+
+Creating the fulfillment tells the *channel* and the buyer. The SellerClaw order row is closed
+separately — do it right after, or the order stays in the seller's open work:
+
+```text
+# ORDER_ID here is the internal SellerClaw order id, not the channel's.
+sellerclaw_run(group="orders", command="set-shipped", positionals={"order_id": ORDER_ID},
+  body={"tracking_number": "1Z999AA10123456784", "tracking_carrier": "UPS"})
+```
+
+Every field is optional — an order the channel marked sent without a number is shipped all the same.
+Repeating the call is safe. Do **not** close the order with `orders update` instead: that leaves the
+status where it was.
+
 ## eBay & Amazon
 
 ```text

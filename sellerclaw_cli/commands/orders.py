@@ -130,6 +130,28 @@ SPECS = (
             body_field("supplier_pay_url", help="Supplier payment URL, if any."),
         ),
     ),
+    Cmd(
+        "set-shipped",
+        "POST",
+        "/agent/orders/{order_id}/shipped",
+        summary=(
+            "Record that the sales channel has already shipped this order, and close it "
+            "(internal status becomes 'fulfilled'). Use it right after the channel's own "
+            "'<platform>-orders create-fulfillment', or when the seller shipped on the channel "
+            "by hand. It does NOT ship anything itself and does not notify the buyer. Tracking "
+            "fields are optional: a channel lets an order be marked sent without a number, and "
+            "nothing is invented for one that has none. Repeating the call is safe."
+        ),
+        body=(
+            body_field(
+                "tracking_number",
+                help="Tracking number the channel holds for this shipment, if there is one.",
+                example="1Z999AA10123456784",
+            ),
+            body_field("tracking_carrier", help="Carrier name, e.g. 'UPS'.", example="UPS"),
+            body_field("tracking_url", help="Public tracking URL, if the channel gives one."),
+        ),
+    ),
 )
 
 app = build_group(NAME, "Internal SellerClaw orders.", SPECS)
