@@ -81,12 +81,12 @@ SPECS = (
             flag("page", type=int, help="Page number."),
             flag("page_size", type=int, help="Results per page."),
             flag(
-                "country",
-                param="country_code",
+                "stocked_in",
                 help=(
-                    "Only products with a warehouse in this country (ISO alpha-2, e.g. US). A hard "
-                    "filter — most dropship goods ship from China and are dropped by it, so search "
-                    "without it first and add it once there is something to narrow."
+                    "Only products already held in a warehouse in this country (ISO alpha-2, e.g. "
+                    "US) — where the goods SIT, not where they are going. A hard filter: most "
+                    "dropship goods ship from China and are dropped by it, so search without it "
+                    "first and add it once there is something to narrow."
                 ),
             ),
             flag(
@@ -122,8 +122,14 @@ SPECS = (
             "For several products at once use inspect-batch."
         ),
         flags=(
-            flag("country", help="ISO-3166 alpha-2; if set, a shipping quote is included."),
-            flag("zip", help="Postal code; required when --country is set."),
+            flag(
+                "to_country",
+                help=(
+                    "Where the goods would ship TO (ISO-3166 alpha-2); set it and a shipping "
+                    "quote is included. A destination, never a warehouse filter."
+                ),
+            ),
+            flag("to_zip", help="Destination postal code; required with --to-country."),
             flag("max_variants", type=int, help="Cap variants returned (default 20)."),
         ),
     ),
@@ -134,7 +140,8 @@ SPECS = (
         summary=(
             "Read a WHOLE shortlist in one call: price, per-warehouse stock and shipping for up "
             "to 20 products. Prefer this over looping inspect / check-stock-by-product per "
-            "product. Descriptions and variant lists are omitted unless --include asks for them."
+            "product. Descriptions and variant lists are omitted unless the body's include field "
+            "asks for them."
         ),
         # Up to 20 products x ~4 rate-limited supplier calls: minutes are possible, so this gets
         # the long client timeout rather than the 30s default.

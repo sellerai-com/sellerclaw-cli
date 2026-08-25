@@ -40,7 +40,7 @@ def test_search_products_sends_all_filters_as_query_params(
             "cj",
             "--query",
             "wireless earbuds",
-            "--country",
+            "--stocked-in",
             "US",
             "--verified-only",
             "--min-price",
@@ -56,8 +56,8 @@ def test_search_products_sends_all_filters_as_query_params(
     assert result.exit_code == 0, result.stderr
     params = route.calls.last.request.url.params
     assert params["query"] == "wireless earbuds"
-    # --country is presented to the user but maps to the API's country_code key.
-    assert params["country_code"] == "US"
+    # Named for what it does — where the goods sit — so it cannot be read as a destination.
+    assert params["stocked_in"] == "US"
     assert params["verified_only"] == "true"
     # min/max price are floats on the wire.
     assert params["min_price"] == "5.0"

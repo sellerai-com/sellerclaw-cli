@@ -21,6 +21,11 @@ sellerclaw_run(group="suppliers", command="search-products",
 sellerclaw_run(group="suppliers", command="resolve-url", flags={"url": "https://…"})
 ```
 
+**Two different countries live in this group — keep them apart.** `--stocked-in` on a search says
+where the goods already **sit** (a warehouse filter); `--to-country` on `inspect` and `destination`
+on the shipping commands say where they are **going**. Answers about origin come back as
+`stock.by_country` and `shipping.from_country_code`.
+
 **Asking for a kind of product? Use the category, not the keyword.** A supplier catalogue is
 enormous and its search matches product *names*, so "leather belt" comes back full of belted dresses
 and pet leashes and no re-phrasing separates them. Find the category once, then filter by it:
@@ -51,7 +56,7 @@ sellerclaw_run(group="suppliers", command="inspect-batch", positionals={"provide
 # One product, with its description and full variant list.
 sellerclaw_run(group="suppliers", command="inspect",
   positionals={"provider": "cj", "product_id": PRODUCT_ID},
-  flags={"country": "US", "zip": "10001", "max_variants": 20})
+  flags={"to_country": "US", "to_zip": "10001", "max_variants": 20})
 ```
 
 **Never loop a per-product command over a shortlist.** Ten `inspect` calls cost ten round trips
