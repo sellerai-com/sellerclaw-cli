@@ -19,6 +19,44 @@ SPECS = (
         ),
     ),
     Cmd(
+        "cancel",
+        "POST",
+        "/agent/stores/{store_id}/orders/{order_id}/cancel",
+        summary=(
+            "Cancel the order at Wix. Wix refuses an order that is still pending, was rejected, or holds an authorized payment — void or refund that first. The reply says what the platform actually did: "
+            "`cancelled`, its own `status`, and `restocked`/`refunded` — where those are null the "
+            "platform did not say, which is not the same as 'no'."
+        ),
+        body=(
+            body_field(
+                "reason",
+                help="Why it is being cancelled. Wix has no reason field on an order; it reaches the buyer only in the email.",
+            ),
+            body_field(
+                "restock",
+                type=bool,
+                help="Put the goods back on sale. Only reaches products Wix itself keeps stock for — a dropshipped line has no Wix inventory to return.",
+            ),
+            body_field(
+                "refund",
+                type=bool,
+                help=(
+                    "Refund the buyer as part of cancelling. Wix cannot do both in one step "
+                    "and refuses rather than cancelling without the refund — refund separately."
+                ),
+            ),
+            body_field(
+                "notify_customer",
+                type=bool,
+                help="Let Wix email the buyer about the cancellation.",
+            ),
+            body_field(
+                "customer_message",
+                help="A note for the buyer, sent with that email. Ignored without notify_customer.",
+            ),
+        ),
+    ),
+    Cmd(
         "create-fulfillment",
         "POST",
         "/agent/stores/{store_id}/orders/{order_id}/fulfillments",
