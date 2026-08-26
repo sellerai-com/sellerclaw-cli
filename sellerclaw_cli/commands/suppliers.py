@@ -434,7 +434,19 @@ SPECS = (
                     "auto-pick the cheapest in-stock warehouse nearest the buyer."
                 ),
             ),
-            body_field("pay_type", type=int, help="Supplier pay type (1-3, default 2)."),
+            body_field(
+                "pay_type",
+                type=int,
+                help=(
+                    "How the purchase gets paid for. OMIT IT and SellerClaw decides from the "
+                    "supplier wallet: enough to cover the estimate -> created unpaid, then paid "
+                    "from the wallet once the real total is checked against the approved cost; "
+                    "not enough, unreadable, or a currency that cannot be compared -> the reply "
+                    "carries `pay_url`, a payment page for the owner, and nothing is charged. "
+                    "Pin it only to override that: 2 charges the wallet on creation, before any "
+                    "such check."
+                ),
+            ),
             body_field(
                 "internal_order_id",
                 help="SellerClaw order this fulfills (UUID); makes the call idempotent.",
