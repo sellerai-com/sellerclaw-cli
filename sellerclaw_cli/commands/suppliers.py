@@ -20,6 +20,123 @@ SPECS = (
         summary="List the owner's connected supplier accounts.",
     ),
     Cmd(
+        "create-account",
+        "POST",
+        "/agent/supplier-accounts/offline",
+        summary=(
+            "Add a supplier with no integration behind it — the owner's own, named by them. "
+            "Nothing is authorized and no key is handed over: the row is a name to hang costs, "
+            "stock, lead times and a contact on, and its id is what a catalog product "
+            "(`catalog set-supplier`) and a price-list upload point at. Names are unique per "
+            "owner. For CJ and other integrations use their own connect flow instead."
+        ),
+        body=(
+            body_field(
+                "name",
+                required=True,
+                help="What the owner calls this supplier. Unique among their own suppliers.",
+                example="Nest Supply Co.",
+            ),
+            body_field(
+                "currency",
+                help="ISO-4217 code this supplier's costs are stated in, e.g. USD.",
+                example="USD",
+            ),
+            body_field(
+                "contact",
+                help="How to reach them — email, phone, or a note. Free text.",
+                example="orders@nestsupply.example.com",
+            ),
+            body_field(
+                "lead_time_days",
+                type=int,
+                help=(
+                    "Days from ordering to the goods arriving, as this supplier's standing figure. "
+                    "Leave it out when they never said — a guessed lead time becomes a guessed "
+                    "delivery promise on a storefront."
+                ),
+                example=7,
+            ),
+            body_field(
+                "min_order_qty",
+                type=int,
+                help="Fewest units they accept on one order. Leave out when unstated.",
+                example=20,
+            ),
+            body_field(
+                "website_url",
+                help="The supplier's own site, if they have one. Must start with https://.",
+                example="https://nestsupply.example.com",
+            ),
+        ),
+    ),
+    Cmd(
+        "update-account",
+        "PATCH",
+        "/agent/supplier-accounts/offline/{supplier_id}",
+        summary=(
+            "Correct what is recorded about one of the owner's own suppliers. An omitted field "
+            "keeps its value; null clears currency or contact. The name cannot be cleared — it is "
+            "the supplier's identity."
+        ),
+        body=(
+            body_field("name", help="New name. Must stay unique among the owner's suppliers."),
+            body_field(
+                "currency",
+                nullable=True,
+                clearable=True,
+                help="ISO-4217 code, or null to stop stating one.",
+            ),
+            body_field(
+                "contact",
+                nullable=True,
+                clearable=True,
+                help="Email, phone or note, or null to stop stating one.",
+            ),
+            body_field(
+                "lead_time_days",
+                type=int,
+                nullable=True,
+                clearable=True,
+                help="Standing lead time in days, or null to stop stating one.",
+            ),
+            body_field(
+                "min_order_qty",
+                type=int,
+                nullable=True,
+                clearable=True,
+                help="Minimum order in units, or null to stop stating one.",
+            ),
+            body_field(
+                "website_url",
+                nullable=True,
+                clearable=True,
+                help="The supplier's site (https://…), or null to stop stating one.",
+            ),
+        ),
+    ),
+    Cmd(
+        "delete-account",
+        "DELETE",
+        "/agent/supplier-accounts/offline/{supplier_id}",
+        summary=(
+            "Remove one of the owner's own suppliers. Refused while catalog products still point "
+            "at it, and the refusal carries their number so the owner decides. "
+            "--unlink-products is that answer: the products stay in the catalog with no supplier "
+            "behind them."
+        ),
+        flags=(
+            flag(
+                "unlink_products",
+                type=bool,
+                help=(
+                    "Detach the catalog products first instead of refusing. They keep selling; "
+                    "they just stop being this supplier's goods."
+                ),
+            ),
+        ),
+    ),
+    Cmd(
         "resolve-url",
         "GET",
         "/agent/suppliers/resolve-url",

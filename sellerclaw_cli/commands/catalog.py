@@ -212,6 +212,103 @@ SPECS = (
             ),
         ),
     ),
+    Cmd(
+        "set-variations",
+        "PATCH",
+        "/agent/products/{product_id}/variations",
+        summary=(
+            "Correct a product's per-variation facts in place: stock, SKU, barcode, weight, "
+            "shipping cost, purchase price. Use this instead of deleting and re-creating a product "
+            "to change one of them — the product id survives, and with it every listing built from "
+            "it and every order line pointing back at it. Top-level fields apply to all variations "
+            "(what a single-variation product wants); `variations` targets them one by one. Stock "
+            "and purchase price are refused on a product sourced from an integrated supplier (CJ): "
+            "the supplier states both and the periodic check overwrites them."
+        ),
+        body=(
+            body_field(
+                "available_quantity",
+                type=int,
+                help="Units in stock, applied to every variation.",
+            ),
+            body_field("sku", help="Seller's code, applied to every variation."),
+            body_field(
+                "barcode",
+                nullable=True,
+                clearable=True,
+                help="GTIN/UPC/EAN, applied to every variation. null clears it.",
+            ),
+            body_field(
+                "weight_grams",
+                type=int,
+                nullable=True,
+                clearable=True,
+                help="Packed weight of one unit in grams. null clears it back to unknown.",
+            ),
+            body_field(
+                "purchase_price",
+                type=float,
+                help="Supplier cost, applied to every variation.",
+            ),
+            body_field(
+                "shipping_cost",
+                type=float,
+                help="Per-unit shipping cost from the supplier, applied to every variation.",
+            ),
+            body_field(
+                "purchase_currency",
+                help=(
+                    "ISO-4217 code the cost is stated in, e.g. EUR. Relabels only — it does not "
+                    "convert the amount, so restate the cost too when the supplier changed money."
+                ),
+            ),
+            body_field(
+                "variations",
+                type=dict,
+                repeatable=True,
+                help=(
+                    "Per-variation edits: array of {supplier_variant_id*, sku?, barcode?, "
+                    "available_quantity?, purchase_price?, shipping_cost?, weight_grams?, "
+                    "purchase_currency?}. Mutually exclusive with the top-level fields above."
+                ),
+            ),
+        ),
+    ),
+    Cmd(
+        "set-supplier",
+        "PATCH",
+        "/agent/products/{product_id}/supplier",
+        summary=(
+            "Record who supplies this product, or that nobody does. `supplier_id` is the "
+            "SellerClaw supplier row's id from `suppliers list-accounts` — never a provider name "
+            "and never an id from the supplier's own system; the provider is read off that row. "
+            "For a supplier with no integration, create the row first with "
+            "`suppliers create-account`. Send supplier_id: null to unbind — the product stays in "
+            "the catalog and live on its channels, it just stops being anyone's goods."
+        ),
+        body=(
+            body_field(
+                "supplier_id",
+                nullable=True,
+                clearable=True,
+                help="Supplier row id (UUID). null unbinds the product from its supplier.",
+            ),
+            body_field(
+                "supplier_product_id",
+                help=(
+                    "The code this supplier knows the item by — their article number. Required "
+                    "when binding a product that has none yet: an order placed with them quotes it."
+                ),
+            ),
+            body_field(
+                "supplier_product_url",
+                help=(
+                    "The item's page at the supplier. Kept verbatim, and only for suppliers whose "
+                    "URLs we cannot rebuild ourselves."
+                ),
+            ),
+        ),
+    ),
     Cmd("delete", "DELETE", "/agent/products/{product_id}", summary="Delete a product."),
     Cmd(
         "source-from-supplier",

@@ -73,3 +73,17 @@ def test_set_shipped_rejects_an_unknown_body_field(
     )
     assert result.exit_code != 0
     assert "tracking" in (result.stderr or result.stdout)
+
+
+@respx.mock
+def test_set_shipped_works_with_no_body_flag_at_all(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """Closing an order the channel shipped without a number takes no `-b` — and must stay that way."""
+    route = respx.post(f"{fake_api_url}/agent/orders/{ORDER_ID}/shipped").mock(
+        return_value=httpx.Response(200, json={"id": ORDER_ID, "status": "fulfilled"})
+    )
+    result = runner.invoke(app, ["orders", "set-shipped", ORDER_ID])
+    assert result.exit_code == 0, result.stderr
+    assert route.calls.last.request.content == b""
