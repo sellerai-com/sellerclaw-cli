@@ -18,7 +18,9 @@ SPECS = (
         "/agent/listings/{listing_id}",
         summary=(
             "Get one listing by its SellerClaw id, from any connected store. Use this to resolve "
-            "a listing the owner referenced (e.g. an @-mentioned listing card carries this id)."
+            "a listing the owner referenced (e.g. an @-mentioned listing card carries this id). "
+            "A variation group id works too and answers with the whole listing (its 'variants' "
+            "array) — that is the id drafting and publishing hand back."
         ),
     ),
     Cmd(
@@ -43,18 +45,30 @@ SPECS = (
         summary=(
             "Find listings across every connected store by any mix of criteria (all AND-combined). "
             "Free text (--q: title / SKU / marketplace id), the catalog product they were published "
-            "from (--product-id — one listing row per variant, so a 4-variant product returns 4), "
-            "an exact --sku or --remote-id, one store (--store-id), a whole channel (--platform), "
-            "or a lifecycle --status. No criteria = the most recently updated listings. Each result "
-            "carries its listing id for a 'get' follow-up; 'total' is the full match count."
+            "from (--product-id), an exact --sku or --remote-id, one store (--store-id), a whole "
+            "channel (--platform), or a lifecycle --status. No criteria = the most recently updated "
+            "listings. ONE ENTRY PER LISTING, not per variation: a 4-variant product is one result, "
+            "carrying 'listing_ids' (every variation's id — what a publish or an update takes), "
+            "'variation_count', the price range and the total stock, plus 'ready' / "
+            "'blocking_fields' / 'not_ready_listing_ids' for the group as a whole. A matched listing "
+            "comes back whole, so searching one SKU returns that listing with all its variations "
+            "named. 'total' counts listings; 'variation_rows' counts the rows behind them. For each "
+            "variation's own price and stock use 'listings variable'."
         ),
         flags=(
             flag("q", help="Free text: substring of the title, SKU, or marketplace id."),
             flag(
                 "product_id",
                 help=(
-                    "Catalog product id: returns every listing published from it, one row per "
-                    "variant. The only product -> listings route there is."
+                    "Catalog product id: returns every listing published from it, one entry each "
+                    "with its variations folded. The only product -> listings route there is."
+                ),
+            ),
+            flag(
+                "group_id",
+                help=(
+                    "Variation group id: the whole listing that group names, as one entry. This is "
+                    "the id drafting and publishing hand back, so it is the one you already hold."
                 ),
             ),
             flag("store_id", help="Restrict to one store (sales channel id, see `channels list`)."),
@@ -163,12 +177,11 @@ SPECS = (
         summary=(
             "Get one WHOLE variable listing on one store — every variation folded under a single "
             "header (status span, price range, total stock) plus each variation's own price / "
-            "stock / sale-blockers, and the listing's open problems. A multi-variant publish makes "
-            "one storefront product with N variations; 'search' returns them as N flat rows, this "
-            "returns them as the one listing they are. Name it with --group-id (every row of one "
-            "listing carries the same group_id — take it from any search row) plus --store-id (its "
-            "id or its domain). Report it to the owner as ONE variable listing (one card), never "
-            "as N separate rows."
+            "stock / sale-blockers, and the listing's open problems. 'search' also answers one "
+            "entry per listing, but only the header of it; this is where each variation's own "
+            "figures and the listing's problems are. Name it with --group-id (every row and every "
+            "search entry carries it) plus --store-id (its id or its domain). Report it to the "
+            "owner as ONE variable listing (one card), never as N separate rows."
         ),
         flags=(
             flag(
@@ -211,11 +224,13 @@ SPECS = (
         "GET",
         "/agent/listings/drafts",
         summary=(
-            "List one store's draft listings — the ones prepared locally but not yet published. Each "
-            "row carries a quick 'ready' flag plus 'issue_count' and 'blocking_fields', so you can see "
-            "which drafts still need work before a bulk publish. Scoped to one store (--store-id is "
-            "required): you work a store at a time, and a store already fixes the channel. For the "
-            "full, product-group-aware readiness (the same one a publish enforces) use "
+            "List one store's draft listings — the ones prepared locally but not yet published. One "
+            "entry per listing with its variations folded, carrying a quick 'ready' flag plus "
+            "'blocking_fields' and 'not_ready_listing_ids', so you can see which drafts still need "
+            "work before a bulk publish. 'ready' is true only when EVERY variation would publish, "
+            "because that is what a publish judges. Scoped to one store (--store-id is required): "
+            "you work a store at a time, and a store already fixes the channel. For the full, "
+            "product-group-aware readiness (the same one a publish enforces) use "
             "'listings readiness'."
         ),
         flags=(
@@ -295,7 +310,11 @@ SPECS = (
                     "List of {listing_id, patch}. patch keys: title, description, sell_prices "
                     "(SKU->price), quantities (SKU->qty), images (the listing's whole gallery in "
                     "publish order — the first is the cover, and the list replaces what was "
-                    "there), variation_images (variation listing id -> photo URL, null clears one)."
+                    "there), variation_images (variation listing id -> photo URL, null clears one), "
+                    "package_weight_grams (what one packed unit weighs, in grams — eBay prices "
+                    "calculated postage from it and refuses a listing without it) and "
+                    "package_length_mm / package_width_mm / package_height_mm (the box; all three "
+                    "or none)."
                 ),
                 example=[
                     {"listing_id": "<uuid>", "patch": {"title": "New title"}},
@@ -303,6 +322,7 @@ SPECS = (
                         "listing_id": "<uuid>",
                         "patch": {"images": ["https://.../front.jpg", "https://.../back.jpg"]},
                     },
+                    {"listing_id": "<uuid>", "patch": {"package_weight_grams": 28}},
                 ],
             ),
         ),
@@ -324,6 +344,63 @@ SPECS = (
                 repeatable=True,
                 required=True,
                 help="SellerClaw listing ids of the drafts to delete.",
+            ),
+        ),
+    ),
+    Cmd(
+        "create-drafts",
+        "POST",
+        "/agent/stores/{store_id}/create-drafts",
+        job_poll_path="/agent/stores/{store_id}/bulk-listing-jobs/{job_id}",
+        summary=(
+            "Draft catalog products onto ANY store — one command for every marketplace. Body: "
+            "'products' is a list of {product_id, title?, description?, images?, attributes?, "
+            "category_external_id?} — everything describing the goods is stated per product, so a "
+            "batch of "
+            "ten gets ten descriptions, not one repeated. 'product_ids' is the shorthand when the "
+            "catalog's own text will do. 'channel' carries what belongs to the account rather than "
+            "the goods (eBay policies and api_kind, Etsy who_made, Walmart item spec) and is "
+            "validated against this store's platform. Returns the job; poll 'listings bulk-job'."
+        ),
+        body=(
+            body_field(
+                "products",
+                type=list,
+                help=(
+                    "List of {product_id, title?, description?, images?, attributes?, "
+                    "category_external_id?}. The description is the listing's own copy — the "
+                    "catalog product's text is a seed, not a description. images is the whole "
+                    "gallery in publish order, first one the cover. category_external_id is where "
+                    "to file this one product, in the marketplace's own id (the `external_id` from "
+                    "`categories`, not our `category_id`); omit it and the product is placed for "
+                    "you."
+                ),
+                example=[
+                    {
+                        "product_id": "<uuid>",
+                        "description": "<the listing's own copy>",
+                        "category_external_id": "<marketplace category id>",
+                    },
+                    {"product_id": "<uuid>"},
+                ],
+            ),
+            body_field(
+                "product_ids",
+                repeatable=True,
+                help="Shorthand: catalog product UUIDs to draft with the catalog's own copy.",
+            ),
+            body_field(
+                "channel",
+                type=dict,
+                help=(
+                    "This marketplace's own fields, settled once for the batch — eBay: api_kind, "
+                    "fulfillment_policy_id, payment_policy_id, return_policy_id, "
+                    "merchant_location_key, condition, sell_prices; Etsy: taxonomy_id, "
+                    "shipping_profile_id, return_policy_id, who_made, when_made, is_supply; "
+                    "Walmart: the item spec; TikTok: category_id; Amazon: asins, condition_type. A "
+                    "field another marketplace uses is refused by name."
+                ),
+                example={"api_kind": "trading"},
             ),
         ),
     ),

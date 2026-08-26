@@ -67,6 +67,11 @@ SPECS = (
                 repeatable=True,
                 help="Campaign-level negatives ('text'=BROAD, '\"text\"'=PHRASE, '[text]'=EXACT).",
             ),
+            # A campaign with a natural end — a sale, a holiday push — should stop on its own
+            # rather than on someone remembering to pause it. The API has taken these all along;
+            # undeclared, they were invisible to `describe` and to the MCP tool.
+            body_field("start_date", help="First day the campaign may serve, YYYY-MM-DD. Omit to start when enabled."),
+            body_field("end_date", help="Last day it serves, YYYY-MM-DD, included. Omit to run until paused."),
             body_field("asset_group", type=dict, help="Asset group definition object. Required for PERFORMANCE_MAX."),
             body_field("ad_group", type=dict, help="Ad group with keywords + responsive search ad. Required for SEARCH."),
         ),
@@ -87,6 +92,11 @@ SPECS = (
             ),
             body_field("bidding_strategy", help="New bidding strategy (same values as on create)."),
             body_field("target_roas", type=float, help="New target ROAS for ROAS-based strategies."),
+            # A campaign with a natural end — a sale, a holiday push — should stop on its own
+            # rather than on someone remembering to pause it. The API has taken these all along;
+            # undeclared, they were invisible to `describe` and to the MCP tool.
+            body_field("start_date", help="First day the campaign may serve, YYYY-MM-DD. Omit to start when enabled."),
+            body_field("end_date", help="Last day it serves, YYYY-MM-DD, included. Omit to run until paused."),
         ),
         body_strict=False,
     ),
@@ -112,7 +122,11 @@ SPECS = (
             body_field("language", help="Ad language (ISO 639-1 / name). Defaults to the user's preferred language."),
             body_field(
                 "final_url",
-                help="Landing page. Omit it: resolved to the product's page on a channel it is live on. Never build one from a domain + guessed path.",
+                help=(
+                    "Landing page. Omit it: resolved to the product's page on a channel it is live on. "
+                    "Never build one from a domain + guessed path; the launch opens the page first and "
+                    "refuses a 404 (final_url_not_reachable)."
+                ),
             ),
             body_field("objective", help="What to optimize for: 'traffic' (clicks) or 'sales' (conversions).", example="traffic"),
             body_field("name", help="Campaign name. Defaults to 'Search: {product name}'."),
@@ -123,6 +137,8 @@ SPECS = (
             ),
             body_field("negative_keywords", repeatable=True, help="Extra campaign-level negative keywords."),
             body_field("cpc_bid", type=float, help="Optional manual CPC ceiling for the ad group (major units)."),
+            body_field("start_date", help="First day the campaign may serve, YYYY-MM-DD. Omit to start when enabled."),
+            body_field("end_date", help="Last day it serves, YYYY-MM-DD, included. Omit to run until paused."),
         ),
         body_strict=False,
     ),
@@ -151,10 +167,16 @@ SPECS = (
             body_field("language", help="Ad language (ISO 639-1 / name). Defaults to the user's preferred language."),
             body_field(
                 "final_url",
-                help="Landing page. Omit it: resolved to the product's page on a channel it is live on. Never build one from a domain + guessed path.",
+                help=(
+                    "Landing page. Omit it: resolved to the product's page on a channel it is live on. "
+                    "Never build one from a domain + guessed path; the launch opens the page first and "
+                    "refuses a 404 (final_url_not_reachable)."
+                ),
             ),
             body_field("call_to_action", help="Call-to-action enum (SHOP_NOW / LEARN_MORE / SIGN_UP / ...).", example="SHOP_NOW"),
             body_field("name", help="Campaign name. Defaults to 'PMax: {product name}'."),
+            body_field("start_date", help="First day the campaign may serve, YYYY-MM-DD. Omit to start when enabled."),
+            body_field("end_date", help="Last day it serves, YYYY-MM-DD, included. Omit to run until paused."),
             body_field("square_image_url", help="Optional explicit square (1:1) marketing image URL — overrides auto-pick."),
         ),
         body_strict=False,
@@ -368,7 +390,11 @@ SPECS = (
         "recommendations",
         "GET",
         "/agent/ads/google/recommendations",
-        summary="Get optimization recommendations.",
+        summary=(
+            "Get the optimization recommendations Google is holding for the account, each with the "
+            "current vs projected impressions / clicks / conversions / cost where Google predicts one."
+        ),
+        flags=(flag("campaign_id", help="Only recommendations about this campaign."),),
     ),
     Cmd(
         "action-log",

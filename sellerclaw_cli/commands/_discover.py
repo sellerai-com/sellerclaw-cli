@@ -87,6 +87,13 @@ def _body_repr(cmd: Cmd) -> list[dict[str, object]]:
             item["nullable"] = True
         if f.clearable:
             item["clearable"] = True
+        # The option spelling, where the field has one. Said so a caller reading the schema knows it
+        # can pass this value on the command line instead of building JSON inside shell quotes —
+        # which is where an apostrophe in the value ends the call before the CLI sees it.
+        if f.option:
+            item["option"] = f.option
+            if f.item_key:
+                item["option_item_key"] = f.item_key
         repr_.append(item)
     return repr_
 
@@ -109,13 +116,37 @@ def _body_example(cmd: Cmd) -> dict[str, object]:
 def _example(group: str, cmd: Cmd) -> str:
     parts = [f"sellerclaw {group} {cmd.name}"]
     parts += [f"<{p}>" for p in positionals_of(cmd.path)]
+    if cmd.upload_file:
+        parts.append("<path to the file>")
     parts += [f"--{f.name.replace('_', '-')} <{f.name}>" for f in cmd.flags if f.required]
     if cmd.query_body:
         parts.append("-q '<graphql document>'")
+    elif option_example := _body_option_example(cmd):
+        # Prefer the option form when the whole example fits in options: it is the spelling that
+        # survives a value with an apostrophe in it, and the example is what gets copied.
+        parts.append(option_example)
     elif cmd.body:
         parts.append("-b '" + json.dumps(_body_example(cmd), ensure_ascii=False) + "'")
     elif cmd.takes_body:
         parts.append("-b @body.json")
+    return " ".join(parts)
+
+
+def _body_option_example(cmd: Cmd) -> str:
+    """The example written with the body's own options, when every field it needs has one."""
+    options = cmd.body_options
+    if not options:
+        return ""
+    needed = [f for f in cmd.body if f.required]
+    if any(f.option is None for f in needed):
+        return ""
+    shown = needed or list(options)
+    parts: list[str] = []
+    for f in shown:
+        if f.option is None:
+            continue
+        value = f.choices[0] if f.choices else f"<{f.item_key or f.name}>"
+        parts.append(f"{f.option} '{value}'")
     return " ".join(parts)
 
 
@@ -151,9 +182,10 @@ def guide_cmd(ctx: typer.Context) -> None:
             "By SellerClaw id: `listings get <listing_id>`, `orders get <order_id>`, "
             "`catalog get <product_id>` — these work across every store; the per-channel groups "
             "(`shopify-listings`, `ebay-orders`, …) do not read a row by id.",
-            "Listings of a catalog product (a multi-variant publish makes one listing per variant): "
-            "`listings search --product-id <product_id>`. Also `--store-id`, `--sku`, `--remote-id`, "
-            "`--platform`, `--status`.",
+            "Listings of a catalog product: `listings search --product-id <product_id>`. Also "
+            "`--store-id`, `--sku`, `--remote-id`, `--platform`, `--status`. One entry per listing, "
+            "not per variation — a multi-variant product is one result carrying every variation's "
+            "id in `listing_ids`; `listings variable` gives each variation's own price and stock.",
             "Catalog product by name/SKU/supplier item: `catalog search --q <text>`, "
             "`catalog list --sku <sku>`, `catalog list --supplier-provider cj "
             "--supplier-product-id <id>` (the 'do I already have this?' check).",
@@ -224,6 +256,8 @@ def _command_detail(group: str, cmd: Cmd) -> dict[str, object]:
         "path": cmd.path,
         "summary": cmd.summary,
         "positionals": positionals_of(cmd.path),
+        # This command sends a file, given as a local path in the first argument — not a JSON body.
+        "upload_file": cmd.upload_file,
         "flags": _flag_repr(group, cmd),
         "body": cmd.takes_body,
         "body_fields": _body_repr(cmd),

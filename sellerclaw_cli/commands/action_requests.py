@@ -17,7 +17,7 @@ SPECS = (
         "get",
         "GET",
         "/agent/goals/action-requests/{request_id}",
-        summary="Get one action request by id (check its status).",
+        summary="Get one action request by id (check its status, and which option was chosen).",
     ),
     Cmd(
         "create",
@@ -37,7 +37,8 @@ SPECS = (
                     "Who acts after the owner responds. 'decision': you can do it yourself but "
                     "need a go-ahead (owner approves/rejects, then you act). 'delegation': only "
                     "the owner can do it (they do it and report back). Omit to default from kind "
-                    "(approval/review -> decision, else delegation)."
+                    "(approval/review -> decision, else delegation) \u2014 or, with `options`, to decision, "
+                    "the only mode a choice can have."
                 ),
                 choices=("decision", "delegation"),
                 example="decision",
@@ -49,6 +50,45 @@ SPECS = (
                 help=(
                     "Optional one-line statement of exactly what you're asking, shown to the owner "
                     "above the details (e.g. 'Approve sending this email before it goes out')."
+                ),
+            ),
+            body_field(
+                "details",
+                type=dict,
+                repeatable=True,
+                help=(
+                    "The facts the owner decides on, as named rows: an array of "
+                    '{"label": "...", "value": "...", "type"?: "text"|"body"|"link"|"file", '
+                    '"url"?: "..."}. Use these instead of packing the numbers into `description` — '
+                    "the owner sees one row per fact (Order, Customer, They paid, Supplier cost, "
+                    "Profit) and can check them at a glance, where a paragraph has to be read "
+                    "through. `description` then only has to say what you want to do and why. "
+                    "Always give them on anything about money."
+                ),
+            ),
+            body_field(
+                "options",
+                type=dict,
+                repeatable=True,
+                help=(
+                    "Turn the ask into a CHOICE instead of a yes/no — an array of "
+                    '{"label": "...", "description"?: "..."}. Use it when the blocker has several '
+                    "right answers (which shipping policy, which markup): two to eight of them, "
+                    "`label` is the button and `description` the one line the owner decides on. "
+                    "Ids are issued by the server (\"1\", \"2\", ...) — read them off the reply. "
+                    'Only a decision can offer them, and they cannot be combined with staged work.'
+                ),
+                example=[
+                    {"label": "Musurok Shipping", "description": "4 days, free — on 101 listings"},
+                    {"label": "Chulkov Shipping from US", "description": "4 days, flat rate"},
+                ],
+            ),
+            body_field(
+                "allow_custom_option",
+                type=bool,
+                help=(
+                    "With `options`, let the owner answer in their own words instead of picking "
+                    "one. Their wording comes back in `resolution_note` with no selected option."
                 ),
             ),
             body_field("goal_id", help="Related goal id (UUID), if any."),

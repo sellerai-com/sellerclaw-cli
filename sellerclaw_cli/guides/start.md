@@ -36,11 +36,14 @@ is worth it only when:
 - **Find by name, don't dump.** Most groups offer `search` and/or `summary` — prefer them to listing
   everything and filtering by hand.
 - **An empty result is not an error.** No rows means none matched, not a failure.
-- **Some writes need the owner's approval.** Sending email and launching ad or Klaviyo campaigns
-  create an approval request the owner accepts — expected behavior, so report it as pending, not as
-  a failure.
-- **Ownership settings are the owner's call.** Pinning a store's default policies, warehouse or
-  markup changes how every future listing behaves — ask before setting them.
+- **Some writes need the owner's approval.** Sending email, launching ad or Klaviyo campaigns, and
+  setting a store's markup create an approval request the owner accepts — expected behavior, so
+  report it as pending, not as a failure. The response `status` says which: `pending_approval` (it
+  is waiting for them) or `approved_queued` (their standing setting answered it, and it applies on
+  its own). Repeat back the one you got, never the other.
+- **Ownership settings are the owner's call.** Pinning a store's default policies or warehouse
+  changes how every future listing behaves — ask before setting them. The markup is the same kind
+  of decision, and the server enforces it: `channels set-markup` proposes, it does not write.
 - **Raw fallbacks exist.** The `shopify` / `ebay` / `amazon` groups pass raw marketplace API calls
   through when no curated command fits. Check the curated groups first.
 

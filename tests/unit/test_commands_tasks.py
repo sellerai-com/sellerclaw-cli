@@ -160,3 +160,230 @@ def test_set_plan_carries_per_item_notes(env: str, group: str, path: str) -> Non
 
     assert result.exit_code == 0, result.stderr
     assert json.loads(route.calls.last.request.content) == {"plan": plan}
+
+
+@respx.mock
+@pytest.mark.parametrize(("group", "path"), _GROUPS)
+@pytest.mark.parametrize(
+    "status",
+    [
+        pytest.param("pending", id="pending"),
+        pytest.param("in_progress", id="in_progress"),
+        pytest.param("done", id="done"),
+        pytest.param("skipped", id="skipped"),
+        pytest.param("failed", id="failed"),
+    ],
+)
+def test_plan_check_sends_every_server_status(
+    env: str, group: str, path: str, status: str
+) -> None:
+    """The single-item form must carry the same statuses the batch form and the server accept.
+
+    Regression guard: `failed` was missing from the local `choices`, so a phase that was worked and
+    did not land was refused before the request left the machine — while the very same value went
+    through untouched inside `items`. The supervisor filed it as `skipped` ("nobody tried") instead.
+    """
+    route = respx.post(f"{env}/agent/goals/{path}/{TASK_ID}/plan/check").mock(
+        return_value=httpx.Response(200, json={"id": TASK_ID})
+    )
+    body = {"item_id": "4", "status": status, "note": "1 of 3 live; two blocked on the owner"}
+
+    result = runner.invoke(app, [group, "plan-check", TASK_ID, "-b", json.dumps(body)])
+
+    assert result.exit_code == 0, result.stderr
+    assert route.call_count == 1
+    assert json.loads(route.calls.last.request.content) == body
+
+
+@respx.mock
+@pytest.mark.parametrize(("group", "path"), _GROUPS)
+def test_plan_check_rejects_a_status_the_server_does_not_have(
+    env: str, group: str, path: str
+) -> None:
+    """The choice list still guards — it is the stale list that was the bug, not the checking."""
+    route = respx.post(f"{env}/agent/goals/{path}/{TASK_ID}/plan/check").mock(
+        return_value=httpx.Response(200, json={"id": TASK_ID})
+    )
+
+    result = runner.invoke(
+        app,
+        [group, "plan-check", TASK_ID, "-b", json.dumps({"item_id": "1", "status": "blocked"})],
+    )
+
+    assert result.exit_code != 0
+    assert "must be one of" in result.stderr
+    assert "failed" in result.stderr
+    assert route.call_count == 0
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    ("group", "path", "review_path"),
+    [
+        pytest.param("subagent-tasks", "agent-tasks", "request-review", id="subagent-request-review"),
+        pytest.param("team-tasks", "team-tasks", "request-review", id="team-request-review"),
+        pytest.param("team-tasks", "team-tasks", "complete", id="team-complete"),
+    ],
+)
+def test_report_can_close_a_phase_as_failed(
+    env: str, group: str, path: str, review_path: str
+) -> None:
+    route = respx.post(f"{env}/agent/goals/{path}/{TASK_ID}/{review_path}").mock(
+        return_value=httpx.Response(200, json={"id": TASK_ID})
+    )
+    plan = [
+        {"item_id": "1", "status": "done"},
+        {"item_id": "2", "status": "failed", "note": "Drafts ready; publish blocked on the policy choice"},
+    ]
+
+    result = runner.invoke(
+        app,
+        [group, review_path, TASK_ID, "-b", json.dumps({"outcome": "3 of 5 live.", "plan": plan})],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {"outcome": "3 of 5 live.", "plan": plan}
+
+
+@respx.mock
+def test_team_task_pause_sends_the_reason_verbatim(env: str) -> None:
+    """The reason is what the owner reads on the task, so it must reach the API unchanged."""
+    route = respx.post(f"{env}/agent/goals/team-tasks/{TASK_ID}/pause").mock(
+        return_value=httpx.Response(200, json={"id": TASK_ID})
+    )
+    body = {"reason": "Waiting for you to pick the eBay shipping and return policies."}
+
+    result = runner.invoke(app, ["team-tasks", "pause", TASK_ID, "-b", json.dumps(body)])
+
+    assert result.exit_code == 0, result.stderr
+    assert route.call_count == 1
+    assert json.loads(route.calls.last.request.content) == body
+
+
+@respx.mock
+def test_team_task_pause_refuses_to_park_a_job_without_saying_why(env: str) -> None:
+    """A parked job that does not say what it waits for is the whole failure this command fixes."""
+    route = respx.post(f"{env}/agent/goals/team-tasks/{TASK_ID}/pause").mock(
+        return_value=httpx.Response(200, json={"id": TASK_ID})
+    )
+
+    result = runner.invoke(app, ["team-tasks", "pause", TASK_ID, "-b", json.dumps({})])
+
+    assert result.exit_code != 0
+    assert "reason" in result.stderr
+    assert route.call_count == 0  # caught before the network call
+
+
+@respx.mock
+@pytest.mark.parametrize(("group", "path"), _GROUPS)
+def test_plan_check_takes_the_item_status_and_note_as_options(
+    env: str, group: str, path: str
+) -> None:
+    """The same body, without hand-writing JSON. A note is a sentence in the owner's language, and
+    a sentence inside `-b '{...}'` ends at its first apostrophe — the shell fails before the CLI
+    is reached, so nothing here could report it."""
+    route = respx.post(f"{env}/agent/goals/{path}/{TASK_ID}/plan/check").mock(
+        return_value=httpx.Response(200, json={"id": TASK_ID})
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            group, "plan-check", TASK_ID,
+            "--item-id", "3",
+            "--status", "failed",
+            "--note", "Drafted 3 of 3, but the owner's policy choice is still open",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {
+        "item_id": "3",
+        "status": "failed",
+        "note": "Drafted 3 of 3, but the owner's policy choice is still open",
+    }
+
+
+@respx.mock
+@pytest.mark.parametrize(("group", "path"), _GROUPS)
+def test_set_plan_builds_the_plan_from_repeated_step_options(
+    env: str, group: str, path: str
+) -> None:
+    """Step texts are prose too, and parentheses break a single-quoted body just as apostrophes do."""
+    route = respx.post(f"{env}/agent/goals/{path}/{TASK_ID}/plan").mock(
+        return_value=httpx.Response(200, json={"id": TASK_ID})
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            group, "set-plan", TASK_ID,
+            "--step", "Search CJ for men's leather belts",
+            "--step", "Shortlist 3 candidates (genuine leather, in stock)",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {
+        "plan": [
+            {"text": "Search CJ for men's leather belts"},
+            {"text": "Shortlist 3 candidates (genuine leather, in stock)"},
+        ]
+    }
+
+
+@respx.mock
+def test_add_note_takes_the_message_as_an_option(env: str) -> None:
+    """`add-note` exists on subagent tasks only, and its whole body is one sentence."""
+    route = respx.post(f"{env}/agent/goals/agent-tasks/{TASK_ID}/progress").mock(
+        return_value=httpx.Response(200, json={"id": TASK_ID})
+    )
+
+    result = runner.invoke(
+        app,
+        ["subagent-tasks", "add-note", TASK_ID, "--message", "CJ's search returned 3 belts"],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {
+        "message": "CJ's search returned 3 belts"
+    }
+
+
+@respx.mock
+@pytest.mark.parametrize(("group", "path"), _GROUPS)
+def test_plan_check_refuses_a_status_the_server_would_reject(
+    env: str, group: str, path: str
+) -> None:
+    """Checked locally against the same choices the body form uses, so a bad status costs no call."""
+    route = respx.post(f"{env}/agent/goals/{path}/{TASK_ID}/plan/check").mock(
+        return_value=httpx.Response(200, json={"id": TASK_ID})
+    )
+
+    result = runner.invoke(
+        app, [group, "plan-check", TASK_ID, "--item-id", "3", "--status", "blocked"]
+    )
+
+    assert result.exit_code == 1
+    assert "must be one of" in json.loads(result.stderr)["error"]["message"]
+    assert route.call_count == 0
+
+
+@respx.mock
+@pytest.mark.parametrize(("group", "path"), _GROUPS)
+def test_set_plan_without_a_plan_names_the_option_as_well_as_the_body(
+    env: str, group: str, path: str
+) -> None:
+    """A refusal that offers only -b sends the caller back to writing JSON in shell quotes — which
+    is the failure the option exists to remove."""
+    route = respx.post(f"{env}/agent/goals/{path}/{TASK_ID}/plan").mock(
+        return_value=httpx.Response(200, json={"id": TASK_ID})
+    )
+
+    result = runner.invoke(app, [group, "set-plan", TASK_ID])
+
+    assert result.exit_code == 1
+    message = json.loads(result.stderr)["error"]["message"]
+    assert "--step" in message
+    assert "-b/--body" in message
+    assert route.call_count == 0

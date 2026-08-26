@@ -16,9 +16,11 @@ from __future__ import annotations
 
 import difflib
 import inspect
+import mimetypes
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import Any
 
 import typer
@@ -35,6 +37,14 @@ from sellerclaw_cli._runtime import BODY_OPTION_HELP, emit_error, parse_json_bod
 #: caller cannot tell that from a failure — it re-sends, and ends up with two of whatever it made.
 #: Declared per command and reported by ``describe``, so the caller sizes its own wait to match.
 LONG_TIMEOUT_SECONDS = 180.0
+
+#: Every channel's ``sync-stock`` takes the same shape, so it is described in the same words:
+#: one identifier, and only the fields you actually mean to change. Restating a value you did not
+#: mean to touch is how a reprice used to carry a stale stock number to the marketplace.
+SYNC_STOCK_PARTIAL_HELP = (
+    "Only what you send changes: a price with no quantity leaves the stock alone, and the "
+    "other way round."
+)
 
 _PATH_PARAM_RE = re.compile(r"\{([^}]+)\}")
 # A short id prefix worth expanding against the task list: hex (UUID) fragments, optionally
@@ -145,6 +155,18 @@ class BodyField:
     # of the listed options, so without this the local check refuses the one value that unsets a
     # setting, and the caller has no way back from a choice it already made.
     clearable: bool = False
+    # This field is also reachable as a real ``--kebab-option``, so a short value never has to be
+    # hand-written as JSON inside shell quotes. The caller of this CLI is usually an agent driving a
+    # POSIX shell, and a plan step reading "Search CJ for men's leather belts" ends a ``-b '{...}'``
+    # string at the apostrophe: the shell fails before the CLI is even reached, so no error message
+    # here could have helped. Declared per field rather than for every body, because only short
+    # scalars belong on a command line — a Markdown report still goes in a file.
+    option: str | None = None
+    # For a list-typed field whose items are single-key objects: each occurrence of ``option``
+    # becomes ``{item_key: value}`` and they append in order. ``set-plan`` is the case — a plan is
+    # ``[{"text": ...}, ...]``, and asking a caller to spell that out is asking for the quoting
+    # trouble again.
+    item_key: str | None = None
 
 
 def body_field(
@@ -158,6 +180,8 @@ def body_field(
     example: object | None = None,
     nullable: bool = False,
     clearable: bool = False,
+    option: str | None = None,
+    item_key: str | None = None,
 ) -> BodyField:
     """Concise constructor for a JSON body field inside a ``Cmd``."""
     return BodyField(
@@ -170,6 +194,8 @@ def body_field(
         example=example,
         nullable=nullable,
         clearable=clearable,
+        option=option,
+        item_key=item_key,
     )
 
 
@@ -187,6 +213,16 @@ def _flag_help(f: Flag) -> str:
         notes.append(f"default {f.default}")
     if notes:
         parts.append("[" + "; ".join(notes) + "]")
+    return " ".join(parts)
+
+
+def _body_option_help(field: BodyField) -> str:
+    """Help for a body field's option — its own words, plus the choices it accepts."""
+    parts = [field.help.strip()] if field.help.strip() else []
+    if field.choices:
+        parts.append(f"[one of: {', '.join(field.choices)}]")
+    if field.item_key:
+        parts.append("[repeat for each entry, in order]")
     return " ".join(parts)
 
 
@@ -248,6 +284,11 @@ class Cmd:
     # model call, publishing then waits on the marketplace) — there, the default refuses a call that
     # is still working. ``describe`` reports the effective value so the caller can size its own wait.
     timeout: float | None = None
+    # A command that sends a file rather than JSON: it takes the local path as its first argument
+    # and posts the bytes as multipart/form-data. Declared here rather than hand-written as a
+    # separate Typer command so the command still appears in ``describe`` and in the surface
+    # snapshot the agent's skills are checked against.
+    upload_file: bool = False
 
     @property
     def effective_timeout(self) -> float:
@@ -266,6 +307,11 @@ class Cmd:
     def takes_body(self) -> bool:
         """Whether this command accepts a ``-b``/``--body`` JSON payload."""
         return self.has_body or self.body_freeform or bool(self.body) or self.query_body
+
+    @property
+    def body_options(self) -> tuple[BodyField, ...]:
+        """Body fields this command also exposes as real ``--options``, in declaration order."""
+        return tuple(f for f in self.body if f.option)
 
 
 @dataclass(frozen=True)
@@ -353,9 +399,20 @@ def validate_body(group: str, cmd: Cmd, body: Any) -> None:
     if body is None:
         if required:
             names = ", ".join(f.name for f in required)
+            # Name the options too, where the command has them. A refusal that offers only -b sends
+            # the caller straight back to writing JSON in shell quotes — the thing the options are
+            # here to avoid — so the message has to know about both routes.
+            routes = ", ".join(f.option for f in required if f.option) or ", ".join(
+                f.option for f in cmd.body_options if f.option
+            )
+            opening = (
+                f"this command needs a body: pass {routes}, or JSON via -b/--body"
+                if routes
+                else "this command needs a JSON body via -b/--body"
+            )
             emit_error(
                 UserInputError(
-                    f"this command needs a JSON body via -b/--body. Required field(s): {names}. "
+                    f"{opening}. Required field(s): {names}. "
                     f"Allowed field(s): {', '.join(allowed)}. {hint}"
                 )
             )
@@ -469,6 +526,41 @@ def _build_query_body(*, query: str | None, variables: str | None, raw_body: str
     )
 
 
+def _build_option_body(cmd: Cmd, values: dict[str, Any], *, raw_body: str | None) -> Any:
+    """Assemble the body from the per-field ``--options``, or fall back to the literal ``-b``.
+
+    Refuses the mix rather than guessing a precedence: a caller that sent both meant one of them,
+    and silently dropping half a body is the kind of "it ran, and did something else" an agent
+    cannot see. Same shape as the ``-q``/``-b`` refusal for GraphQL.
+    """
+    given = {f.name: values[f.name] for f in cmd.body_options if _option_given(f, values[f.name])}
+    if not given:
+        return parse_json_body(raw_body)
+    if raw_body is not None:
+        names = ", ".join(f.option or "" for f in cmd.body_options if f.name in given)
+        raise UserInputError(
+            f"pass either -b/--body or the field options ({names}), not both — "
+            f"they build the same body."
+        )
+    body: dict[str, Any] = {}
+    for field in cmd.body_options:
+        if field.name not in given:
+            continue
+        value = given[field.name]
+        if field.item_key:
+            body[field.name] = [{field.item_key: item} for item in value]
+        else:
+            body[field.name] = value
+    return body
+
+
+def _option_given(field: BodyField, value: Any) -> bool:
+    """Whether this field's option carries something to send."""
+    if field.item_key or field.repeatable:
+        return bool(value)
+    return value is not None
+
+
 def _expand_id_prefix(cmd: Cmd, positionals: dict[str, Any], prefix: str) -> str | None:
     """Expand a short id ``prefix`` to a full id via the command's ``resolve_list_path``.
 
@@ -520,6 +612,24 @@ def _resolve_active_id(cmd: Cmd, positionals: dict[str, Any], raw: Any) -> str:
     return value
 
 
+def upload_payload(file_path: Path, *, filename: str | None = None) -> dict[str, tuple[str, bytes, str]]:
+    """The multipart field for a file being uploaded, read off disk.
+
+    Shared by the CLI command and the MCP tool so both send the picture itself. Posting the file as
+    a JSON body — the shape every other command takes — is what an upload command that took ``-b``
+    invited, and it ended with the text of a JSON document stored as an ad image.
+    """
+    name = filename or file_path.name
+    content_type, _ = mimetypes.guess_type(name)
+    try:
+        content = file_path.read_bytes()
+    except OSError as exc:
+        raise UserInputError(f"failed to read file {file_path}: {exc}") from exc
+    if not content:
+        raise UserInputError(f"{file_path} is empty — nothing to upload.")
+    return {"file": (name, content, content_type or "application/octet-stream")}
+
+
 def _make_callback(group: str, cmd: Cmd):
     """Build a callback with a synthetic signature Typer can introspect.
 
@@ -532,6 +642,12 @@ def _make_callback(group: str, cmd: Cmd):
     def _callback(**kwargs: Any) -> None:
         ctx = kwargs.pop("ctx")
         values = {name: kwargs.pop(name) for name in positionals}
+        files: dict[str, tuple[str, bytes, str]] | None = None
+        if cmd.upload_file:
+            try:
+                files = upload_payload(kwargs.pop("file"), filename=kwargs.get("filename"))
+            except CliError as err:
+                emit_error(err)
         resolved_active: str | None = None
         if cmd.active_positional is not None:
             resolved_active = _resolve_active_id(
@@ -551,6 +667,11 @@ def _make_callback(group: str, cmd: Cmd):
                         variables=kwargs.pop("variables", None),
                         raw_body=raw_body,
                     )
+                elif cmd.body_options:
+                    option_values = {
+                        f.name: kwargs.pop(f.name, None) for f in cmd.body_options
+                    }
+                    body = _build_option_body(cmd, option_values, raw_body=raw_body)
                 else:
                     body = parse_json_body(raw_body)
             except CliError as err:
@@ -576,6 +697,7 @@ def _make_callback(group: str, cmd: Cmd):
             path,
             params=params or None,
             json_body=body,
+            files=files,
             timeout=cmd.effective_timeout,
             job_poll_path=poll_path,
         )
@@ -609,6 +731,17 @@ def _make_callback(group: str, cmd: Cmd):
             )
         )
         annotations[name] = annotation
+
+    if cmd.upload_file:
+        parameters.append(
+            inspect.Parameter(
+                "file",
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                default=typer.Argument(..., help="Path to the local file to upload."),
+                annotation=Path,
+            )
+        )
+        annotations["file"] = Path
 
     for f in cmd.flags:
         annotation = _flag_annotation(f)
@@ -653,6 +786,26 @@ def _make_callback(group: str, cmd: Cmd):
             )
         )
         annotations["variables"] = str | None
+
+    for field in cmd.body:
+        option = field.option
+        if option is None:
+            continue
+        field_annotation: Any = list[str] if (field.item_key or field.repeatable) else str | None
+        field_default = (
+            typer.Option([], option, help=_body_option_help(field))
+            if (field.item_key or field.repeatable)
+            else typer.Option(None, option, help=_body_option_help(field))
+        )
+        parameters.append(
+            inspect.Parameter(
+                field.name,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                default=field_default,
+                annotation=field_annotation,
+            )
+        )
+        annotations[field.name] = field_annotation
 
     if cmd.takes_body:
         body_annotation: Any = str | None

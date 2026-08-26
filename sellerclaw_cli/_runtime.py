@@ -32,6 +32,7 @@ def run_operation(
     *,
     params: dict[str, Any] | None = None,
     json_body: Any = None,
+    files: dict[str, tuple[str, bytes, str]] | None = None,
     timeout: float | None = None,
     job_poll_path: str | None = None,
 ) -> None:
@@ -61,7 +62,7 @@ def run_operation(
     http_timeout = DEFAULT_TIMEOUT_SECONDS if starts_a_job else budget
     try:
         with Client.from_env(timeout=http_timeout) as client:
-            result = client.request(method, path, params=params, json=json_body)
+            result = client.request(method, path, params=params, json=json_body, files=files)
             if job_poll_path is not None and looks_like_job(result):
                 poll_command = _poll_command(job_poll_path)
                 if not _waits(ctx):

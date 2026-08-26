@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typer
 
-from sellerclaw_cli._command_group import Cmd, LONG_TIMEOUT_SECONDS, body_field, build_group, flag
+from sellerclaw_cli._command_group import Cmd, LONG_TIMEOUT_SECONDS, SYNC_STOCK_PARTIAL_HELP, body_field, build_group, flag
 
 NAME = "ebay-listings"
 
@@ -79,12 +79,36 @@ _LAZY_DRAFT_BODY = (
     body_field("sell_prices", type=dict, help="Override sell prices keyed by SKU/variant."),
 )
 
+# The parcel, shared by the two edit commands. eBay prices calculated postage from it and refuses a
+# listing that carries no weight — and it lives on the listing, so this is how an existing draft or a
+# live listing is fixed, without deleting and re-creating anything.
+_PACKAGE_BODY = (
+    body_field(
+        "package_weight_grams",
+        type=int,
+        help=(
+            "What one packed unit weighs, in grams. Required by eBay under a calculated-rate "
+            "shipping policy; omit it if nobody knows, never send 0 or a guess."
+        ),
+    ),
+    body_field(
+        "package_length_mm",
+        type=int,
+        help="Package length in millimetres. Send all three sides or none — eBay refuses a partial box.",
+    ),
+    body_field("package_width_mm", type=int, help="Package width in millimetres."),
+    body_field("package_height_mm", type=int, help="Package height in millimetres."),
+)
+
 SPECS = (
     Cmd(
         "list",
         "GET",
         "/agent/stores/{store_id}/listings",
-        summary="List the store's eBay listings from the SellerClaw mirror.",
+        summary=(
+            "List the store's eBay listings from the SellerClaw mirror. `total` is the filter-aware match "
+            "count, not the size of this page — page through the rest with `--offset`."
+        ),
         flags=(
             flag(
                 "status",
@@ -101,6 +125,7 @@ SPECS = (
                 default=100,
                 help="Max results.",
             ),
+            flag("offset", type=int, minimum=0, default=0, help="Results to skip (paging)."),
         ),
     ),
     Cmd(
@@ -183,13 +208,18 @@ SPECS = (
         "sync-stock",
         "POST",
         "/agent/stores/{store_id}/listings/sync-stock",
-        summary="Sync stock to eBay.",
+        summary=(
+            "Update price and/or stock on existing eBay offers "
+            '(body: {"items": [{"sku": "...", "quantity": 5, "price": 19.99}]}). '
+            "Identify each item by sku or remote_id (the eBay listing id)."
+        ),
         body=(
             body_field(
                 "items",
                 type=dict,
                 repeatable=True,
-                help="Stock items to push, each {sku, quantity, remote_id?, price?, compare_at_price?}.",
+                help="Offers to update, each {sku?, remote_id?, quantity?, price?, "
+                "compare_at_price?} (sku or remote_id, and quantity and/or price). " + SYNC_STOCK_PARTIAL_HELP,
             ),
         ),
     ),
@@ -259,6 +289,7 @@ SPECS = (
             body_field("return_policy_id", help="Return policy id from `ebay-store list-policies`."),
             body_field("images", repeatable=True, help="List of image URLs (max 24)."),
             body_field("aspects", type=dict, help="Item specifics, e.g. {\"Color\": [\"Black\"]}."),
+            *_PACKAGE_BODY,
         ),
     ),
     Cmd("delete", "DELETE", "/agent/stores/{store_id}/ebay-listings/{listing_id}", summary="Delete a published eBay listing."),
@@ -266,8 +297,20 @@ SPECS = (
         "list-drafts",
         "GET",
         "/agent/stores/{store_id}/ebay-draft-listings",
-        summary="List eBay draft listings.",
-        flags=(flag("status", help="Filter by status."),),
+        summary=(
+            "List this store's eBay listings — despite the name, every status, not only drafts "
+            "(filter with --status). ONE ENTRY PER LISTING, not per variation: each carries "
+            "'listing_ids' (every variation's id — what publish and update-draft take), "
+            "'variation_count', the price range, the total stock and the statuses it spans. 'sku' "
+            "and 'remote_id' appear only on a listing with exactly one variation. 'total' counts "
+            "listings, 'variation_rows' the rows behind them; page with --limit / --offset. For "
+            "each variation's own price and stock use 'listings variable'."
+        ),
+        flags=(
+            flag("status", help="Filter by status."),
+            flag("limit", type=int, minimum=1, maximum=200, default=50, help="Max listings."),
+            flag("offset", type=int, minimum=0, default=0, help="Listings to skip (paging)."),
+        ),
     ),
     Cmd(
         "create-drafts",
@@ -280,8 +323,9 @@ SPECS = (
             "reaches eBay: publishing is a separate step, after you have read the drafts back. Runs "
             "in the background: the answer is the queued job and the command that reads it. Read "
             "that once the work has plausibly finished — `drafted` says what was decided per "
-            "product (category, item specifics, price range), `results` gives the rows with their "
-            "readiness — or add `--wait` to hold on until then."
+            "product (category, item specifics, price range, the `listing_ids` it became and "
+            "`ready` for the group), `not_ready` names only the rows a publish would refuse and "
+            "why — or add `--wait` to hold on until then."
         ),
         # Only product_ids is required, matching every other channel's draft command and the server,
         # which fills the rest: it places the category, resolves the item specifics off the product,
@@ -369,6 +413,7 @@ SPECS = (
             body_field("return_policy_id", help="Return policy id from `ebay-store list-policies`."),
             body_field("images", repeatable=True, help="List of image URLs (max 24)."),
             body_field("aspects", type=dict, help="Item specifics, e.g. {\"Color\": [\"Black\"]}."),
+            *_PACKAGE_BODY,
         ),
     ),
     Cmd(

@@ -38,11 +38,12 @@ launch. Authentication is inherited from the usual CLI config — ``SELLERCLAW_T
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from sellerclaw_cli import guides
 from sellerclaw_cli._client import Client
-from sellerclaw_cli._command_group import REGISTRY, Cmd, Flag, GroupSpec, positionals_of
+from sellerclaw_cli._command_group import REGISTRY, Cmd, Flag, GroupSpec, positionals_of, upload_payload
 from sellerclaw_cli._errors import UserInputError
 from sellerclaw_cli.commands._discover import _body_example
 
@@ -50,6 +51,14 @@ if TYPE_CHECKING:
     import typer
 
 SERVER_NAME = "sellerclaw"
+
+# Where someone can read what this server is, and the logo to show beside it. Both are standard
+# server metadata (``websiteUrl`` / ``icons`` in the initialize response): a client that renders
+# them shows SellerClaw's own branding instead of a generic tile, and a client that does not —
+# claude.ai's custom connectors today — ignores them at no cost.
+SERVER_WEBSITE_URL = "https://sellerclaw.ai"
+_ICON_MIME_TYPE = "image/png"
+_ICON_SIZES = ["512x512"]
 
 SERVER_INSTRUCTIONS = (
     "SellerClaw e-commerce control over the seller's stores, orders, listings, ads, suppliers, "
@@ -68,9 +77,10 @@ SERVER_INSTRUCTIONS = (
     "owner's approval.\n"
     "Finding things: read one row by its SellerClaw id with the channel-agnostic groups — "
     "`listings get`, `orders get`, `catalog get` (the per-channel groups like `shopify-listings` "
-    "do not read by id). `listings search` finds listings by product_id (one row per variant), "
-    "store, SKU, marketplace id, channel or status; `catalog list` finds a product by exact SKU or "
-    "by supplier item; `orders list` takes a product_id (who bought this).\n"
+    "do not read by id). `listings search` finds listings by product_id, store, SKU, marketplace "
+    "id, channel or status, one entry per listing (a multi-variant product is one result, with "
+    "every variation's id in `listing_ids`); `catalog list` finds a product by exact SKU or by "
+    "supplier item; `orders list` takes a product_id (who bought this).\n"
     "How the business is doing — sales, profit, best sellers, trends, what to reorder, where buyers "
     "are, cash tied up in stock, what needs attention today — is the `analytics` group. Every "
     "command there takes the same period (a `period` keyword, or `week`/`month` for a COMPLETED "
@@ -323,6 +333,9 @@ def _command_schema(group: str, cmd: Cmd) -> dict[str, Any]:
         "path": cmd.path,
         "summary": cmd.summary,
         "positionals": positionals_of(cmd.path),
+        # A command that sends a file: pass the local path as positionals["file"]. It is not a path
+        # placeholder, so it is announced on its own rather than in the list above.
+        **({"upload_file": True} if cmd.upload_file else {}),
         "flags": [_flag_schema(f) for f in cmd.flags],
         "takes_body": cmd.takes_body,
         "body_freeform": cmd.takes_body and not cmd.body,
@@ -410,8 +423,18 @@ def run_command(
     if body is not None and not cmd.takes_body:
         raise UserInputError(f"{group} {command} does not take a body; drop the `body` argument.")
 
+    files = None
+    if cmd.upload_file:
+        local_path = str(positionals.get("file") or "").strip()
+        if not local_path:
+            raise UserInputError(
+                f"{group} {command} uploads a file: pass its local path as positionals: "
+                '{"file": "/path/to/image.jpg"}.'
+            )
+        files = upload_payload(Path(local_path), filename=params.get("filename"))
+
     with _client_for_tool(cmd.effective_timeout) as client:
-        return client.request(cmd.method, path, params=params or None, json=body)
+        return client.request(cmd.method, path, params=params or None, json=body, files=files)
 
 
 def _map_flags(group: str, command: str, cmd: Cmd, flags: dict[str, Any]) -> dict[str, Any]:
@@ -454,12 +477,113 @@ def _import_fastmcp() -> Any:
     return FastMCP
 
 
+def _server_branding() -> dict[str, Any]:
+    """The website and logo a client can show for this server, as FastMCP keyword arguments.
+
+    The icon travels as a data URI rather than a link: a permission dialog that renders it should
+    not depend on our web host being reachable, and 11 KB rides along once per session. Read here
+    rather than at import time so the core CLI never touches it.
+    """
+    import base64
+    from importlib.resources import files
+
+    from mcp.types import Icon
+
+    try:
+        # Addressed through the package, not as ``sellerclaw_cli.assets``: the folder holds data,
+        # not code, and has no ``__init__.py`` to be imported as a package of its own.
+        png = (files("sellerclaw_cli") / "assets" / "icon.png").read_bytes()
+    except OSError:
+        # A build that shipped without the asset loses a logo, nothing more. Refusing to start the
+        # hosted server over a decoration would turn a cosmetic regression into an outage.
+        return {"website_url": SERVER_WEBSITE_URL}
+    data_uri = f"data:{_ICON_MIME_TYPE};base64,{base64.b64encode(png).decode('ascii')}"
+    return {
+        "website_url": SERVER_WEBSITE_URL,
+        "icons": [Icon(src=data_uri, mimeType=_ICON_MIME_TYPE, sizes=_ICON_SIZES)],
+    }
+
+
+def _apply_server_version(server: Any) -> None:
+    """Report SellerClaw's version in the handshake instead of the SDK's.
+
+    FastMCP takes no version argument and lets the low-level server default to the ``mcp`` package
+    version, so a client that shows "SellerClaw 1.29.0" would be quoting the SDK back at us — and
+    at anyone asking a user which version they are on.
+
+    Reached through a private attribute for want of a public one, so it gives way rather than
+    crashes if a future SDK moves it: the hosted image installs the SDK unpinned within 1.x (see the
+    ``mcp`` extra), and the worst honest outcome of a rename is the old, wrong version number.
+    """
+    from sellerclaw_cli import __version__
+
+    low_level = getattr(server, "_mcp_server", None)
+    if low_level is not None:
+        low_level.version = __version__
+
+
 def _register_tools(server: Any) -> None:
-    """Register the four discovery/proxy tools on a FastMCP server."""
-    server.add_tool(show_guide, name="sellerclaw_guide", description=_GUIDE_TOOL_DESC)
-    server.add_tool(list_groups, name="sellerclaw_groups", description=_GROUPS_TOOL_DESC)
-    server.add_tool(describe_command, name="sellerclaw_describe", description=_DESCRIBE_TOOL_DESC)
-    server.add_tool(run_command, name="sellerclaw_run", description=_RUN_TOOL_DESC)
+    """Register the four discovery/proxy tools on a FastMCP server.
+
+    Each carries a title as well as a name: the name is what a caller types, the title is what a
+    person reads in a permission dialog, where "Sellerclaw run" says a good deal less than "Run a
+    SellerClaw command".
+
+    Each also carries annotations, because a client told nothing has to assume the worst: ChatGPT
+    labels every unannotated tool "destructive" and "public write", so reading a guide came out
+    looking exactly as dangerous as withdrawing a listing — and a warning that fires on everything
+    stops being read. Three of the four only read this process's own command registry and the
+    bundled guides; ``sellerclaw_run`` is the one that reaches the account and can change or
+    remove things in it.
+    """
+    from mcp.types import ToolAnnotations
+
+    def _reads_only(title: str) -> ToolAnnotations:
+        return ToolAnnotations(
+            title=title,
+            readOnlyHint=True,
+            destructiveHint=False,
+            idempotentHint=True,
+            openWorldHint=False,
+        )
+
+    server.add_tool(
+        show_guide,
+        name="sellerclaw_guide",
+        title="Read a SellerClaw guide",
+        description=_GUIDE_TOOL_DESC,
+        annotations=_reads_only("Read a SellerClaw guide"),
+    )
+    server.add_tool(
+        list_groups,
+        name="sellerclaw_groups",
+        title="List SellerClaw commands",
+        description=_GROUPS_TOOL_DESC,
+        annotations=_reads_only("List SellerClaw commands"),
+    )
+    server.add_tool(
+        describe_command,
+        name="sellerclaw_describe",
+        title="Describe a SellerClaw command",
+        description=_DESCRIBE_TOOL_DESC,
+        annotations=_reads_only("Describe a SellerClaw command"),
+    )
+    server.add_tool(
+        run_command,
+        name="sellerclaw_run",
+        title="Run a SellerClaw command",
+        description=_RUN_TOOL_DESC,
+        # The honest reading of the one tool that fronts every command: it writes, it can destroy
+        # (withdraw a listing, cancel an order), running it twice is not the same as running it
+        # once, and it reaches the outside world.
+        annotations=ToolAnnotations(
+            title="Run a SellerClaw command",
+            readOnlyHint=False,
+            destructiveHint=True,
+            idempotentHint=False,
+            openWorldHint=True,
+        ),
+    )
 
 
 def build_server() -> Any:
@@ -471,7 +595,8 @@ def build_server() -> Any:
     fast_mcp = _import_fastmcp()
     import sellerclaw_cli.cli  # noqa: F401 — importing registers every group into REGISTRY
 
-    server = fast_mcp(SERVER_NAME, instructions=SERVER_INSTRUCTIONS)
+    server = fast_mcp(SERVER_NAME, instructions=SERVER_INSTRUCTIONS, **_server_branding())
+    _apply_server_version(server)
     _register_tools(server)
     return server
 
@@ -493,7 +618,9 @@ class SellerclawTokenVerifier:
         from mcp.server.auth.provider import AccessToken
 
         try:
-            async with httpx.AsyncClient(base_url=self._api_url, timeout=10.0) as client:
+            async with httpx.AsyncClient(
+                base_url=self._api_url, timeout=10.0, trust_env=False
+            ) as client:
                 response = await client.get(
                     "/agent/me", headers={"Authorization": f"Bearer {token}"}
                 )
@@ -544,7 +671,9 @@ def build_http_server(
         stateless_http=True,
         host=host,
         port=port,
+        **_server_branding(),
     )
+    _apply_server_version(server)
     _register_tools(server)
     return server
 

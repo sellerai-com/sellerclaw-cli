@@ -17,6 +17,12 @@ NAME = "categories"
 # `refresh` is for one situation only: the owner says they *just* made a category on their own store
 # (WooCommerce, Wix, BigCommerce) and wants it used now. Drafting reads our copy of their store, which
 # updates itself daily, so every other time it is a wasted call.
+#
+# `create` and `rename` write to the owner's own store, so they exist only for those three: a
+# marketplace hands every seller the same fixed tree, and Shopify's category is free text. Create a
+# category when the OWNER asks for one — not because a product matched nothing. A shop's pages are
+# built on the categories it already has, and a second near-identical one is a page nobody links to
+# (which is why a name the store already keeps comes back as `created: false` instead).
 SPECS = (
     Cmd(
         "suggest",
@@ -85,7 +91,14 @@ SPECS = (
         summary="Walk the category tree one level down. Rarely needed — prefer `suggest`.",
         flags=(
             flag("store_id", required=True, help="Store whose marketplace to walk."),
-            flag("parent_id", help="Marketplace category id; omit for the top level."),
+            flag(
+                "parent_external_id",
+                aliases=("--parent-id",),
+                help=(
+                    "The marketplace's own id for the parent (an `external_id`); omit for the top "
+                    "level. `--parent-id` is the old spelling."
+                ),
+            ),
             flag("tree_id", help="Which tree, when the store has several (e.g. eBay Motors)."),
         ),
     ),
@@ -107,6 +120,51 @@ SPECS = (
                 required=True,
                 help="The store whose own categories to re-read (from `channels list`).",
             ),
+        ),
+    ),
+    Cmd(
+        "create",
+        "POST",
+        "/agent/categories/create",
+        summary=(
+            "Make a new category on your own store (WooCommerce, Wix, BigCommerce). "
+            "A name the store already has is returned instead of a duplicate."
+        ),
+        body=(
+            body_field("store_id", required=True, help="Your store (from `channels list`)."),
+            body_field("name", required=True, help="What the category is called."),
+            body_field(
+                "parent_external_id",
+                help=(
+                    "Category to nest this one under, in the shop's own id (`external_id`); omit "
+                    "for a top-level one."
+                ),
+            ),
+            body_field(
+                "parent_id",
+                help="Deprecated spelling of `parent_external_id`; send one or the other.",
+            ),
+        ),
+    ),
+    Cmd(
+        "rename",
+        "POST",
+        "/agent/categories/rename",
+        summary="Rename one of your own store's categories. What is filed in it stays filed.",
+        body=(
+            body_field("store_id", required=True, help="Your store (from `channels list`)."),
+            body_field(
+                "external_id",
+                help=(
+                    "The shop's own id for the category to rename (from `search`/`used`). Not our "
+                    "mirror row's `category_id` — this call has only ever taken the shop's."
+                ),
+            ),
+            body_field(
+                "category_id",
+                help="Deprecated spelling of `external_id`; send one or the other.",
+            ),
+            body_field("name", required=True, help="The new name."),
         ),
     ),
 )

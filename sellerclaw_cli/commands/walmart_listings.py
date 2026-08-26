@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typer
 
-from sellerclaw_cli._command_group import Cmd, LONG_TIMEOUT_SECONDS, body_field, build_group, flag
+from sellerclaw_cli._command_group import Cmd, LONG_TIMEOUT_SECONDS, SYNC_STOCK_PARTIAL_HELP, body_field, build_group, flag
 
 NAME = "walmart-listings"
 
@@ -15,7 +15,10 @@ SPECS = (
         "list",
         "GET",
         "/agent/stores/{store_id}/listings",
-        summary="List the store's Walmart listings from the SellerClaw mirror.",
+        summary=(
+            "List the store's Walmart listings from the SellerClaw mirror. `total` is the filter-aware "
+            "match count, not the size of this page — page through the rest with `--offset`."
+        ),
         flags=(
             flag(
                 "status",
@@ -24,6 +27,7 @@ SPECS = (
             ),
             flag("search", help="Match title or SKU."),
             flag("limit", type=int, minimum=1, maximum=500, default=100, help="Max results."),
+            flag("offset", type=int, minimum=0, default=0, help="Results to skip (paging)."),
         ),
     ),
     Cmd(
@@ -69,14 +73,14 @@ SPECS = (
         summary=(
             "Update price and/or stock on existing Walmart items "
             '(body: {"items": [{"sku": "...", "quantity": 5, "price": 19.99}]}). '
-            "Identify each item by sku."
+            "Identify each item by sku (or by remote_id for an item we already mirror)."
         ),
         body=(
             body_field(
                 "items",
                 type=dict,
                 repeatable=True,
-                help="Items to update, each {sku, quantity?, price?}.",
+                help="Items to update, each {sku, quantity?, price?}. " + SYNC_STOCK_PARTIAL_HELP,
             ),
         ),
     ),
@@ -84,6 +88,7 @@ SPECS = (
         "draft",
         "POST",
         "/agent/walmart/stores/{store_id}/listings/draft",
+        job_poll_path="/agent/stores/{store_id}/bulk-listing-jobs/{job_id}",
         timeout=LONG_TIMEOUT_SECONDS,
         summary=(
             "Create local DRAFT listings from catalog products before publishing. A Walmart "

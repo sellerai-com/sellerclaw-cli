@@ -25,8 +25,8 @@ SPECS = (
         summary=(
             "Put catalog products on the storefront, one listing per variation. Price defaults to the "
             "shop's markup over the catalog cost; pass 'prices' to override. A product with no cost, "
-            "or a shop with no markup set, is refused rather than listed at zero — set the shop's "
-            "markup or pass an explicit price first."
+            "or a shop with no markup set, is refused rather than listed at zero — get a markup on "
+            "the shop (the owner approves it) or pass an explicit price first."
         ),
         body=(
             body_field(

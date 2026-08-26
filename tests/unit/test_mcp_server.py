@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 
 import httpx
 import pytest
 import respx
 
+from sellerclaw_cli import __version__
 from sellerclaw_cli._command_group import REGISTRY
 from sellerclaw_cli._errors import UserInputError
 
@@ -15,6 +17,7 @@ from sellerclaw_cli._errors import UserInputError
 from sellerclaw_cli.cli import app  # noqa: F401
 from sellerclaw_cli.mcp_server import (
     MCP_VISIBLE_GROUPS,
+    SERVER_WEBSITE_URL,
     build_server,
     describe_command,
     list_groups,
@@ -141,6 +144,7 @@ _LISTINGS_COMMANDS = {
     "check",
     "bulk-update",
     "delete-drafts",
+    "create-drafts",
     "bulk-publish",
     "bulk-jobs",
     "bulk-job",
@@ -289,3 +293,77 @@ def test_build_server_registers_exactly_the_four_proxy_tools() -> None:
     describe_props = set(by_name["sellerclaw_describe"].inputSchema["properties"])
     assert {"group", "command"} <= describe_props
     assert "topic" in by_name["sellerclaw_guide"].inputSchema["properties"]
+
+
+def test_every_tool_carries_a_human_title() -> None:
+    """A permission dialog shows the title, and "Sellerclaw run" tells nobody what it does."""
+    tools = asyncio.run(build_server().list_tools())
+
+    assert {t.name: t.title for t in tools} == {
+        "sellerclaw_guide": "Read a SellerClaw guide",
+        "sellerclaw_groups": "List SellerClaw commands",
+        "sellerclaw_describe": "Describe a SellerClaw command",
+        "sellerclaw_run": "Run a SellerClaw command",
+    }
+
+
+def test_only_run_is_advertised_as_writing_and_reaching_the_outside_world() -> None:
+    """An unannotated tool is treated as destructive, which made reading a guide look dangerous.
+
+    A client renders these hints in the dialog where someone decides whether to allow the call, so
+    a warning on all four is a warning on none. Discovery reads this process's own registry; only
+    ``sellerclaw_run`` touches the account.
+    """
+    by_name = {t.name: t.annotations for t in asyncio.run(build_server().list_tools())}
+
+    for name in ("sellerclaw_guide", "sellerclaw_groups", "sellerclaw_describe"):
+        annotations = by_name[name]
+        assert annotations is not None, name
+        assert annotations.readOnlyHint is True, name
+        assert annotations.destructiveHint is False, name
+        assert annotations.idempotentHint is True, name
+        assert annotations.openWorldHint is False, name
+
+    run = by_name["sellerclaw_run"]
+    assert run is not None
+    assert run.readOnlyHint is False
+    assert run.destructiveHint is True
+    assert run.idempotentHint is False
+    assert run.openWorldHint is True
+
+
+def test_the_handshake_carries_our_branding_and_our_version() -> None:
+    """Clients that render server metadata should get SellerClaw's logo, site and version.
+
+    The icon travels inline so a permission dialog never has to reach our web host, and the version
+    must be ours: FastMCP otherwise reports the ``mcp`` SDK's, which would be quoted back at anyone
+    asked "which version are you running?".
+    """
+    options = build_server()._mcp_server.create_initialization_options()
+
+    assert options.website_url == SERVER_WEBSITE_URL
+    assert options.server_version == __version__
+    icon = (options.icons or [])[0]
+    assert icon.mimeType == "image/png"
+    assert icon.src.startswith("data:image/png;base64,")
+    # A real image, not an empty placeholder: the PNG magic number survives the round trip.
+    assert base64.b64decode(icon.src.split(",", 1)[1])[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_a_build_without_the_logo_still_serves(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Losing a decoration must not take the server down.
+
+    The hosted server is installed from a wheel; if one ever shipped without the asset, it has to
+    keep answering tool calls with a blank tile rather than refuse to start.
+    """
+    import importlib.resources
+
+    def _missing(_package: str) -> object:
+        raise FileNotFoundError("this build has no assets")
+
+    monkeypatch.setattr(importlib.resources, "files", _missing)
+
+    options = build_server()._mcp_server.create_initialization_options()
+
+    assert not options.icons
+    assert options.website_url == SERVER_WEBSITE_URL

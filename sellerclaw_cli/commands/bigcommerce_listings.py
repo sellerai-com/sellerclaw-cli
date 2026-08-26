@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typer
 
-from sellerclaw_cli._command_group import Cmd, LONG_TIMEOUT_SECONDS, body_field, build_group, flag
+from sellerclaw_cli._command_group import Cmd, LONG_TIMEOUT_SECONDS, SYNC_STOCK_PARTIAL_HELP, body_field, build_group, flag
 
 NAME = "bigcommerce-listings"
 
@@ -14,7 +14,10 @@ SPECS = (
         "list",
         "GET",
         "/agent/stores/{store_id}/listings",
-        summary="List the store's BigCommerce listings from the SellerClaw mirror.",
+        summary=(
+            "List the store's BigCommerce listings from the SellerClaw mirror. `total` is the "
+            "filter-aware match count, not the size of this page — page through the rest with `--offset`."
+        ),
         flags=(
             flag(
                 "status",
@@ -23,6 +26,7 @@ SPECS = (
             ),
             flag("search", help="Match title, SKU, or remote id."),
             flag("limit", type=int, minimum=1, maximum=500, default=100, help="Max results."),
+            flag("offset", type=int, minimum=0, default=0, help="Results to skip (paging)."),
         ),
     ),
     Cmd(
@@ -78,7 +82,8 @@ SPECS = (
                 "items",
                 type=dict,
                 repeatable=True,
-                help="Products to update, each {sku?, remote_id?, quantity?, price?} (sku or remote_id).",
+                help="Products to update, each {sku?, remote_id?, quantity?, price?} (sku or remote_id, and "
+                "quantity and/or price). " + SYNC_STOCK_PARTIAL_HELP,
             ),
         ),
     ),
@@ -92,8 +97,10 @@ SPECS = (
             "Create local DRAFT listings from catalog products before publishing "
             '(body: {"product_ids": ["<uuid>", ...]}). One draft row per product variant. Runs in '
             "the background: the answer is the queued job and the command that reads it. Reading "
-            "it gives the created rows with their readiness, and any product the shop had no "
-            "category for; `--wait` holds on until then instead."
+            "it gives `drafted` (one entry per product with what was decided, the `listing_ids` it "
+            "became and `ready` for the group), `not_ready` (only the rows a publish would refuse, "
+            "with their issues), and any product the shop had no category for; `--wait` holds on "
+            "until then instead."
         ),
         body=(
             body_field(

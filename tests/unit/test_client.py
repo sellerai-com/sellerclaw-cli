@@ -545,6 +545,26 @@ class TestAgentIdHeader:
 # ---------------------------------------------------------------------------
 
 
+class TestProxyEnv:
+    def test_client_ignores_socks_proxy_env(
+        self, fake_api_url: str, fake_token: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A shell SOCKS proxy (socks://, no socksio) must not crash Client construction or a request."""
+        monkeypatch.setenv("ALL_PROXY", "socks://127.0.0.1:10808/")
+        monkeypatch.setenv("all_proxy", "socks://127.0.0.1:10808/")
+
+        client = Client(base_url=fake_api_url, token=fake_token)
+
+        assert client._http is not None
+        assert client._http._trust_env is False
+
+        with respx.mock:
+            respx.get(f"{fake_api_url}/agent/stores").mock(
+                return_value=httpx.Response(200, json={"ok": True})
+            )
+            assert client.request("GET", "/agent/stores") == {"ok": True}
+
+
 class TestFromEnv:
     @respx.mock
     def test_from_env_reads_env_token_and_api_url(

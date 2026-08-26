@@ -32,6 +32,30 @@ SPECS = (
                 help="Campaign objective, e.g. OUTCOME_SALES, OUTCOME_TRAFFIC, OUTCOME_LEADS.",
                 example="OUTCOME_SALES",
             ),
+            # Where the budget sits is decided here, not later: a campaign budget (CBO) means every
+            # ad set under it is created without one, and no budget here means each ad set brings
+            # its own. Undeclared, this choice was invisible and every campaign came out budgetless.
+            body_field(
+                "daily_budget",
+                type=float,
+                help=(
+                    "Daily budget in the account currency (50 = $50). Sets campaign budget "
+                    "optimization: ad sets under it then carry no budget of their own."
+                ),
+            ),
+            body_field(
+                "lifetime_budget",
+                type=float,
+                help="Lifetime budget in the account currency, instead of daily_budget. Same CBO effect.",
+            ),
+            body_field(
+                "special_ad_categories",
+                type=list,
+                help=(
+                    'Regulated categories, e.g. ["HOUSING"], ["CREDIT"], ["EMPLOYMENT"]. Defaults '
+                    "to none — send it only when the ads really are in one."
+                ),
+            ),
             body_field("status", help="Ignored — campaigns are always created paused; activate via PATCH."),
         ),
         body_strict=False,
@@ -59,17 +83,28 @@ SPECS = (
         body=(
             body_field("campaign_id", required=True, help="Parent campaign id."),
             body_field("name", required=True, help="Ad set name."),
+            # Budget lives at exactly one level: on the campaign (budget optimization) or on the
+            # ad set. Demanding the pair here made an ad set under a budgeted campaign impossible
+            # to create at all — every attempt was one Meta rejects.
             body_field(
                 "daily_budget",
                 type=float,
-                required=True,
-                help="Daily budget in account currency minor units (e.g. cents).",
+                help="Daily budget in the account currency (50 = $50). Omit under campaign budget optimization.",
             ),
             body_field(
                 "bid_strategy",
-                required=True,
-                help="Bid strategy, e.g. LOWEST_COST_WITHOUT_CAP, COST_CAP, LOWEST_COST_WITH_BID_CAP.",
+                help="Bid strategy, e.g. LOWEST_COST_WITHOUT_CAP, COST_CAP, LOWEST_COST_WITH_BID_CAP. Goes with daily_budget.",
                 example="LOWEST_COST_WITHOUT_CAP",
+            ),
+            body_field(
+                "bid_amount",
+                type=float,
+                help="Bid cap / cost target in the account currency. Required for COST_CAP and LOWEST_COST_WITH_BID_CAP.",
+            ),
+            body_field(
+                "billing_event",
+                help="What Meta charges for: IMPRESSIONS (default), LINK_CLICKS, THRUPLAY.",
+                example="IMPRESSIONS",
             ),
             body_field(
                 "optimization_goal",
@@ -78,11 +113,18 @@ SPECS = (
                 example="OFFSITE_CONVERSIONS",
             ),
             body_field(
+                "promoted_object",
+                type=dict,
+                help='What to optimize towards: {"pixel_id": ..., "custom_event_type": "PURCHASE"} or {"page_id": ...}.',
+            ),
+            body_field(
                 "targeting",
                 type=dict,
                 required=True,
-                help="Full targeting spec (geo_locations, age_min/age_max, genders, interests, ...).",
+                help="Targeting spec: geo_locations.countries, age_min/age_max, interests, genders ([1] men, [2] women).",
             ),
+            body_field("start_time", help="ISO-8601 start, e.g. 2026-09-01T00:00:00-0700."),
+            body_field("end_time", help="ISO-8601 end. Meta requires it with a lifetime budget."),
             body_field("status", help="Ignored — ad sets are always created paused."),
         ),
         body_strict=False,
@@ -105,7 +147,7 @@ SPECS = (
             body_field(
                 "daily_budget",
                 type=float,
-                help="Override daily budget for the copy (account currency minor units).",
+                help="Override daily budget for the copy, in the account currency (50 = $50).",
             ),
         ),
         body_strict=False,
@@ -123,7 +165,13 @@ SPECS = (
                 "creative",
                 type=dict,
                 required=True,
-                help="Ad creative spec, e.g. {title, body, link_url, image_hash, call_to_action} or {object_story_spec}.",
+                help=(
+                    "The words and picture: {title, body, description, link_url, image_hash, "
+                    'call_to_action} — a plain button name like "SHOP_NOW" is fine. Assembled into '
+                    "the object_story_spec Meta requires; pass one yourself to control the whole "
+                    "shape. page_id names the Page the ad runs from (list-pages); omit it and the "
+                    "ad account's own Page is used. image_hash comes from upload-image."
+                ),
             ),
             body_field("status", help="Ignored — ads are always created paused."),
         ),
@@ -137,6 +185,12 @@ SPECS = (
         body_freeform=True,
     ),
     # Creatives, audiences, images, targeting
+    Cmd(
+        "list-pages",
+        "GET",
+        "/agent/ads/facebook/pages",
+        summary="List the Meta Pages this ad account can advertise from (an ad runs as a Page).",
+    ),
     Cmd("list-creatives", "GET", "/agent/ads/facebook/adcreatives", summary="List ad creatives."),
     Cmd("list-audiences", "GET", "/agent/ads/facebook/audiences", summary="List custom audiences."),
     Cmd(
@@ -160,8 +214,12 @@ SPECS = (
         "upload-image",
         "POST",
         "/agent/ads/facebook/images",
-        summary="Upload an image to the ad account.",
-        body_freeform=True,
+        summary="Upload an image file to the ad account; returns the image_hash a creative needs.",
+        # The picture itself, not a description of it. Declared as an upload rather than a JSON
+        # body: sending the file as JSON is what a `-b` body invited, and every real image died on
+        # its first byte before the request was ever made.
+        upload_file=True,
+        flags=(flag("filename", help="Name to store it under (default: the local file's name)."),),
     ),
     Cmd(
         "search-interests",

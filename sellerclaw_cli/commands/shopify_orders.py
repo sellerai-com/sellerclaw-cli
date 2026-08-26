@@ -19,11 +19,27 @@ SPECS = (
         "cancel",
         "POST",
         "/agent/stores/{store_id}/orders/{order_id}/cancel",
-        summary="Cancel a marketplace order.",
+        summary=(
+            "Cancel the order at Shopify. Shopify cancels asynchronously: the reply carries the "
+            "`job` doing the work, and `status` is null because nothing has changed on the order "
+            "yet. Unlike Wix and WooCommerce, Shopify can refund in the same step."
+        ),
         body=(
-            body_field("reason", required=True, help="Why the order is being cancelled."),
-            body_field("refund", type=bool, help="Refund the customer when cancelling."),
-            body_field("restock", type=bool, help="Restock the items when cancelling."),
+            body_field(
+                "reason",
+                help=(
+                    "Why it is being cancelled. Shopify accepts only its own words — CUSTOMER, "
+                    "DECLINED, FRAUD, INVENTORY, STAFF, OTHER — and anything else becomes OTHER."
+                ),
+            ),
+            body_field("refund", type=bool, help="Refund the buyer as part of cancelling."),
+            body_field("restock", type=bool, help="Put the goods back on sale."),
+            body_field(
+                "notify_customer",
+                type=bool,
+                help="Ignored by Shopify: its own notification settings decide.",
+            ),
+            body_field("customer_message", help="Ignored by Shopify; see notify_customer."),
         ),
     ),
     Cmd(

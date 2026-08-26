@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typer
 
-from sellerclaw_cli._command_group import Cmd, LONG_TIMEOUT_SECONDS, body_field, build_group, flag
+from sellerclaw_cli._command_group import Cmd, LONG_TIMEOUT_SECONDS, SYNC_STOCK_PARTIAL_HELP, body_field, build_group, flag
 
 NAME = "amazon-listings"
 
@@ -13,7 +13,10 @@ SPECS = (
         "list",
         "GET",
         "/agent/stores/{store_id}/listings",
-        summary="List the store's Amazon listings from the SellerClaw mirror.",
+        summary=(
+            "List the store's Amazon listings from the SellerClaw mirror. `total` is the filter-aware "
+            "match count, not the size of this page — page through the rest with `--offset`."
+        ),
         flags=(
             flag(
                 "status",
@@ -22,6 +25,7 @@ SPECS = (
             ),
             flag("search", help="Match title, SKU, or remote id."),
             flag("limit", type=int, minimum=1, maximum=500, default=100, help="Max results."),
+            flag("offset", type=int, minimum=0, default=0, help="Results to skip (paging)."),
         ),
     ),
     Cmd(
@@ -77,7 +81,8 @@ SPECS = (
                 "items",
                 type=dict,
                 repeatable=True,
-                help="Offers to update, each {sku (required), quantity?, price?, remote_id?}.",
+                help="Offers to update, each {sku, quantity?, price?} (remote_id works for an "
+                "offer we already mirror). " + SYNC_STOCK_PARTIAL_HELP,
             ),
         ),
     ),
@@ -109,6 +114,7 @@ SPECS = (
         "draft",
         "POST",
         "/agent/amazon/stores/{store_id}/listings/draft",
+        job_poll_path="/agent/stores/{store_id}/bulk-listing-jobs/{job_id}",
         timeout=LONG_TIMEOUT_SECONDS,
         summary=(
             "Create local DRAFT offers from catalog products before publishing. Amazon sells on "

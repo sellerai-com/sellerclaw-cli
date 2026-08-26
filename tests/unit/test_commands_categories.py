@@ -70,3 +70,85 @@ def test_refresh_without_a_store_never_reaches_the_server(
 
     assert result.exit_code != 0
     assert route.call_count == 0
+
+
+@respx.mock
+def test_children_walks_by_the_marketplaces_own_parent_id(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """`category_id` elsewhere on this surface is our mirror row's UUID; the parent here has always
+    been the marketplace's own id, so the option says so."""
+    route = respx.get(f"{fake_api_url}/agent/categories/children").mock(
+        return_value=httpx.Response(200, json={"data": []})
+    )
+
+    result = runner.invoke(
+        app,
+        ["categories", "children", "--store-id", STORE_ID, "--parent-external-id", "2993"],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert route.calls.last.request.url.params["parent_external_id"] == "2993"
+
+
+@respx.mock
+def test_children_still_accepts_the_old_parent_id_spelling(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """Callers written against the old name keep working while the skills move over."""
+    route = respx.get(f"{fake_api_url}/agent/categories/children").mock(
+        return_value=httpx.Response(200, json={"data": []})
+    )
+
+    result = runner.invoke(
+        app, ["categories", "children", "--store-id", STORE_ID, "--parent-id", "2993"]
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert route.calls.last.request.url.params["parent_external_id"] == "2993"
+
+
+@respx.mock
+def test_rename_sends_the_shops_own_id_under_its_new_name(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """The rename never took our UUID — only the field name said otherwise."""
+    route = respx.post(f"{fake_api_url}/agent/categories/rename").mock(
+        return_value=httpx.Response(200, json={"data": {"external_id": "15"}})
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "categories", "rename",
+            "-b", '{"store_id": "' + STORE_ID + '", "external_id": "15", "name": "Dog Muzzles"}',
+        ],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert route.calls.last.request.read().decode().count("external_id") == 1
+
+
+@respx.mock
+def test_rename_still_accepts_the_old_category_id_spelling(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """Declared on both sides: the API takes either, and the CLI must not refuse one locally."""
+    route = respx.post(f"{fake_api_url}/agent/categories/rename").mock(
+        return_value=httpx.Response(200, json={"data": {"external_id": "15"}})
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "categories", "rename",
+            "-b", '{"store_id": "' + STORE_ID + '", "category_id": "15", "name": "Dog Muzzles"}',
+        ],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert route.call_count == 1

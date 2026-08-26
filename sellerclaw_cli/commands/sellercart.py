@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import typer
 
-from sellerclaw_cli._command_group import Cmd, body_field, build_group, flag
+from sellerclaw_cli._command_group import (
+    LONG_TIMEOUT_SECONDS,
+    Cmd,
+    body_field,
+    build_group,
+    flag,
+)
 
 NAME = "sellercart"
 
@@ -38,9 +44,9 @@ SPECS = (
         "GET",
         "/agent/sellercart/options",
         summary=(
-            "What a shop may be created with: the address suffix every shop ends in, and every "
-            "currency `create` accepts. Read it before offering the seller a currency — the currency "
-            "is permanent once the shop exists."
+            "What a shop may be created with: the address suffix every shop ends in, every currency "
+            "`create` accepts, and every language it can be served in. Read it before offering the "
+            "seller a currency — the currency is permanent once the shop exists."
         ),
     ),
     Cmd(
@@ -75,6 +81,18 @@ SPECS = (
             ),
             body_field("currency", help="ISO currency the shop prices in. Permanent — ask first.", example="USD"),
             body_field(
+                "language",
+                help=(
+                    "What the shop says to buyers in its own words — the cart, the buttons, the "
+                    "checkout, the empty shelf — and the titles of the six pages it starts with. "
+                    "ISO 639-1; `options` lists what is accepted. Read it off the seller rather "
+                    "than asking: the language they write to you in is the one their buyers read. "
+                    "Omitted, the shop speaks English, so a Russian shop gets English buttons over "
+                    "Russian pages. Changeable later, unlike the currency."
+                ),
+                example="ru",
+            ),
+            body_field(
                 "markup_percent",
                 type=float,
                 help=(
@@ -90,16 +108,35 @@ SPECS = (
         "PATCH",
         "/agent/sellercart",
         summary=(
-            "Rename the shop, change the markup its prices are computed from, or stop it selling "
-            "online. The address and the currency are deliberately not changeable: buyers and search "
-            "engines already hold the one, and every price on the shelf is denominated in the other."
+            "Rename the shop, change the language it speaks, propose the markup its prices are "
+            "computed from, or stop it selling online. The address and the currency are deliberately "
+            "not changeable: buyers and search engines already hold the one, and every price on the "
+            "shelf is denominated in the other."
         ),
         body=(
             body_field("name", help="Shop name shown to buyers.", example="Acme Gear"),
             body_field(
+                "language",
+                help=(
+                    "What the shop says to buyers from the next page load: the cart, the buttons, "
+                    "the checkout, the empty shelf. ISO 639-1; `options` lists what is accepted. It "
+                    "rewrites nothing the seller already wrote — pages, blocks and menus stay in the "
+                    "language they were authored in — so switching a shop whose pages are English to "
+                    "'ru' leaves Russian buttons over English copy until the pages are redone. Say "
+                    "that when you switch it."
+                ),
+                example="ru",
+            ),
+            body_field(
                 "markup_percent",
                 type=float,
-                help="Markup percent over catalog cost, e.g. 30 for +30% (0-500).",
+                help=(
+                    "Markup percent over catalog cost, e.g. 30 for +30% (0-500). Because it is what "
+                    "the owner earns on everything the shop sells, this does not change it: it "
+                    "raises an approval for them and answers 202 with status pending_approval, and "
+                    "the shop prices by it once they approve. Send it on its own — mixed with a "
+                    "rename or sells_online the call is refused."
+                ),
                 example=45,
             ),
             body_field(
@@ -155,6 +192,54 @@ SPECS = (
             "before going live. Append the token to any page as '?preview=<token>'. Asking again "
             "returns the same token, so a preview tab they left open keeps working."
         ),
+    ),
+    Cmd(
+        "screenshot",
+        "POST",
+        "/agent/sellercart/screenshot",
+        summary=(
+            "A picture of one page of this shop, drafts included — look at what you built instead of "
+            "imagining it. The preview secret is added server-side, so nothing has to be published "
+            "first. Costs credits, so shoot when the answer matters (before publishing, after a "
+            "theme change), not routinely."
+        ),
+        body=(
+            body_field(
+                "page",
+                help="Page slug to shoot: home, catalog, delivery... Defaults to home.",
+                example="home",
+            ),
+            body_field(
+                "path",
+                help=(
+                    "Any path on the shop instead of a page slug — a product page, say. Mutually "
+                    "exclusive with page."
+                ),
+                example="/products/42",
+            ),
+            body_field(
+                "width",
+                type=int,
+                help=(
+                    "Viewport width in pixels, 320-2560 (default 1280). 390 photographs the shop as "
+                    "a phone receives it, layout and all."
+                ),
+                example=1280,
+            ),
+            body_field(
+                "full",
+                type=bool,
+                help=(
+                    "Capture the whole page instead of the first screen. For a picture the SELLER "
+                    "opens: a full-page shot of a long page is too tall for you to read back, and "
+                    "comes back as nothing. Scroll the viewport instead when you need to look."
+                ),
+                example=False,
+            ),
+        ),
+        # A render is a page load in somebody else's browser: the default budget refuses a call
+        # that is still working.
+        timeout=LONG_TIMEOUT_SECONDS,
     ),
     Cmd(
         "blocks",

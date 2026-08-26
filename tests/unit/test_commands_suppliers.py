@@ -40,7 +40,7 @@ def test_search_products_sends_all_filters_as_query_params(
             "cj",
             "--query",
             "wireless earbuds",
-            "--country",
+            "--stocked-in",
             "US",
             "--verified-only",
             "--min-price",
@@ -56,8 +56,8 @@ def test_search_products_sends_all_filters_as_query_params(
     assert result.exit_code == 0, result.stderr
     params = route.calls.last.request.url.params
     assert params["query"] == "wireless earbuds"
-    # --country is presented to the user but maps to the API's country_code key.
-    assert params["country_code"] == "US"
+    # Named for what it does — where the goods sit — so it cannot be read as a destination.
+    assert params["stocked_in"] == "US"
     assert params["verified_only"] == "true"
     # min/max price are floats on the wire.
     assert params["min_price"] == "5.0"
@@ -81,6 +81,84 @@ def test_search_products_omits_unset_filters(
     assert params["query"] == "mug"
     for dropped in ("country_code", "verified_only", "min_price", "max_price", "sort", "order_by"):
         assert dropped not in params
+
+
+@respx.mock
+def test_search_products_sends_the_category_filter_without_a_query(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """Browsing a category whole is the point of the filter: keyword search returns whatever says
+    "belt", so asking by category has to work without inventing a word to go with it."""
+    route = respx.get(f"{fake_api_url}/agent/suppliers/cj/products").mock(
+        return_value=httpx.Response(200, json={"items": [], "total": 0})
+    )
+    result = runner.invoke(
+        app, ["suppliers", "search-products", "cj", "--category", "cat-belts"]
+    )
+    assert result.exit_code == 0, result.stderr
+    params = route.calls.last.request.url.params
+    # --category is presented to the user but maps to the API's category_id key.
+    assert params["category_id"] == "cat-belts"
+    assert "query" not in params
+
+
+@respx.mock
+def test_categories_browses_the_top_level_by_default(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.get(f"{fake_api_url}/agent/suppliers/cj/categories").mock(
+        return_value=httpx.Response(200, json={"categories": [], "total": 0})
+    )
+    result = runner.invoke(app, ["suppliers", "categories", "cj"])
+    assert result.exit_code == 0, result.stderr
+    params = route.calls.last.request.url.params
+    for dropped in ("search", "parent", "limit"):
+        assert dropped not in params
+
+
+@respx.mock
+def test_categories_passes_search_parent_and_limit(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.get(f"{fake_api_url}/agent/suppliers/cj/categories").mock(
+        return_value=httpx.Response(200, json={"categories": [], "total": 0})
+    )
+    result = runner.invoke(
+        app,
+        [
+            "suppliers",
+            "categories",
+            "cj",
+            "--search",
+            "belt",
+            "--parent",
+            "Men's Accessories",
+            "--limit",
+            "5",
+        ],
+    )
+    assert result.exit_code == 0, result.stderr
+    params = route.calls.last.request.url.params
+    assert params["search"] == "belt"
+    assert params["parent"] == "Men's Accessories"
+    assert params["limit"] == "5"
+
+
+@respx.mock
+def test_categories_rejects_an_out_of_range_limit_before_the_network_call(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """A bad bound fails fast with the allowed range instead of costing a round trip and a 422."""
+    route = respx.get(f"{fake_api_url}/agent/suppliers/cj/categories").mock(
+        return_value=httpx.Response(200, json={"categories": [], "total": 0})
+    )
+    result = runner.invoke(app, ["suppliers", "categories", "cj", "--limit", "5000"])
+    assert result.exit_code != 0
+    assert route.call_count == 0
 
 
 @respx.mock

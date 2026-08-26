@@ -6,10 +6,11 @@ from pathlib import Path
 
 import pytest
 
-# Tests never make real outbound HTTP calls (transports are mocked/faked), but httpx clients are
-# created with trust_env=True and read *_proxy from the environment at construction time. A developer
-# with a SOCKS proxy exported (e.g. all_proxy=socks://...) would otherwise crash every httpx client
-# build with "Unknown scheme for proxy URL" unless socksio is installed. Strip proxy vars up front.
+# Tests never make real outbound HTTP calls (transports are mocked/faked). Production CLI clients
+# use trust_env=False, but some tests still construct a default httpx client (ASGITransport helper)
+# which reads *_proxy from the environment. A developer with a SOCKS proxy exported
+# (all_proxy=socks://...) would otherwise crash those builds with "Unknown scheme for proxy URL"
+# unless socksio is installed. Strip proxy vars up front.
 _PROXY_ENV_VARS = (
     "ALL_PROXY",
     "all_proxy",

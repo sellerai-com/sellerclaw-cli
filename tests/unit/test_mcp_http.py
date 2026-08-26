@@ -71,6 +71,22 @@ def test_mcp_endpoint_challenges_unauthenticated_requests() -> None:
 
 
 @respx.mock
+def test_token_verifier_ignores_socks_proxy_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A shell SOCKS proxy must not crash token verification (httpx needs socksio for socks://)."""
+    monkeypatch.setenv("ALL_PROXY", "socks://127.0.0.1:10808/")
+    monkeypatch.setenv("all_proxy", "socks://127.0.0.1:10808/")
+    respx.get(f"{API_URL}/agent/me").mock(
+        return_value=httpx.Response(200, json={"id": "user-1"})
+    )
+    verifier = SellerclawTokenVerifier(api_url=API_URL)
+
+    access = asyncio.run(verifier.verify_token("sca_good"))
+
+    assert access is not None
+    assert access.token == "sca_good"
+
+
+@respx.mock
 def test_token_verifier_accepts_token_the_agent_api_accepts() -> None:
     respx.get(f"{API_URL}/agent/me").mock(
         return_value=httpx.Response(200, json={"id": "user-1", "email": "a@b.c"})

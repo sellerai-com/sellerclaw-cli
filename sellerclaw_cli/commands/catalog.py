@@ -56,6 +56,7 @@ SPECS = (
         flags=(
             flag("q", required=True, help="Search text (matched as a substring of the name or any variation SKU)."),
             flag("limit", type=int, minimum=1, maximum=500, default=100, help="Max results."),
+            flag("offset", type=int, minimum=0, default=0, help="Results to skip (paging)."),
             flag(
                 "status",
                 help="Also filter by status.",
@@ -67,7 +68,12 @@ SPECS = (
         "create",
         "POST",
         "/agent/products",
-        summary="Create products (batch; the body accepts an array of products).",
+        summary=(
+            "Create products (batch; the body accepts an array of products). The answer is "
+            "`{results, errors}`, not the `{items, total}` the read commands return: `results` "
+            "holds one entry per created product and `errors` one per item that was refused, so a "
+            "partly-accepted batch is readable without a follow-up read."
+        ),
         body=(
             body_field(
                 "items",
@@ -77,11 +83,14 @@ SPECS = (
                 help=(
                     "Array of products to create. Each item: name*, description*, category*, "
                     "variations* (array of {supplier_variant_id, sku, name, available_quantity, "
-                    "shipping_cost, purchase_price?, images?, attributes?, barcode?}), and "
-                    "optional images. barcode is the variation's GTIN/UPC/EAN — marketplaces "
-                    "identify the item by it and Walmart refuses a listing without one. Supplier "
-                    "binding (supplier_id, supplier_product_id, supplier_provider) must be all set "
-                    "together or all omitted."
+                    "shipping_cost, purchase_price?, images?, attributes?, barcode?, "
+                    "weight_grams?}), and optional images. barcode is the variation's GTIN/UPC/EAN "
+                    "— marketplaces identify the item by it and Walmart refuses a listing without "
+                    "one. weight_grams is what one packed unit weighs; eBay refuses a listing under "
+                    "a calculated-rate shipping policy without it. Omit it when the weight is "
+                    "unknown — never send 0 or a guess. Supplier binding (supplier_id, "
+                    "supplier_product_id, supplier_provider) must be all set together or all "
+                    "omitted."
                 ),
             ),
         ),
@@ -91,8 +100,10 @@ SPECS = (
         "PATCH",
         "/agent/products/{product_id}",
         summary=(
-            "Update product metadata (name, description, images, category, status). Catalog only — "
-            "a listing built from this product keeps its own copy of the text and pictures, so this "
+            "Update ONE product's metadata (name, description, images, category, status) — the "
+            "product id is a positional, so a set of products needs `catalog bulk-update` (up to "
+            "200 in one call) or, for a whole catalog, the `catalog-file` import. Catalog only — a "
+            "listing built from this product keeps its own copy of the text and pictures, so this "
             "changes nothing already on a marketplace. To change what a store shows, edit the "
             "listing (`listings bulk-update`) and publish."
         ),
@@ -125,6 +136,53 @@ SPECS = (
                 "country_of_origin",
                 help="Two-letter country code where the goods were made, e.g. 'PT'.",
             ),
+            body_field(
+                "weight_grams",
+                type=int,
+                # ``null`` is a real instruction here — "back to unknown" — and is the only way to
+                # undo a wrong weight. Omitting the key means something different (leave it alone).
+                nullable=True,
+                help=(
+                    "What one packed unit weighs, in grams, applied to every variation. eBay prices "
+                    "calculated-rate postage from it and refuses a listing that carries none. Send "
+                    "null to clear it back to unknown; omit the field to leave it alone. Never send "
+                    "0 or a guess — a buyer is charged real postage from this number."
+                ),
+            ),
+        ),
+    ),
+    Cmd(
+        "bulk-update",
+        "POST",
+        "/agent/products/bulk-update",
+        summary=(
+            "Update the metadata of many catalog products in ONE call — the batch answer to "
+            "`catalog update`, which takes a single product id. Use it to fix a set of names, "
+            "brands, categories or statuses at once (up to 200 products); a whole-catalog load "
+            "belongs in the `catalog-file` import instead. Items are isolated: a stale id or "
+            "somebody else's product is reported on its own line while the rest still apply, so "
+            "the reply is `{items: [{product_id, ok, error, product}]}` in the order sent — never "
+            "one 404 that loses the whole batch. Catalog only, and purely local: a listing built "
+            "from a product keeps its own copy of the content until it is republished."
+        ),
+        body=(
+            body_field(
+                "items",
+                type=dict,
+                repeatable=True,
+                required=True,
+                help=(
+                    "Array of {product_id*, patch*}. `patch` takes the same fields as `catalog "
+                    "update`: name, description, images, category, status, brand, "
+                    "country_of_origin, weight_grams. Omit a field to leave it unchanged; "
+                    "weight_grams accepts an explicit null to clear it back to unknown."
+                ),
+                example=[
+                    {"product_id": "<uuid>", "patch": {"name": "Cat Litter Mat"}},
+                    {"product_id": "<uuid>", "patch": {"brand": "ACME", "category": "Pet Supplies > Cats"}},
+                    {"product_id": "<uuid>", "patch": {"weight_grams": None}},
+                ],
+            ),
         ),
     ),
     Cmd(
@@ -150,6 +208,103 @@ SPECS = (
                 help=(
                     "Per-variation prices: array of {supplier_variant_id*, purchase_price?}. "
                     "Mutually exclusive with the broadcast price above."
+                ),
+            ),
+        ),
+    ),
+    Cmd(
+        "set-variations",
+        "PATCH",
+        "/agent/products/{product_id}/variations",
+        summary=(
+            "Correct a product's per-variation facts in place: stock, SKU, barcode, weight, "
+            "shipping cost, purchase price. Use this instead of deleting and re-creating a product "
+            "to change one of them — the product id survives, and with it every listing built from "
+            "it and every order line pointing back at it. Top-level fields apply to all variations "
+            "(what a single-variation product wants); `variations` targets them one by one. Stock "
+            "and purchase price are refused on a product sourced from an integrated supplier (CJ): "
+            "the supplier states both and the periodic check overwrites them."
+        ),
+        body=(
+            body_field(
+                "available_quantity",
+                type=int,
+                help="Units in stock, applied to every variation.",
+            ),
+            body_field("sku", help="Seller's code, applied to every variation."),
+            body_field(
+                "barcode",
+                nullable=True,
+                clearable=True,
+                help="GTIN/UPC/EAN, applied to every variation. null clears it.",
+            ),
+            body_field(
+                "weight_grams",
+                type=int,
+                nullable=True,
+                clearable=True,
+                help="Packed weight of one unit in grams. null clears it back to unknown.",
+            ),
+            body_field(
+                "purchase_price",
+                type=float,
+                help="Supplier cost, applied to every variation.",
+            ),
+            body_field(
+                "shipping_cost",
+                type=float,
+                help="Per-unit shipping cost from the supplier, applied to every variation.",
+            ),
+            body_field(
+                "purchase_currency",
+                help=(
+                    "ISO-4217 code the cost is stated in, e.g. EUR. Relabels only — it does not "
+                    "convert the amount, so restate the cost too when the supplier changed money."
+                ),
+            ),
+            body_field(
+                "variations",
+                type=dict,
+                repeatable=True,
+                help=(
+                    "Per-variation edits: array of {supplier_variant_id*, sku?, barcode?, "
+                    "available_quantity?, purchase_price?, shipping_cost?, weight_grams?, "
+                    "purchase_currency?}. Mutually exclusive with the top-level fields above."
+                ),
+            ),
+        ),
+    ),
+    Cmd(
+        "set-supplier",
+        "PATCH",
+        "/agent/products/{product_id}/supplier",
+        summary=(
+            "Record who supplies this product, or that nobody does. `supplier_id` is the "
+            "SellerClaw supplier row's id from `suppliers list-accounts` — never a provider name "
+            "and never an id from the supplier's own system; the provider is read off that row. "
+            "For a supplier with no integration, create the row first with "
+            "`suppliers create-account`. Send supplier_id: null to unbind — the product stays in "
+            "the catalog and live on its channels, it just stops being anyone's goods."
+        ),
+        body=(
+            body_field(
+                "supplier_id",
+                nullable=True,
+                clearable=True,
+                help="Supplier row id (UUID). null unbinds the product from its supplier.",
+            ),
+            body_field(
+                "supplier_product_id",
+                help=(
+                    "The code this supplier knows the item by — their article number. Required "
+                    "when binding a product that has none yet: an order placed with them quotes it."
+                ),
+            ),
+            body_field(
+                "supplier_product_url",
+                help=(
+                    "The item's page at the supplier. Kept verbatim, and only for suppliers whose "
+                    "URLs we cannot rebuild ourselves."
                 ),
             ),
         ),

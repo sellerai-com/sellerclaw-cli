@@ -19,6 +19,44 @@ SPECS = (
         ),
     ),
     Cmd(
+        "cancel",
+        "POST",
+        "/agent/stores/{store_id}/orders/{order_id}/cancel",
+        summary=(
+            "Cancel the order at WooCommerce. Cancelling in WooCommerce is a status change: the order moves to `cancelled`. The reply says what the platform actually did: "
+            "`cancelled`, its own `status`, and `restocked`/`refunded` — where those are null the "
+            "platform did not say, which is not the same as 'no'."
+        ),
+        body=(
+            body_field(
+                "reason",
+                help="Why it is being cancelled. Kept as an order note, where the shop's staff read it.",
+            ),
+            body_field(
+                "restock",
+                type=bool,
+                help="Ignored: WooCommerce restores stock itself on this status change when stock management is on, and reports nothing about having done it.",
+            ),
+            body_field(
+                "refund",
+                type=bool,
+                help=(
+                    "Refund the buyer as part of cancelling. WooCommerce cannot do both in one step "
+                    "and refuses rather than cancelling without the refund — refund separately."
+                ),
+            ),
+            body_field(
+                "notify_customer",
+                type=bool,
+                help="Let WooCommerce email the buyer about the cancellation.",
+            ),
+            body_field(
+                "customer_message",
+                help="A note for the buyer, sent with that email. Ignored without notify_customer.",
+            ),
+        ),
+    ),
+    Cmd(
         "create-fulfillment",
         "POST",
         "/agent/stores/{store_id}/orders/{order_id}/fulfillments",

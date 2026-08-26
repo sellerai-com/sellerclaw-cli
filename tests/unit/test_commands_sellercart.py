@@ -54,6 +54,65 @@ def test_update_patches_name_and_markup(
 
 
 @respx.mock
+def test_create_sets_the_language_the_shop_speaks(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """A shop born without a language is born English, whatever its seller writes in."""
+    route = respx.post(f"{fake_api_url}/agent/sellercart").mock(
+        return_value=httpx.Response(200, json={"slug": "komok", "language": "ru"})
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "sellercart",
+            "create",
+            "-b",
+            json.dumps({"name": "Комокъ", "slug": "komok", "currency": "RUB", "language": "ru"}),
+        ],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {
+        "name": "Комокъ",
+        "slug": "komok",
+        "currency": "RUB",
+        "language": "ru",
+    }
+
+
+@respx.mock
+def test_update_switches_the_language_the_shop_speaks(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """The one field that fixes a Russian shop greeting its buyers in English."""
+    route = respx.patch(f"{fake_api_url}/agent/sellercart").mock(
+        return_value=httpx.Response(200, json={"language": "ru"})
+    )
+
+    result = runner.invoke(app, ["sellercart", "update", "-b", json.dumps({"language": "ru"})])
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {"language": "ru"}
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        pytest.param("create", id="create"),
+        pytest.param("update", id="update"),
+    ],
+)
+def test_the_shop_language_is_offered_on_both_paths(command: str) -> None:
+    """A field the API takes but this surface omits is a field the agent cannot reach at all."""
+    detail = _data(runner.invoke(app, ["describe", "sellercart", command]).stdout)
+
+    assert "language" in {f["field"] for f in detail["body_fields"]}
+
+
+@respx.mock
 def test_update_turns_the_shop_into_a_catalog(
     env_pointing_at_fake_api: None,  # noqa: ARG001
     fake_api_url: str,

@@ -76,6 +76,7 @@ _LISTINGS_COMMANDS = [
     "check",
     "bulk-update",
     "delete-drafts",
+    "create-drafts",
     "bulk-publish",
     "bulk-jobs",
     "bulk-job",
@@ -168,6 +169,35 @@ def test_suppliers_expose_per_product_stock() -> None:
     assert detail["positionals"] == ["provider", "product_id"]
     assert detail["body"] is False
     assert detail["example"].startswith("sellerclaw suppliers check-stock-by-product <provider> <product_id>")
+
+
+def test_suppliers_expose_a_batch_product_read() -> None:
+    """``inspect-batch`` reads a whole shortlist in one call.
+
+    The command exists so a candidate pool costs the caller one turn instead of one per product —
+    the per-product loop is what made a nine-product search expensive.
+    """
+    result = runner.invoke(app, ["commands", "--group", "suppliers"])
+    assert result.exit_code == 0, result.output
+    cmds = {row["command"] for row in _data(result.stdout)}
+    assert "inspect-batch" in cmds
+
+    detail = _data(runner.invoke(app, ["describe", "suppliers", "inspect-batch"]).stdout)
+    assert detail["method"] == "POST"
+    assert detail["positionals"] == ["provider"]
+    assert detail["body"] is True
+    body_fields = {field["field"] for field in detail["body_fields"]}
+    assert {"product_ids", "destination", "include"} <= body_fields
+
+
+def test_inspect_does_not_offer_a_shipping_method_to_pin() -> None:
+    """Quotes list every method the provider offers; pinning one never reached the provider.
+
+    The flag taught agents to "retry with another method" on a refusal — changing a field CJ's
+    freight endpoint is not even sent.
+    """
+    detail = _data(runner.invoke(app, ["describe", "suppliers", "inspect"]).stdout)
+    assert "--shipping-method" not in {flag["flag"] for flag in detail["flags"]}
 
 
 def test_catalog_and_orders_expose_search() -> None:
@@ -441,6 +471,26 @@ def test_channels_set_markup_patches_markup_percent() -> None:
     assert markup_field.type is float
 
 
+def test_facebook_create_adset_lets_the_budget_live_on_the_campaign() -> None:
+    """Meta puts the budget on the campaign or on the ad set, never both.
+
+    Demanding `daily_budget` and `bid_strategy` here made an ad set under a budget-optimized
+    campaign impossible to send: the only body the CLI accepted was the one Meta rejects. The
+    fields Meta itself insists on — `billing_event`, and `promoted_object` for conversion goals —
+    are declared instead of riding along as undocumented extras.
+    """
+    create_adset = next(
+        c for g in REGISTRY if g.name == "facebook-ads" for c in g.commands if c.name == "create-adset"
+    )
+    fields = {f.name: f for f in create_adset.body}
+    required = {name for name, field in fields.items() if field.required}
+
+    assert required == {"campaign_id", "name", "optimization_goal", "targeting"}
+    assert {"billing_event", "promoted_object", "bid_amount", "start_time", "end_time"} <= set(fields)
+    assert fields["daily_budget"].type is float
+    assert fields["promoted_object"].type is dict
+
+
 def test_google_ads_reads_what_the_money_was_spent_on() -> None:
     """`search-terms` answers what keywords cannot: which queries actually took the budget.
 
@@ -466,3 +516,30 @@ def test_google_ads_targeting_takes_either_level() -> None:
     assert targeting.method == "GET"
     assert targeting.path == "/agent/ads/google/targeting"
     assert {f.name for f in targeting.flags} == {"campaign_id", "adgroup_id"}
+
+
+def test_describe_names_the_option_a_body_field_can_be_sent_as() -> None:
+    """A caller reading the schema has to be able to see that a short value goes on the command
+    line — otherwise it builds JSON in shell quotes and loses the call to an apostrophe."""
+    result = runner.invoke(app, ["describe", "subagent-tasks", "plan-check"])
+    assert result.exit_code == 0, result.output
+    detail = _data(result.stdout)
+    fields = {f["field"]: f for f in detail["body_fields"]}
+    assert fields["item_id"]["option"] == "--item-id"
+    assert fields["status"]["option"] == "--status"
+    assert fields["note"]["option"] == "--note"
+    # An object field keeps to -b: it has no sensible command-line spelling.
+    assert "option" not in fields["metadata"]
+
+
+def test_describe_shows_a_repeated_option_and_the_key_it_fills() -> None:
+    """`set-plan` takes a list of single-key objects, so its option repeats and says which key."""
+    result = runner.invoke(app, ["describe", "team-tasks", "set-plan"])
+    assert result.exit_code == 0, result.output
+    detail = _data(result.stdout)
+    fields = {f["field"]: f for f in detail["body_fields"]}
+    assert fields["plan"]["option"] == "--step"
+    assert fields["plan"]["option_item_key"] == "text"
+    # The runnable example prefers the spelling that survives prose.
+    assert "--step" in detail["example"]
+    assert "-b" not in detail["example"]
