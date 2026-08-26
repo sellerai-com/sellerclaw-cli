@@ -53,6 +53,20 @@ SPECS = (
                 ),
             ),
             body_field(
+                "details",
+                type=dict,
+                repeatable=True,
+                help=(
+                    "The facts the owner decides on, as named rows: an array of "
+                    '{"label": "...", "value": "...", "type"?: "text"|"body"|"link"|"file", '
+                    '"url"?: "..."}. Use these instead of packing the numbers into `description` — '
+                    "the owner sees one row per fact (Order, Customer, They paid, Supplier cost, "
+                    "Profit) and can check them at a glance, where a paragraph has to be read "
+                    "through. `description` then only has to say what you want to do and why. "
+                    "Always give them on anything about money."
+                ),
+            ),
+            body_field(
                 "options",
                 type=dict,
                 repeatable=True,
