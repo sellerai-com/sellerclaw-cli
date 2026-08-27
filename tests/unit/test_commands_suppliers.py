@@ -230,3 +230,75 @@ def test_calculate_shipping_accepts_from_country_code(
     )
     assert result.exit_code == 0, result.stderr
     assert json.loads(route.calls.last.request.content)["from_country_code"] == "US"
+
+
+@respx.mock
+def test_cancel_order_posts_to_the_suppliers_own_order_id(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """The path carries the supplier's order id, the same one `confirm` and `pay` take."""
+    route = respx.post(f"{fake_api_url}/agent/suppliers/cj/orders/SD-2608/cancel").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "supplier_order_id": "SD-2608",
+                "cancelled": True,
+                "message": "Cancelled at the supplier.",
+                "linked_order_id": None,
+            },
+        )
+    )
+    result = runner.invoke(app, ["suppliers", "cancel-order", "cj", "SD-2608"])
+    assert result.exit_code == 0, result.stderr
+    assert route.call_count == 1
+
+
+@respx.mock
+def test_cancel_order_passes_the_sellerclaw_order_to_unhook(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """`internal_order_id` is a known body field — without it the order keeps a dead purchase."""
+    order_id = "8b0b8192-0b2f-41fd-87b6-817b5754b82b"
+    route = respx.post(f"{fake_api_url}/agent/suppliers/cj/orders/SD-2608/cancel").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "supplier_order_id": "SD-2608",
+                "cancelled": True,
+                "message": "Cancelled at the supplier.",
+                "linked_order_id": order_id,
+            },
+        )
+    )
+    result = runner.invoke(
+        app,
+        [
+            "suppliers",
+            "cancel-order",
+            "cj",
+            "SD-2608",
+            "-b",
+            json.dumps({"internal_order_id": order_id}),
+        ],
+    )
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {"internal_order_id": order_id}
+
+
+@respx.mock
+def test_cancel_order_rejects_an_unknown_body_field_before_the_network_call(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """A mistyped field must not reach the supplier as a silently ignored extra."""
+    route = respx.post(f"{fake_api_url}/agent/suppliers/cj/orders/SD-2608/cancel").mock(
+        return_value=httpx.Response(200, json={})
+    )
+    result = runner.invoke(
+        app,
+        ["suppliers", "cancel-order", "cj", "SD-2608", "-b", json.dumps({"order_id": "x"})],
+    )
+    assert result.exit_code != 0
+    assert route.call_count == 0

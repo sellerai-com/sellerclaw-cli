@@ -472,6 +472,24 @@ SPECS = (
         summary="Pay for a supplier order.",
     ),
     Cmd(
+        "cancel-order",
+        "POST",
+        "/agent/suppliers/{provider}/orders/{order_id}/cancel",
+        summary=(
+            "Call a purchase back at the supplier. Pass `internal_order_id` to also unhook the "
+            "SellerClaw order it was placed for — its supplier id, payment page and cost go, and "
+            "an order caught mid-purchase returns to `approved`, so it can be bought again. "
+            "Without it the owner is left with an order pointing at a purchase the supplier no "
+            "longer has. The buyer's own order is never cancelled by this."
+        ),
+        body=(
+            body_field(
+                "internal_order_id",
+                help="SellerClaw order this purchase was placed for (UUID); unhooks it.",
+            ),
+        ),
+    ),
+    Cmd(
         "get-tracking",
         "GET",
         "/agent/suppliers/{provider}/orders/{order_id}/tracking",

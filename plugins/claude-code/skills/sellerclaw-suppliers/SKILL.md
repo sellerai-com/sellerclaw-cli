@@ -102,12 +102,24 @@ sellerclaw_run(group="suppliers", command="get-tracking",  positionals={"provide
 
 `get-balance` tells you whether paying will go through; `get-order` re-reads one order's state.
 
+Calling a purchase back — the owner cancelled, or shipped it themselves:
+
+```text
+sellerclaw_run(group="suppliers", command="cancel-order",
+  positionals={"provider": "cj", "order_id": ORDER_ID},
+  body={"internal_order_id": SELLERCLAW_ORDER_ID})
+```
+
 ## Watch for
 
 - **Ordering is three steps.** `create-order` alone reserves nothing useful — confirm, then pay, or
   the supplier never ships it.
 - **Pass `internal_order_id` when the purchase fulfills a SellerClaw order.** It links the two and
   makes the call idempotent, so a retry cannot buy the same goods twice.
+- **`cancel-order` calls off the purchase, not the sale.** The buyer keeps their order and their
+  goods — cancelling that is a separate decision, made on the order itself. Pass
+  `internal_order_id` so the SellerClaw order stops pointing at a purchase that no longer exists;
+  without it the owner is left looking at a payment page for goods nobody will ship.
 - **The warehouse is chosen for you** — the cheapest in-stock one nearest the buyer, which is often
   not China. Only pass `from_country_code` when the owner wants a specific origin.
 - **Spending money is the owner's call.** Confirm the total (product + shipping) with them before

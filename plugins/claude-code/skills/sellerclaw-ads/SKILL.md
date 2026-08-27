@@ -17,7 +17,7 @@ sellerclaw_run(group="integrations", command="list")    # one-call overview acro
 
 Channels and their command groups:
 
-- `google-ads` — campaigns, ad groups, keywords, PMax assets, metrics.
+- `google-ads` — campaigns, ad groups, ads, keywords, PMax assets, metrics.
 - `facebook-ads` — campaigns, ad sets, ads, audiences, metrics.
 - `ebay-promoted` — Promoted Listings campaigns and performance reports (read-only).
 - `klaviyo` — `segments`, `lists`, `profiles`, `campaigns`, `flows`, `metrics`.
