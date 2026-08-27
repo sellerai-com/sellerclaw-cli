@@ -215,6 +215,28 @@ SPECS = (
         body_strict=False,
     ),
     Cmd(
+        "list-ads",
+        "GET",
+        "/agent/ads/google/adgroups/{adgroup_id}/ads",
+        summary="List the ads in an ad group, with each ad's own on/off switch.",
+        flags=(flag("status", help="Filter by status (ENABLED, PAUSED, REMOVED)."),),
+    ),
+    Cmd(
+        "update-ad",
+        "PATCH",
+        "/agent/ads/google/adgroups/{adgroup_id}/ads/{ad_id}",
+        summary="Enable, pause or remove one ad. An enabled campaign shows nothing while its ad is paused.",
+        body=(
+            body_field(
+                "status",
+                required=True,
+                help="New status: ENABLED, PAUSED, or REMOVED (removal is permanent).",
+                example="ENABLED",
+            ),
+        ),
+        body_strict=False,
+    ),
+    Cmd(
         "list-keywords",
         "GET",
         "/agent/ads/google/adgroups/{adgroup_id}/keywords",
