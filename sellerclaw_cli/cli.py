@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import difflib
 import sys
+from typing import TypeVar, cast
 
 import click
 import typer
@@ -117,13 +118,38 @@ from sellerclaw_cli.commands import (
     woocommerce_store,
 )
 
-# Match usage/abort errors raised by either the public click package or typer's vendored
-# copy (see the ``_typer_click`` shim above) so ``main()`` never lets a vendored exception
-# fall through to the generic handler.
-_USAGE_ERRORS = (click.exceptions.UsageError, _typer_click.exceptions.UsageError)
-_NO_SUCH_OPTION = (click.exceptions.NoSuchOption, _typer_click.exceptions.NoSuchOption)
-_ABORTS = (click.exceptions.Abort, _typer_click.exceptions.Abort)
-_CLICK_EXCEPTIONS = (click.ClickException, _typer_click.ClickException)
+_ClickError = TypeVar("_ClickError", bound=BaseException)
+
+
+def _exception_types(anchor: type[_ClickError], *others: object) -> tuple[type[_ClickError], ...]:
+    """Group ``anchor`` with the same error as the *installed* typer happens to define, skipping misses.
+
+    Which module owns a class moves between typer releases (0.27.2 pulled ``Abort`` out of the vendored
+    ``typer._click.exceptions`` and back into ``typer.exceptions``), so every lookup is a ``getattr``
+    that may return nothing. Resolving defensively keeps a typer upgrade from turning the import of
+    this module — i.e. every single ``sellerclaw`` invocation — into an ``AttributeError``. The
+    vendored classes are not subclasses of the public click ones, but carry the same attributes, so
+    the handlers in ``main()`` may treat them as the anchor type.
+    """
+    kept: list[type[_ClickError]] = [anchor]
+    for candidate in others:
+        if isinstance(candidate, type) and issubclass(candidate, BaseException) and candidate not in kept:
+            kept.append(cast("type[_ClickError]", candidate))
+    return tuple(kept)
+
+
+# Match usage/abort errors raised by either the public click package or typer's vendored copy (see
+# the ``_typer_click`` shim above) so ``main()`` never lets a vendored exception fall through to the
+# generic handler. ``typer.Abort`` is the public re-export and points at whichever class the
+# installed typer actually raises.
+_vendored = getattr(_typer_click, "exceptions", _typer_click)
+
+_USAGE_ERRORS = _exception_types(click.exceptions.UsageError, getattr(_vendored, "UsageError", None))
+_NO_SUCH_OPTION = _exception_types(click.exceptions.NoSuchOption, getattr(_vendored, "NoSuchOption", None))
+_ABORTS = _exception_types(click.exceptions.Abort, getattr(_vendored, "Abort", None), getattr(typer, "Abort", None))
+_CLICK_EXCEPTIONS = _exception_types(
+    click.ClickException, getattr(_typer_click, "ClickException", None), getattr(_vendored, "ClickException", None)
+)
 
 app = typer.Typer(
     name="sellerclaw",

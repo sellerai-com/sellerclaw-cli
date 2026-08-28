@@ -957,7 +957,7 @@ requires-dist = [
     { name = "python-dateutil", specifier = ">=2.9.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "tomli-w", specifier = ">=1.0.0" },
-    { name = "typer", specifier = ">=0.15.0" },
+    { name = "typer", specifier = ">=0.15.0,<0.28" },
 ]
 provides-extras = ["mcp"]
 
