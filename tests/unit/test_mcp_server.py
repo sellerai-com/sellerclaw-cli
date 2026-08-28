@@ -227,17 +227,12 @@ def test_run_command_accepts_kebab_and_alias_flag_spellings(
     fake_api_url: str,
 ) -> None:
     """A flag is reachable by its snake name, its --kebab spelling, or a documented alias."""
-    route = respx.get(_url(fake_api_url, "ebay-listings", "list", store_id=STORE_ID)).mock(
+    route = respx.get(_url(fake_api_url, "orders", "list")).mock(
         return_value=httpx.Response(200, json=[])
     )
-    # `--page-size` is the deprecated alias of the `limit` flag (query key `limit`).
-    run_command(
-        "ebay-listings",
-        "list",
-        positionals={"store_id": STORE_ID},
-        flags={"page-size": 5},
-    )
-    assert route.calls.last.request.url.params["limit"] == "5"
+    # `--store-id` is the alias of the `sales_channel_id` flag (query key `sales_channel_id`).
+    run_command("orders", "list", flags={"store-id": STORE_ID})
+    assert route.calls.last.request.url.params["sales_channel_id"] == STORE_ID
 
 
 @respx.mock

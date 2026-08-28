@@ -30,7 +30,7 @@ sellerclaw_run(group="shopify-listings", command="sync-stock",
 ```
 
 Other Shopify commands (confirm fields with `sellerclaw_describe` if unsure): `update`, `publish`,
-`unpublish`, `delete`, `list-drafts`, `create-drafts`, `publish-drafts`.
+`withdraw`, `delete`, `list-drafts`, `create-drafts`, `publish-drafts`.
 
 ## eBay
 

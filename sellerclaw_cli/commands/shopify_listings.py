@@ -190,28 +190,6 @@ SPECS = (
         ),
     ),
     Cmd(
-        "unpublish",
-        "POST",
-        "/agent/stores/{store_id}/shopify-listings/withdraw",
-        summary="Take listings off the storefront (WITHDRAWN), keeping the catalog in step. Target by "
-        "listing_id (SellerClaw UUID) or product_id (Shopify id). Reversible — the product keeps its "
-        "id, URL and reviews. Same endpoint as 'withdraw'. Defaults to the Online Store.",
-        body=(
-            body_field(
-                "listing_ids", repeatable=True, help="SellerClaw listing UUIDs to unpublish."
-            ),
-            body_field(
-                "product_ids", repeatable=True, help="Shopify product ids to unpublish."
-            ),
-            body_field(
-                "publication_names",
-                repeatable=True,
-                help="Sales-channel names to unpublish from; omit to default to the Online Store "
-                "(the alias 'online_store' also works). Used only for products not in the catalog.",
-            ),
-        ),
-    ),
-    Cmd(
         "sync-stock",
         "POST",
         "/agent/stores/{store_id}/listings/sync-stock",
@@ -322,7 +300,7 @@ SPECS = (
         "GET",
         "/agent/stores/{store_id}/publications",
         summary="List the store's sales-channel publications (id + name), e.g. the Online Store. "
-        "Use the names with the publish/unpublish commands.",
+        "Use the names with the publish/withdraw commands.",
     ),
     Cmd(
         "inventory",

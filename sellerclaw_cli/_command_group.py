@@ -75,7 +75,7 @@ class Flag:
     repeatable: bool = False  # list value; repeat the flag to add entries
     help: str = ""
     param: str | None = None  # API query key when it differs from ``name``
-    aliases: tuple[str, ...] = ()  # extra CLI spellings, e.g. ("--page-size",)
+    aliases: tuple[str, ...] = ()  # extra CLI spellings, e.g. ("--store-id",)
     minimum: int | None = None
     maximum: int | None = None
     default: object | None = None  # documented default (informational, not auto-sent)
@@ -814,7 +814,7 @@ def _make_callback(group: str, cmd: Cmd):
                 "body",
                 inspect.Parameter.POSITIONAL_OR_KEYWORD,
                 default=typer.Option(
-                    None, "--body", "-b", "--json-body", help=BODY_OPTION_HELP, metavar="JSON"
+                    None, "--body", "-b", help=BODY_OPTION_HELP, metavar="JSON"
                 ),
                 annotation=body_annotation,
             )

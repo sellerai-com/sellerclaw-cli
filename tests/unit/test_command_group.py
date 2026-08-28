@@ -210,7 +210,6 @@ def test_two_positionals_in_path_order(
     [
         pytest.param("-b", id="short"),
         pytest.param("--body", id="canonical"),
-        pytest.param("--json-body", id="deprecated"),
     ],
 )
 @respx.mock
@@ -263,7 +262,7 @@ def test_flag_alias_spelling_is_accepted(
     env_pointing_at_fake_api: None,  # noqa: ARG001
     fake_api_url: str,
 ) -> None:
-    """The deprecated ``--page-size`` alias still works and maps to ``page_size``."""
+    """An alias spelling reaches the same flag and still sends its API query key."""
     route = respx.get(f"{fake_api_url}/agent/widgets").mock(
         return_value=httpx.Response(200, json={"items": []})
     )

@@ -236,7 +236,7 @@ def test_describe_returns_full_detail() -> None:
 
 
 def test_describe_surfaces_flag_constraints_for_ebay_list() -> None:
-    """The eBay list flag advertises its range/default and the deprecated alias."""
+    """The eBay list flag advertises its range and default."""
     result = runner.invoke(app, ["describe", "ebay-listings", "list"])
     assert result.exit_code == 0, result.output
     flags = {f["flag"]: f for f in _data(result.stdout)["flags"]}
@@ -247,7 +247,7 @@ def test_describe_surfaces_flag_constraints_for_ebay_list() -> None:
     assert limit["default"] == 100
     # Flag name now matches the query param ("limit"), so no separate mapping is surfaced.
     assert "query_param" not in limit
-    assert limit["aliases"] == ["--page-size"]
+    assert "aliases" not in limit
 
 
 def test_describe_surfaces_status_choices_for_shopify_list() -> None:
