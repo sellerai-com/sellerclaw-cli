@@ -343,3 +343,20 @@ def test_set_shipping_in_price_rejects_a_non_boolean_locally(
     )
     assert result.exit_code != 0
     assert route.call_count == 0  # wrong type caught before the network call
+
+
+@respx.mock
+def test_set_auto_purchase_sends_the_off_switch(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """Stopping automatic CJ buying for a store is one PATCH with one field."""
+    route = respx.patch(f"{fake_api_url}/agent/sales-channels/{STORE_ID}").mock(
+        return_value=httpx.Response(200, json=_CHANNEL_JSON)
+    )
+    result = runner.invoke(
+        app,
+        ["channels", "set-auto-purchase", STORE_ID, "-b", json.dumps({"cj_auto_purchase": False})],
+    )
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {"cj_auto_purchase": False}

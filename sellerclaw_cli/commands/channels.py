@@ -169,6 +169,25 @@ SPECS = (
         ),
     ),
     Cmd(
+        "set-auto-purchase",
+        "PATCH",
+        "/agent/sales-channels/{sales_channel_id}",
+        summary=(
+            "Stop buying this store's CJ orders automatically. Only false is accepted: switching "
+            "it on is a standing permission to spend, and the owner gives that by approving the "
+            "purchase their next CJ order raises, or on the store's page."
+        ),
+        body=(
+            body_field(
+                "cj_auto_purchase",
+                type=bool,
+                required=True,
+                help="false to stop buying this store's CJ orders automatically.",
+                example=False,
+            ),
+        ),
+    ),
+    Cmd(
         "set-amazon-fulfilment",
         "PATCH",
         "/agent/sales-channels/{sales_channel_id}",
