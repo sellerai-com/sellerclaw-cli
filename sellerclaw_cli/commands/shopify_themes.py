@@ -31,8 +31,19 @@ SPECS = (
         "get-files",
         "GET",
         "/agent/stores/{store_id}/themes/{theme_id}/files",
-        summary="Read theme files.",
-        flags=(flag("limit", type=int, help="Max results."), flag("after", help="Cursor.")),
+        summary=(
+            "Read theme files. Without --filenames this pages the whole theme (a Dawn-class theme is "
+            "100+ files and each node carries its full body) — name the files you want."
+        ),
+        flags=(
+            flag(
+                "filenames",
+                repeatable=True,
+                help="Exact theme file path, e.g. config/settings_data.json (repeat for several).",
+            ),
+            flag("limit", type=int, minimum=1, maximum=250, help="Max results."),
+            flag("after", help="Cursor."),
+        ),
     ),
     Cmd(
         "upsert-files",

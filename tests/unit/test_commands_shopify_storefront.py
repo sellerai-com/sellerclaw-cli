@@ -100,6 +100,47 @@ def test_inventory_repeats_sku_query_params(
     assert route.calls.last.request.url.params.get_list("skus") == ["A", "B"]
 
 
+@respx.mock
+def test_theme_get_files_repeats_filename_query_params(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """Naming files keeps a theme read to one call — paging a whole theme is the thing to avoid."""
+    theme_id = "138903683131"
+    route = respx.get(
+        f"{fake_api_url}/agent/stores/{STORE_ID}/themes/{theme_id}/files"
+    ).mock(return_value=httpx.Response(200, json={"nodes": []}))
+    result = runner.invoke(
+        app,
+        [
+            "shopify-themes", "get-files", STORE_ID, theme_id,
+            "--filenames", "config/settings_data.json",
+            "--filenames", "templates/index.json",
+        ],
+    )
+    assert result.exit_code == 0, result.stderr
+    assert route.calls.last.request.url.params.get_list("filenames") == [
+        "config/settings_data.json",
+        "templates/index.json",
+    ]
+
+
+@respx.mock
+def test_theme_get_files_without_filenames_sends_no_filter(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """An unset repeatable flag must not send an empty filter that would match nothing."""
+    theme_id = "138903683131"
+    route = respx.get(
+        f"{fake_api_url}/agent/stores/{STORE_ID}/themes/{theme_id}/files"
+    ).mock(return_value=httpx.Response(200, json={"nodes": []}))
+    result = runner.invoke(app, ["shopify-themes", "get-files", STORE_ID, theme_id, "--limit", "5"])
+    assert result.exit_code == 0, result.stderr
+    assert route.calls.last.request.url.params.get_list("filenames") == []
+    assert route.calls.last.request.url.params.get("limit") == "5"
+
+
 def test_set_inventory_policy_command_is_removed() -> None:
     """The oversell toggle is gone — the store must never sell below zero."""
     result = runner.invoke(app, ["shopify-listings", "set-inventory-policy", STORE_ID, "-b", "{}"])
