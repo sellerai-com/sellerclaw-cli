@@ -93,24 +93,6 @@ def test_children_walks_by_the_marketplaces_own_parent_id(
 
 
 @respx.mock
-def test_children_still_accepts_the_old_parent_id_spelling(
-    env_pointing_at_fake_api: None,  # noqa: ARG001
-    fake_api_url: str,
-) -> None:
-    """Callers written against the old name keep working while the skills move over."""
-    route = respx.get(f"{fake_api_url}/agent/categories/children").mock(
-        return_value=httpx.Response(200, json={"data": []})
-    )
-
-    result = runner.invoke(
-        app, ["categories", "children", "--store-id", STORE_ID, "--parent-id", "2993"]
-    )
-
-    assert result.exit_code == 0, result.stderr
-    assert route.calls.last.request.url.params["parent_external_id"] == "2993"
-
-
-@respx.mock
 def test_rename_sends_the_shops_own_id_under_its_new_name(
     env_pointing_at_fake_api: None,  # noqa: ARG001
     fake_api_url: str,
@@ -133,11 +115,13 @@ def test_rename_sends_the_shops_own_id_under_its_new_name(
 
 
 @respx.mock
-def test_rename_still_accepts_the_old_category_id_spelling(
+def test_rename_refuses_the_retired_category_id_spelling(
     env_pointing_at_fake_api: None,  # noqa: ARG001
     fake_api_url: str,
 ) -> None:
-    """Declared on both sides: the API takes either, and the CLI must not refuse one locally."""
+    """`category_id` is our mirror row's UUID everywhere else, so the rename no longer answers to
+    it: the call is refused locally, naming the field that replaced it, instead of reaching the API
+    under a name that reads as the wrong id."""
     route = respx.post(f"{fake_api_url}/agent/categories/rename").mock(
         return_value=httpx.Response(200, json={"data": {"external_id": "15"}})
     )
@@ -150,5 +134,7 @@ def test_rename_still_accepts_the_old_category_id_spelling(
         ],
     )
 
-    assert result.exit_code == 0, result.stderr
-    assert route.call_count == 1
+    assert result.exit_code != 0
+    assert "category_id" in result.stderr
+    assert "external_id" in result.stderr
+    assert route.call_count == 0

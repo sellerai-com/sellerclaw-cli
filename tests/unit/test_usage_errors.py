@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 
+import click
 import httpx
 import pytest
 import respx
+import typer
 
 from sellerclaw_cli import cli
 
@@ -168,3 +170,28 @@ def test_body_validation_error_still_structured_via_main(
     assert code == 1
     msg = _err(err)
     assert "missing required field(s): outcome" in msg
+
+
+@pytest.mark.parametrize(
+    "abort_class",
+    [
+        pytest.param(click.exceptions.Abort, id="public-click"),
+        pytest.param(typer.Abort, id="installed-typer"),
+    ],
+)
+def test_abort_is_structured_whichever_module_defines_it(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], abort_class: type[BaseException]
+) -> None:
+    """Ctrl-C style aborts keep our contract no matter where typer currently keeps ``Abort``.
+
+    typer 0.27.2 moved ``Abort`` out of the vendored ``typer._click.exceptions`` and back into
+    ``typer.exceptions``; a hard reference to one location broke the *import* of the CLI entirely.
+    """
+
+    def _abort(*_args: object, **_kwargs: object) -> int:
+        raise abort_class()
+
+    monkeypatch.setattr(cli, "app", _abort)
+    code, _out, err = _run(monkeypatch, capsys, ["listings", "search"])
+    assert code == 1
+    assert _err(err) == "aborted"

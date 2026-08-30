@@ -119,7 +119,6 @@ SPECS = (
             flag(
                 "limit",
                 type=int,
-                aliases=("--page-size",),
                 minimum=1,
                 maximum=500,
                 default=100,

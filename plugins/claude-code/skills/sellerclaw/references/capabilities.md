@@ -31,7 +31,7 @@ Many groups take an id as the **first positional** (e.g. a store id for `shopify
 | Group | What |
 | --- | --- |
 | `ad-accounts` | Connected ad accounts and strategy settings. |
-| `google-ads` | Campaigns, ad groups, keywords, PMax assets, metrics. |
+| `google-ads` | Campaigns, ad groups, ads, keywords, PMax assets, metrics. |
 | `facebook-ads` | Meta campaigns, ad sets, ads, audiences, metrics. |
 | `klaviyo` | Email marketing: audiences, analytics, approval-gated campaigns. |
 

@@ -38,7 +38,10 @@ classifiers = [
 dependencies = [
     "click>=8.2.1",
     "httpx>=0.28.0",
-    "typer>=0.15.0",
+    # Capped below 0.28: typer restructures its vendored click between PATCH releases (0.27.2 moved
+    # `Abort` out of `typer._click.exceptions`), and a published wheel has no lock to protect the
+    # user — an uncapped range let a fresh install of an unchanged sellerclaw-cli crash on import.
+    "typer>=0.15.0,<0.28",
     "pydantic>=2.11.0",
     "pyyaml>=6.0",
     "attrs>=24.2.0",

@@ -74,7 +74,7 @@ SPECS = (
         summary="Find a category by name — use when the owner names one outright.",
         flags=(
             flag("store_id", required=True, help="Store whose marketplace to search."),
-            flag("q", required=True, help="Words from the category name or its path.", aliases=("--query",)),
+            flag("q", required=True, help="Words from the category name or its path."),
             flag("leaf_only", type=bool, help="Only categories you may publish into (default true)."),
             flag(
                 "supports_variations",
@@ -93,10 +93,9 @@ SPECS = (
             flag("store_id", required=True, help="Store whose marketplace to walk."),
             flag(
                 "parent_external_id",
-                aliases=("--parent-id",),
                 help=(
                     "The marketplace's own id for the parent (an `external_id`); omit for the top "
-                    "level. `--parent-id` is the old spelling."
+                    "level."
                 ),
             ),
             flag("tree_id", help="Which tree, when the store has several (e.g. eBay Motors)."),
@@ -140,10 +139,6 @@ SPECS = (
                     "for a top-level one."
                 ),
             ),
-            body_field(
-                "parent_id",
-                help="Deprecated spelling of `parent_external_id`; send one or the other.",
-            ),
         ),
     ),
     Cmd(
@@ -155,14 +150,11 @@ SPECS = (
             body_field("store_id", required=True, help="Your store (from `channels list`)."),
             body_field(
                 "external_id",
+                required=True,
                 help=(
                     "The shop's own id for the category to rename (from `search`/`used`). Not our "
                     "mirror row's `category_id` — this call has only ever taken the shop's."
                 ),
-            ),
-            body_field(
-                "category_id",
-                help="Deprecated spelling of `external_id`; send one or the other.",
             ),
             body_field("name", required=True, help="The new name."),
         ),

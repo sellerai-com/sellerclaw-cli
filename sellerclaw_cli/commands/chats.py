@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typer
 
-from sellerclaw_cli._command_group import Cmd, build_group, flag
+from sellerclaw_cli._command_group import Cmd, body_field, build_group, flag
 
 NAME = "chats"
 
@@ -33,9 +33,25 @@ SPECS = (
         "/agent/chat/messages/{message_id}",
         summary="Get one message with full text and raw content.",
     ),
+    Cmd(
+        "open",
+        "POST",
+        "/agent/chat/chats",
+        summary="Open a new chat with the owner about a topic they have not raised.",
+        body=(
+            body_field(
+                "title",
+                help=(
+                    "Thread name in the owner's sidebar. Name the topic, not the action: "
+                    "'Order #1234 shipping address looks wrong'."
+                ),
+                example="Order #1234 shipping address looks wrong",
+            ),
+        ),
+    ),
 )
 
-app = build_group(NAME, "Owner chats and messages (read-only).", SPECS)
+app = build_group(NAME, "Owner chats and messages.", SPECS)
 
 
 def register(parent: typer.Typer) -> None:

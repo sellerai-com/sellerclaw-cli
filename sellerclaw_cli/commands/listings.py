@@ -186,17 +186,12 @@ SPECS = (
         flags=(
             flag(
                 "group_id",
+                required=True,
                 help=(
                     "Variation group id — what says 'these rows are one listing'. Read it off any "
-                    "search row. Works for a listing found on the store as well as one published "
-                    "from the catalog, and it does not change when a draft goes live."
-                ),
-            ),
-            flag(
-                "product_id",
-                help=(
-                    "Catalog product id — the older way to name the listing, still accepted. Only "
-                    "resolves a listing published from the catalog; prefer --group-id."
+                    "search row (`listings search --product-id <uuid>` turns a catalog product into "
+                    "one). Works for a listing found on the store as well as one published from the "
+                    "catalog, and it does not change when a draft goes live."
                 ),
             ),
             flag(

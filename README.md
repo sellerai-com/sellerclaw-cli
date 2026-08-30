@@ -317,7 +317,7 @@ When no curated command fits a Shopify task, run a raw Admin GraphQL operation w
 
 ### Passing request bodies
 
-Any command that takes a request body accepts `--body` (short: `-b`; `--json-body` is kept as a deprecated alias). It supports three sources:
+Any command that takes a request body accepts `--body` (short: `-b`). It supports three sources:
 
 ```sh
 # 1. Literal JSON on the command line

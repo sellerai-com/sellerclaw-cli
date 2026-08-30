@@ -19,10 +19,7 @@ from sellerclaw_cli._job_wait import (
 )
 from sellerclaw_cli._output import OutputFormat, print_error, print_ok
 
-BODY_OPTION_HELP = (
-    "JSON body: literal, '@-' or '-' for stdin, or '@path/to/file.json' (a bare path also works). "
-    "'--json-body' is deprecated; use '--body' / '-b'."
-)
+BODY_OPTION_HELP = "JSON body: literal, '@-' or '-' for stdin, or '@path/to/file.json' (a bare path also works)."
 
 
 def run_operation(
@@ -84,7 +81,7 @@ def run_operation(
 
 
 def parse_json_body(arg: str | None) -> Any:
-    """Parse --body / -b / --json-body.
+    """Parse --body / -b.
 
     Accepted forms:
       * literal JSON (``{...}`` / ``[...]`` / ``"..."``);
