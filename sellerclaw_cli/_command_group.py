@@ -36,6 +36,13 @@ from sellerclaw_cli._runtime import BODY_OPTION_HELP, emit_error, parse_json_bod
 #: latency on top. Under the default such a call gets cut off while it is still working, and the
 #: caller cannot tell that from a failure — it re-sends, and ends up with two of whatever it made.
 #: Declared per command and reported by ``describe``, so the caller sizes its own wait to match.
+#:
+#: The same budget covers a *read* the app spends real time fetching from an outside data provider
+#: (see ``provider_reads`` on :func:`build_group`). Those wait on someone else's queue: the research
+#: providers are allowed 120s for a single call, and the marketplace-product endpoints poll a task
+#: for a further 90s on top. Under the default the caller gets "timed out" while the answer is still
+#: on its way — which is how a product scan lost its whole Amazon side and reported the gap as the
+#: provider being down.
 LONG_TIMEOUT_SECONDS = 180.0
 
 #: Every channel's ``sync-stock`` takes the same shape, so it is described in the same words:
@@ -284,6 +291,11 @@ class Cmd:
     # model call, publishing then waits on the marketplace) — there, the default refuses a call that
     # is still working. ``describe`` reports the effective value so the caller can size its own wait.
     timeout: float | None = None
+    # A POST that only *reads*: the body carries the query, and the call changes nothing on our side
+    # or the marketplace's. It matters when the wait runs out — a write that timed out may already
+    # have been applied, so the caller is told to check state before resending, while for one of
+    # these there is nothing to check and the same call can simply be made again.
+    read_only: bool = False
     # A command that sends a file rather than JSON: it takes the local path as its first argument
     # and posts the bytes as multipart/form-data. Declared here rather than hand-written as a
     # separate Typer command so the command still appears in ``describe`` and in the surface
@@ -700,6 +712,7 @@ def _make_callback(group: str, cmd: Cmd):
             files=files,
             timeout=cmd.effective_timeout,
             job_poll_path=poll_path,
+            read_only=cmd.read_only,
         )
         # Only reached when the call succeeded (run_operation raises typer.Exit on error): remember
         # the task the `start` command just acted on, so follow-up commands can omit the id.
@@ -861,9 +874,36 @@ def _with_search_aliases(cmd: Cmd) -> Cmd:
     return replace(cmd, flags=flags)
 
 
-def build_group(name: str, help: str, commands: Sequence[Cmd]) -> typer.Typer:
-    """Create a Typer sub-app for a group and record it in ``REGISTRY``."""
+def _as_provider_read(cmd: Cmd) -> Cmd:
+    """Give a command the shape of a read that waits on an outside provider.
+
+    Applied per group rather than per command because these groups are read-only end to end, and a
+    command added to one of them later should inherit the right budget instead of quietly taking
+    the default. A command that states a budget of its own keeps it.
+    """
+    return replace(
+        cmd,
+        timeout=LONG_TIMEOUT_SECONDS if cmd.timeout is None else cmd.timeout,
+        read_only=True,
+    )
+
+
+def build_group(
+    name: str,
+    help: str,
+    commands: Sequence[Cmd],
+    *,
+    provider_reads: bool = False,
+) -> typer.Typer:
+    """Create a Typer sub-app for a group and record it in ``REGISTRY``.
+
+    ``provider_reads`` marks a group whose every command is a lookup served by an outside data
+    provider — research and site audits. Those get :data:`LONG_TIMEOUT_SECONDS` and are marked
+    ``read_only``; both entries say why the shared default is wrong for them.
+    """
     resolved = tuple(_with_search_aliases(cmd) for cmd in commands)
+    if provider_reads:
+        resolved = tuple(_as_provider_read(cmd) for cmd in resolved)
     app = typer.Typer(name=name, help=help, no_args_is_help=True)
     for cmd in resolved:
         app.command(cmd.name, help=command_help(cmd))(_make_callback(name, cmd))

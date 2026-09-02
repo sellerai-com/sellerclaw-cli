@@ -43,7 +43,8 @@ SPECS = (
         summary=(
             "Queue 1-5 images (each with its own prompt); delivered to the chat when ready. "
             'Returns job ids — do not re-queue the same request. Body: {"images": [{"prompt": "...", '
-            '"size"?, "aspect_ratio"?}, ...]}.'
+            '"size"?, "aspect_ratio"?}, ...], "chat_id"?}. Pass the id of the chat you are in as '
+            "chat_id so the images come back to THIS conversation."
         ),
         body=(
             body_field(
@@ -52,6 +53,10 @@ SPECS = (
                 repeatable=True,
                 required=True,
                 help="1-5 images to queue: array of {prompt*, size?, aspect_ratio?}.",
+            ),
+            body_field(
+                "chat_id",
+                help="Chat to deliver the finished images into (the conversation you are in).",
             ),
         ),
     ),
@@ -62,9 +67,11 @@ SPECS = (
         summary=(
             "Queue ONE video; delivered to the chat when ready. Returns a job id — do not "
             're-queue the same request. Body: {"prompt": "...", "aspect_ratio"?, '
-            '"reference_image_url"?, "duration_seconds"?}. With a reference_image_url it is '
-            "image-to-video; otherwise text-to-video. duration_seconds is optional and snapped to "
-            "the provider's nearest supported length (text-to-video 4/6/8s, default 8)."
+            '"reference_image_url"?, "duration_seconds"?, "chat_id"?}. Pass the id of the chat '
+            "you are in as chat_id so the video comes back to THIS conversation. With a "
+            "reference_image_url it is image-to-video; otherwise text-to-video. duration_seconds "
+            "is optional and snapped to the provider's nearest supported length (text-to-video "
+            "4/6/8s, default 8)."
         ),
         body=(
             body_field("prompt", required=True, help="Text description of the video to generate."),
@@ -77,6 +84,10 @@ SPECS = (
                 "duration_seconds",
                 type=int,
                 help="Clip length in seconds; snapped to the nearest supported length.",
+            ),
+            body_field(
+                "chat_id",
+                help="Chat to deliver the finished video into (the conversation you are in).",
             ),
         ),
     ),

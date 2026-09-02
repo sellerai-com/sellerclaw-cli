@@ -70,7 +70,12 @@ SPECS = (
     ),
 )
 
-app = build_group(NAME, "Rate a storefront's SEO (PageSpeed + On-Page) and GEO / AI visibility.", SPECS)
+app = build_group(
+    NAME,
+    "Rate a storefront's SEO (PageSpeed + On-Page) and GEO / AI visibility.",
+    SPECS,
+    provider_reads=True,
+)
 
 
 def register(parent: typer.Typer) -> None:

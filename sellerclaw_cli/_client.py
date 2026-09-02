@@ -75,6 +75,7 @@ class Client:
         json: Any = None,
         files: dict[str, Any] | None = None,
         data: dict[str, Any] | None = None,
+        read_only: bool = False,
     ) -> Any:
         """Execute an HTTP request and return the parsed JSON body.
 
@@ -85,6 +86,10 @@ class Client:
         resent when the server provably never ran it — the connection never opened, or it answered
         429. On a timeout the call may already have been applied, so resending it would create a
         second listing / order / task; the caller is told to check state instead.
+
+        ``read_only`` marks a POST that queries rather than changes (research lookups): it is still
+        not resent automatically — each attempt can cost the owner a paid provider call — but the
+        caller is told the truth, that nothing was written and the call may simply be made again.
 
         ``files``/``data`` enable multipart uploads; pass them mutually exclusively with ``json``.
         """
@@ -110,7 +115,10 @@ class Client:
                 if is_last or not (idempotent or unsent):
                     raise NetworkError(
                         _transport_message(
-                            exc, delivered=not unsent and not idempotent, waited=self.timeout
+                            exc,
+                            delivered=not unsent and not idempotent and not read_only,
+                            waited=self.timeout,
+                            read_only=read_only,
                         )
                     ) from exc
                 time.sleep(_backoff_seconds(attempt))
@@ -149,19 +157,34 @@ class Client:
         self.close()
 
 
-def _transport_message(exc: httpx.HTTPError, *, delivered: bool, waited: float | None = None) -> str:
+def _transport_message(
+    exc: httpx.HTTPError,
+    *,
+    delivered: bool,
+    waited: float | None = None,
+    read_only: bool = False,
+) -> str:
     """Message for a transport failure. ``delivered`` marks a write that may already have run.
 
     A bare "timed out" reads as "the server is down", which is the one thing it does not mean on a
     long-running command. Naming the budget we actually waited turns it into something the caller can
     act on: raise it (``--timeout``) or, better, use the command's background form.
+
+    ``read_only`` earns the opposite ending. "Check current state before resending" is sound advice
+    for a publish and useless for a keyword lookup — there is no state it could have changed, and a
+    caller that follows it goes looking for something that was never there instead of asking again.
     """
     base = str(exc) or exc.__class__.__name__
     if isinstance(exc, httpx.TimeoutException) and waited is not None:
         base = f"{base} after {waited:g}s"
-    if not delivered:
-        return base
-    return f"{base} — the request reached the server and may have been applied; check current state before resending"
+    if delivered:
+        return (
+            f"{base} — the request reached the server and may have been applied; "
+            "check current state before resending"
+        )
+    if read_only:
+        return f"{base} — nothing was written, so this call is safe to repeat; --timeout raises the wait"
+    return base
 
 
 def _decode_body(response: httpx.Response) -> Any:

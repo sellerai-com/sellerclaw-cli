@@ -472,3 +472,46 @@ def test_analytics_timeseries_buckets_the_window_without_a_count(
     assert params["month"] == "0"
     assert params["granularity"] == "day"
     assert "buckets" not in params
+
+
+# -- the currency every money figure is stated in ---------------------------
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    ("command", "path"),
+    [
+        pytest.param("metrics", "metrics", id="metrics"),
+        pytest.param("capital", "capital", id="capital"),
+        pytest.param("inventory", "inventory", id="inventory"),
+        pytest.param("timeseries", "timeseries", id="timeseries"),
+    ],
+)
+def test_every_money_read_forwards_the_currency_flag(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+    command: str,
+    path: str,
+) -> None:
+    """Stock health counts as a money read: a stockout row states the revenue forfeited per day."""
+    route = respx.get(f"{fake_api_url}/agent/analytics/stores/{STORE_ID}/{path}").mock(
+        return_value=httpx.Response(200, json={})
+    )
+    result = runner.invoke(app, ["analytics", command, STORE_ID, "--currency", "EUR"])
+    assert result.exit_code == 0, result.stderr
+    assert route.calls.last.request.url.params["currency"] == "EUR"
+
+
+@respx.mock
+def test_omitting_the_currency_leaves_the_choice_to_the_server(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """No flag must mean no parameter — the server then keeps the stores' shared currency, and a
+    client-side default would silently relabel a seller's own figures."""
+    route = respx.get(f"{fake_api_url}/agent/analytics/stores/{STORE_ID}/capital").mock(
+        return_value=httpx.Response(200, json={})
+    )
+    result = runner.invoke(app, ["analytics", "capital", STORE_ID])
+    assert result.exit_code == 0, result.stderr
+    assert "currency" not in route.calls.last.request.url.params

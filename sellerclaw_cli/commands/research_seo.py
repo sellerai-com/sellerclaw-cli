@@ -104,8 +104,10 @@ SPECS = (
             body_field("keyword", required=True, help="Search keyword for Amazon products."),
             body_field("location_name", help="Location name (e.g. 'United States')."),
             body_field("location_code", type=int, help="Numeric location code (overrides name)."),
-            body_field("language_name", help="Language name (e.g. 'English')."),
-            body_field("language_code", help="Language code (e.g. 'en')."),
+            body_field("language_name", help="Language name (e.g. 'English (United States)')."),
+            # Amazon marketplaces use locale-qualified codes; the bare "en" the Google endpoints
+            # take is rejected outright, so the example here must not repeat theirs.
+            body_field("language_code", help="Marketplace language code (e.g. 'en_US')."),
         ),
     ),
     Cmd(
@@ -117,8 +119,8 @@ SPECS = (
             body_field("asin", required=True, help="Amazon ASIN (10 characters)."),
             body_field("location_name", help="Location name (e.g. 'United States')."),
             body_field("location_code", type=int, help="Numeric location code (overrides name)."),
-            body_field("language_name", help="Language name (e.g. 'English')."),
-            body_field("language_code", help="Language code (e.g. 'en')."),
+            body_field("language_name", help="Language name (e.g. 'English (United States)')."),
+            body_field("language_code", help="Marketplace language code (e.g. 'en_US')."),
             body_field("depth", type=int, help="Number of reviews to fetch (1-100). Defaults to 10."),
         ),
     ),
@@ -147,7 +149,12 @@ SPECS = (
     ),
 )
 
-app = build_group(NAME, "SEO / SERP / marketplace keyword and product research.", SPECS)
+app = build_group(
+    NAME,
+    "SEO / SERP / marketplace keyword and product research.",
+    SPECS,
+    provider_reads=True,
+)
 
 
 def register(parent: typer.Typer) -> None:

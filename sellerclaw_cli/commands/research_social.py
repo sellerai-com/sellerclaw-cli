@@ -414,7 +414,12 @@ SPECS = (
     ),
 )
 
-app = build_group(NAME, "Social / ad-library / Reddit / TikTok / YouTube research.", SPECS)
+app = build_group(
+    NAME,
+    "Social / ad-library / Reddit / TikTok / YouTube research.",
+    SPECS,
+    provider_reads=True,
+)
 
 
 def register(parent: typer.Typer) -> None:

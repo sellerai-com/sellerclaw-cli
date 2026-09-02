@@ -293,8 +293,10 @@ SPECS = (
             "variation_images?}} — sell_prices / quantities are keyed by SKU. Nothing reaches a "
             "marketplace here: each edit is written locally and recorded as owed, and the next "
             "publish delivers it. eBay takes title/description/images only; Amazon takes "
-            "price/stock only (its copy and photos belong to the ASIN card). One failing item does "
-            "not sink the rest."
+            "price/stock only (its copy and photos belong to the ASIN card). The seller's own "
+            "SellerCart shop is the exception to the debt: that row *is* the shop, so the edit is "
+            "on the page as soon as this returns and there is no publish to wait for — never tell "
+            "the owner a shop change is queued. One failing item does not sink the rest."
         ),
         body=(
             body_field(

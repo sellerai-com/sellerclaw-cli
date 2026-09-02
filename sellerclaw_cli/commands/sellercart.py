@@ -79,7 +79,15 @@ SPECS = (
                 help="Address of the shop: <slug>.sellercart.shop. Lowercase letters, digits, hyphens.",
                 example="acme-gear",
             ),
-            body_field("currency", help="ISO currency the shop prices in. Permanent — ask first.", example="USD"),
+            body_field(
+                "currency",
+                help=(
+                    "ISO currency the shop prices in. Treat it as permanent and ask first: it can "
+                    "only be changed while the shop has priced nothing, and the first drafted "
+                    "product closes that window for good."
+                ),
+                example="USD",
+            ),
             body_field(
                 "language",
                 help=(
@@ -88,7 +96,8 @@ SPECS = (
                     "ISO 639-1; `options` lists what is accepted. Read it off the seller rather "
                     "than asking: the language they write to you in is the one their buyers read. "
                     "Omitted, the shop speaks English, so a Russian shop gets English buttons over "
-                    "Russian pages. Changeable later, unlike the currency."
+                    "Russian pages. Changeable later whatever the shop is selling, unlike the "
+                    "currency."
                 ),
                 example="ru",
             ),
@@ -108,13 +117,38 @@ SPECS = (
         "PATCH",
         "/agent/sellercart",
         summary=(
-            "Rename the shop, change the language it speaks, propose the markup its prices are "
-            "computed from, or stop it selling online. The address and the currency are deliberately "
-            "not changeable: buyers and search engines already hold the one, and every price on the "
-            "shelf is denominated in the other."
+            "Rename or move the shop, change the language it speaks, propose the markup its prices "
+            "are computed from, or stop it selling online. Moving is real — the old address stops "
+            "answering and every product link is rewritten — and the currency only moves while the "
+            "shop has priced nothing, because a shelf price is a number *in* one."
         ),
         body=(
             body_field("name", help="Shop name shown to buyers.", example="Acme Gear"),
+            body_field(
+                "slug",
+                help=(
+                    "Move the shop to this address. The old one stops answering the moment this "
+                    "returns, and every product link is rewritten to the new one — so send it when "
+                    "the owner has renamed their shop and wants the address to follow, not to tidy "
+                    "a spelling somebody may already have bookmarked or linked to. An address "
+                    "someone else holds comes back as slug_taken; check first with `check-slug`. A "
+                    "shop on its own domain keeps being reached by that domain either way."
+                ),
+                example="tihiy-dom",
+            ),
+            body_field(
+                "currency",
+                help=(
+                    "Change what the shop prices in. Accepted only while nothing has been priced in "
+                    "the old one: a shelf price is a number *in* a currency and is held nowhere "
+                    "else, so relabelling a stocked shop would turn a $20 item into a EUR20 one at "
+                    "no notice. Past the first drafted product this comes back as currency_locked, "
+                    "and the only way across is to take the products off and re-add them — say that "
+                    "cost out loud rather than offering the change as a setting. `options` lists "
+                    "what is accepted."
+                ),
+                example="EUR",
+            ),
             body_field(
                 "language",
                 help=(
