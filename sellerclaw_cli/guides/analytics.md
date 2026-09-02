@@ -19,11 +19,15 @@ Everything here is the `analytics` group, read-only. Run the examples directly; 
 **The stores.** The positional is a store id, or the literal `all` for every active store. Repeat
 `store` in `flags` to pick an arbitrary set. The server recomputes over the combined data, so
 **never add up two single-store answers yourself** — totals add, but averages, shares and rankings
-do not. Two caveats on an aggregate:
+do not. Three caveats on an aggregate:
 
-- **Money needs one currency.** Stores reporting in different currencies are refused
-  (`currency_mismatch`), not summed — group the ones that share a currency. Order and unit counts
-  (geography, stock health) are unaffected.
+- **The answer is in one currency, and it says which.** Stores that share a currency are reported
+  in it; stores that do not are converted to **USD** at today's rate rather than summed at face
+  value. `coverage.currency` is what the figures are denominated in, `coverage.source_currencies`
+  what they were built from — when those differ, say the numbers were converted. Override with the
+  `currency` flag. Stock health carries money too (`lost_revenue_per_day`), so it converts as well.
+- **`store_id` is null for an aggregate.** It names a store only when the answer is about exactly
+  one; `coverage.store_ids` is always the honest list of what it covers.
 - **The same SKU across stores merges into one row.** Right for "what sold"; misleading for stock —
   60 units in each of two stores reads as 120, though neither can ship the other's orders.
 
@@ -63,7 +67,10 @@ sellerclaw_run(group="analytics", command="operations-digest", positionals={"sto
 - **inventory** — what is selling out while still listed, and what to reorder.
 - **geography** — which countries and regions the orders go to, and how the mix shifted.
 - **capital** — cash tied up in stock, and the slice that hasn't sold in `dead_after` days. No
-  period: stock is only ever "as of now".
+  period: stock is only ever "as of now". Counts only stock the owner paid for — a dropshipper's
+  warehouse comes back apart, as `supplier_stock_units` / `supplier_stock_providers`. So
+  `tied_up_value: 0` beside a large supplier figure means "none of your money is on a shelf", not
+  "we could not work it out".
 - **operations-digest** — one store, right now: unshipped orders, stockouts, and on eBay also
   parcels, disputes and account health. Best answer to "anything urgent today".
 

@@ -71,14 +71,30 @@ STORE_FLAGS = (
     ),
 )
 
+# Declared by the reads that carry money. Stock health is one of them: a stockout row states the
+# revenue forfeited per day, which is as much a sum of money as revenue is.
+MONEY_FLAGS = (
+    flag(
+        "currency",
+        help=(
+            "Express every money figure in this currency (e.g. USD). Omit to use the currency the "
+            "selected stores share, or USD when they report in different ones."
+        ),
+    ),
+)
+
 # Reused in several summaries: the two things that make an answer honest.
 _SELECTION = (
     "Pass `all` instead of a store id to cover every active store, or repeat --store to pick "
-    "several. Averages, shares and rankings are recomputed over the combined data."
+    "several. Averages, shares and rankings are recomputed over the combined data. `store_id` in "
+    "the answer is null for such an aggregate — read `coverage.store_ids` for what it covers."
 )
 _ONE_CURRENCY = (
-    "A selection whose stores report in different currencies is refused (`currency_mismatch`) "
-    "rather than summed — group the stores that share a currency, or ask one at a time."
+    "Money is stated in one currency: the one the selected stores share, or USD when they differ "
+    "(never summed at face value). `coverage.currency` says which and `coverage.source_currencies` "
+    "what it was built from — when those differ, say the figures were converted at today's rate. "
+    "Override with --currency. If a rate cannot be read the answer is refused "
+    "(`currency_conversion_unavailable`) rather than mixed."
 )
 _COVERAGE = (
     "Every answer carries `coverage`: which `store_ids` it covers, `history_status` "
@@ -106,6 +122,7 @@ SPECS = (
         flags=(
             *WINDOW_FLAGS,
             *STORE_FLAGS,
+            *MONEY_FLAGS,
             flag(
                 "top",
                 type=int,
@@ -151,6 +168,7 @@ SPECS = (
         flags=(
             *WINDOW_FLAGS,
             *STORE_FLAGS,
+            *MONEY_FLAGS,
             flag(
                 "granularity",
                 help="Bucket size.",
@@ -194,6 +212,7 @@ SPECS = (
         flags=(
             *WINDOW_FLAGS,
             *STORE_FLAGS,
+            *MONEY_FLAGS,
             flag(
                 "top",
                 type=int,
@@ -229,10 +248,16 @@ SPECS = (
             "of now (no stock history is kept). Stock is valued at supplier cost, which exists only "
             "for sourced products, so `coverage_pct` (0..1) is the share of on-hand units the money "
             "figures actually cover — a low value means the real number is bigger than the one "
-            f"shown, and must be said out loud. {_SELECTION} {_ONE_CURRENCY} {_COVERAGE}"
+            "shown, and must be said out loud. Counts ONLY stock the owner paid for: units in a "
+            "dropshipper's warehouse (CJ and the like) are bought one order at a time and come back "
+            "apart, as `supplier_stock_units` / `supplier_stock_providers`. So a dropshipping "
+            "catalog reads `tied_up_value: 0` WITH a large supplier figure — that means 'none of "
+            "your money is sitting on a shelf', not 'we could not work it out'; say it that way. "
+            f"{_SELECTION} {_ONE_CURRENCY} {_COVERAGE}"
         ),
         flags=(
             *STORE_FLAGS,
+            *MONEY_FLAGS,
             flag(
                 "dead_after",
                 type=int,
