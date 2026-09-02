@@ -434,7 +434,16 @@ def run_command(
         files = upload_payload(Path(local_path), filename=params.get("filename"))
 
     with _client_for_tool(cmd.effective_timeout) as client:
-        return client.request(cmd.method, path, params=params or None, json=body, files=files)
+        return client.request(
+            cmd.method,
+            path,
+            params=params or None,
+            json=body,
+            files=files,
+            # Same wait and the same account of what a timeout means as the CLI gives: an MCP caller
+            # is the one least able to go and check state it was never told about.
+            read_only=cmd.read_only,
+        )
 
 
 def _map_flags(group: str, command: str, cmd: Cmd, flags: dict[str, Any]) -> dict[str, Any]:

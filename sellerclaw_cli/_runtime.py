@@ -32,6 +32,7 @@ def run_operation(
     files: dict[str, tuple[str, bytes, str]] | None = None,
     timeout: float | None = None,
     job_poll_path: str | None = None,
+    read_only: bool = False,
 ) -> None:
     """Execute an API call and print its result in the user-selected format.
 
@@ -40,6 +41,9 @@ def run_operation(
 
     ``timeout`` is the command's own budget; a ``--timeout`` on the command line overrides it, so a
     caller who knows their batch is unusually large is never stuck with our estimate.
+
+    ``read_only`` says this call writes nothing even though it is a POST, which changes what the
+    caller is told when the budget runs out: there is no half-applied write to go and check.
 
     ``job_poll_path`` marks a command that starts background work. The call itself returns at once —
     it only queues the job — and by default that queued job *is* the answer, carrying the command
@@ -59,7 +63,9 @@ def run_operation(
     http_timeout = DEFAULT_TIMEOUT_SECONDS if starts_a_job else budget
     try:
         with Client.from_env(timeout=http_timeout) as client:
-            result = client.request(method, path, params=params, json=json_body, files=files)
+            result = client.request(
+                method, path, params=params, json=json_body, files=files, read_only=read_only
+            )
             if job_poll_path is not None and looks_like_job(result):
                 poll_command = _poll_command(job_poll_path)
                 if not _waits(ctx):

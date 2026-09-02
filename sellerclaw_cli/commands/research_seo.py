@@ -149,7 +149,12 @@ SPECS = (
     ),
 )
 
-app = build_group(NAME, "SEO / SERP / marketplace keyword and product research.", SPECS)
+app = build_group(
+    NAME,
+    "SEO / SERP / marketplace keyword and product research.",
+    SPECS,
+    provider_reads=True,
+)
 
 
 def register(parent: typer.Typer) -> None:
