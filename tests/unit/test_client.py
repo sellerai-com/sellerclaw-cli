@@ -84,6 +84,20 @@ class TestSuccess:
         assert sent_url.params["limit"] == "10"
 
     @respx.mock
+    def test_request_says_what_this_client_is(self, fake_api_url: str, fake_token: str) -> None:
+        """A token minted for a request that never said would be treated as an unattended agent."""
+        client = Client(base_url=fake_api_url, token=fake_token)
+        route = respx.post(f"{fake_api_url}/agent/auth/device/token").mock(
+            return_value=httpx.Response(200, json={})
+        )
+
+        client.request("POST", "/agent/auth/device/token")
+
+        sent = route.calls.last.request
+        assert sent.headers["X-Client-Kind"] == "cli"
+        assert sent.headers["X-Client-Name"] == "SellerClaw CLI"
+
+    @respx.mock
     def test_request_without_token_omits_authorization_header(
         self, fake_api_url: str
     ) -> None:

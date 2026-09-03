@@ -60,6 +60,15 @@ const LOGIN_POLL_BUDGET_MS = Number(process.env.SELLERCLAW_LOGIN_POLL_MS) > 0
 
 const MCP_URL = (process.env.SELLERCLAW_MCP_URL || '').trim() || DEFAULT_MCP_URL
 
+// Who is signing in, sent with the sign-in calls. `cli` is the interactive class — a person is in
+// Claude Desktop for every turn — which is what lets them answer a SellerClaw approval right here
+// instead of only in the web app; the name is what SellerClaw shows next to anything approved this
+// way. A sign-in that says nothing is treated as an unattended agent, the strictest case.
+const CLIENT_IDENTITY = {
+  'X-Client-Kind': 'cli',
+  'X-Client-Name': 'SellerClaw for Claude Desktop',
+}
+
 const LOGIN_TOOL = {
   name: 'sellerclaw_login',
   description:
@@ -307,7 +316,7 @@ let pendingDevice = null
 async function apiPost(pathname, body) {
   const response = await httpRequest(`${apiUrl().replace(/\/+$/, '')}${pathname}`, {
     method: 'POST',
-    headers: { Accept: 'application/json' },
+    headers: { Accept: 'application/json', ...CLIENT_IDENTITY },
     body: body || {},
     timeoutMs: AUTH_CALL_TIMEOUT_MS,
   })

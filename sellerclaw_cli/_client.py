@@ -26,6 +26,13 @@ _UNSENT_TRANSPORT_ERRORS = (httpx.ConnectError, httpx.ConnectTimeout, httpx.Pool
 MAX_RETRIES = 3
 _BACKOFF_CAP_SECONDS = 10.0
 _BACKOFF_JITTER_MAX = 0.25
+#: What this client tells the cloud it is. Read when a token is minted: ``cli`` means a person is
+#: sitting in front of this call, which is what lets them answer an approval where they already are
+#: instead of only by pressing a button in the web app. It is also the name shown next to anything
+#: this client approved. Sent on every request — the identity does not change between them, and the
+#: cloud reads it where it matters.
+CLIENT_KIND = "cli"
+CLIENT_NAME = "SellerClaw CLI"
 
 
 @dataclass
@@ -38,7 +45,11 @@ class Client:
     _http: httpx.Client | None = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
-        headers = {"Accept": "application/json"}
+        headers = {
+            "Accept": "application/json",
+            "X-Client-Kind": CLIENT_KIND,
+            "X-Client-Name": CLIENT_NAME,
+        }
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
         agent_id = resolve_agent_id()
