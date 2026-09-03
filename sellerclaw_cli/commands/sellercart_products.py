@@ -50,7 +50,32 @@ SPECS = (
         "remove",
         "DELETE",
         "/agent/sellercart/products/{listing_id}",
-        summary="Take a product off the storefront. Buyers stop seeing it; the row is kept for history.",
+        summary=(
+            "Take a product off the storefront, reversibly: buyers stop seeing it, the row is kept "
+            "and publishing it again puts it back. The default reading of 'убери это'. To get rid "
+            "of it for good use 'delete'."
+        ),
+    ),
+    Cmd(
+        "delete",
+        "POST",
+        "/agent/sellercart/products/delete",
+        summary=(
+            "Get rid of products for good (irreversible). One id per product — the whole variation "
+            "group goes. Rows are kept as REMOVED for history, but nothing can be put back: "
+            "shelving the product again drafts new rows at today's prices, losing any price or copy "
+            "hand-written on these. Only on an explicit instruction from the owner; for a "
+            "reversible take-down use 'remove'. A draft was never on the shelf — delete it with "
+            "'listings delete-drafts'."
+        ),
+        body=(
+            body_field(
+                "listing_ids",
+                type=list,
+                required=True,
+                help="SellerClaw listing UUIDs, one per product, to delete for good.",
+            ),
+        ),
     ),
 )
 
