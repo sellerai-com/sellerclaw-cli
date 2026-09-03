@@ -4,6 +4,10 @@
 returns: without that the agent has a chat it cannot reach, so the tests below pin that the
 address survives to stdout, and that the cloud's refusal (too many threads left unanswered)
 arrives as a failure rather than a chat the agent believes it opened.
+
+`chats list` is paged because an agent asking it is nearly always after the thread it was just
+in, not the archive. A real run typed `chats list --limit 5`, got "No such option", and spent two
+more turns guessing its way to the history it needed.
 """
 
 from __future__ import annotations
@@ -113,3 +117,53 @@ def test_open_reports_the_unanswered_chat_limit_as_a_failure(env: str) -> None:
 
     assert result.exit_code != 0
     assert "unanswered" in (result.stdout + result.stderr).lower()
+
+
+def _chats_page_response() -> httpx.Response:
+    return httpx.Response(200, json={"chats": [], "total": 7})
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    ("argv", "expected_query"),
+    [
+        pytest.param([], {}, id="unpaged-sends-no-query"),
+        pytest.param(["--limit", "5"], {"limit": "5"}, id="limit"),
+        pytest.param(["--offset", "10"], {"offset": "10"}, id="offset"),
+        pytest.param(
+            ["--agent-id", "supervisor", "--limit", "5"],
+            {"agent_id": "supervisor", "limit": "5"},
+            id="limit-alongside-the-agent-filter",
+        ),
+    ],
+)
+def test_list_passes_paging_through_to_the_query(
+    env: str, argv: list[str], expected_query: dict[str, str]
+) -> None:
+    """Each flag reaches the URL under its own name — a flag the CLI accepts and then drops is
+    worse than one it rejects, because the caller believes it was applied."""
+    route = respx.get(f"{env}/agent/chat/chats").mock(return_value=_chats_page_response())
+
+    result = runner.invoke(app, ["chats", "list", *argv])
+
+    assert result.exit_code == 0, result.stderr
+    assert dict(route.calls.last.request.url.params) == expected_query
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    "argv",
+    [
+        pytest.param(["--limit", "0"], id="limit-below-one"),
+        pytest.param(["--limit", "201"], id="limit-above-the-cap"),
+        pytest.param(["--offset", "-1"], id="negative-offset"),
+    ],
+)
+def test_list_refuses_out_of_range_paging_before_the_request(env: str, argv: list[str]) -> None:
+    """Caught locally, so an out-of-range page costs no round trip and no 422 to interpret."""
+    route = respx.get(f"{env}/agent/chat/chats").mock(return_value=_chats_page_response())
+
+    result = runner.invoke(app, ["chats", "list", *argv])
+
+    assert result.exit_code != 0
+    assert not route.called
