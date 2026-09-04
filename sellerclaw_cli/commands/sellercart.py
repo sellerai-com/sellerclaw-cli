@@ -50,6 +50,27 @@ SPECS = (
         ),
     ),
     Cmd(
+        "traffic",
+        "GET",
+        "/agent/sellercart/traffic",
+        summary=(
+            "How many people came to the shop, what they looked at, where they came from, and what "
+            "each source actually sold. The shop's own counter on its own domain, so it answers "
+            "even for an owner with no Google Analytics and is not the half of the truth ad "
+            "blockers leave behind. `views` counts pages and `visitors` counts people — different "
+            "questions. A null source means unknown, never 'direct'."
+        ),
+        flags=(
+            flag(
+                "days",
+                type=int,
+                minimum=1,
+                maximum=90,
+                help="How many days back, counting today. Default 7.",
+            ),
+        ),
+    ),
+    Cmd(
         "check-slug",
         "GET",
         "/agent/sellercart/slug-check",
