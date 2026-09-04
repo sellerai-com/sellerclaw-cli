@@ -360,3 +360,73 @@ def test_set_auto_purchase_sends_the_off_switch(
     )
     assert result.exit_code == 0, result.stderr
     assert json.loads(route.calls.last.request.content) == {"cj_auto_purchase": False}
+
+
+# --------------------------------------------------------------------------
+# The quantity ceiling: a whole number, and an option that can also remove it.
+#
+# Every body option before this one carried a string, so the option path never had to turn what the
+# shell handed it into the type the field declares. A ceiling is an integer, and "40" is not one —
+# the local body check refused the CLI's own option with "expected integer, got string", which no
+# caller could act on because they had passed exactly what --help asked for.
+# --------------------------------------------------------------------------
+
+
+@respx.mock
+def test_set_listing_quantity_sends_the_option_as_a_number(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.patch(f"{fake_api_url}/agent/sales-channels/{STORE_ID}").mock(
+        return_value=httpx.Response(200, json=_CHANNEL_JSON)
+    )
+    result = runner.invoke(app, ["channels", "set-listing-quantity", STORE_ID, "--units", "40"])
+    assert result.exit_code == 0, result.stderr
+    sent = json.loads(route.calls.last.request.content)
+    assert sent == {"listing_quantity_cap": 40}
+
+
+@respx.mock
+def test_set_listing_quantity_removes_the_cap_from_the_option(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """Removing has to be reachable the same way setting is — the help says "null removes the cap"."""
+    route = respx.patch(f"{fake_api_url}/agent/sales-channels/{STORE_ID}").mock(
+        return_value=httpx.Response(200, json=_CHANNEL_JSON)
+    )
+    result = runner.invoke(app, ["channels", "set-listing-quantity", STORE_ID, "--units", "null"])
+    assert result.exit_code == 0, result.stderr
+    sent = json.loads(route.calls.last.request.content)
+    assert sent == {"listing_quantity_cap": None}
+
+
+@respx.mock
+def test_set_listing_quantity_still_takes_a_json_body(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.patch(f"{fake_api_url}/agent/sales-channels/{STORE_ID}").mock(
+        return_value=httpx.Response(200, json=_CHANNEL_JSON)
+    )
+    result = runner.invoke(
+        app,
+        ["channels", "set-listing-quantity", STORE_ID, "-b", json.dumps({"listing_quantity_cap": None})],
+    )
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {"listing_quantity_cap": None}
+
+
+@respx.mock
+def test_set_listing_quantity_refuses_a_value_that_is_not_a_number(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """And says so in terms of the option the caller typed, not the field behind it."""
+    route = respx.patch(f"{fake_api_url}/agent/sales-channels/{STORE_ID}").mock(
+        return_value=httpx.Response(200, json=_CHANNEL_JSON)
+    )
+    result = runner.invoke(app, ["channels", "set-listing-quantity", STORE_ID, "--units", "fifty"])
+    assert result.exit_code != 0
+    assert route.call_count == 0
+    assert "--units" in result.stdout + result.stderr
