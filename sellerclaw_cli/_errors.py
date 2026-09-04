@@ -25,8 +25,26 @@ class ApiError(CliError):
 
 
 class AuthError(CliError):
+    """Not authenticated: no token, or one the API rejects (401).
+
+    Kept apart from :class:`PermissionDeniedError` on purpose — signing in again fixes
+    this one and only this one, so only this one carries the ``auth login`` hint.
+    """
+
     exit_code = 3
     code = "auth_error"
+
+
+class PermissionDeniedError(CliError):
+    """Authenticated, but this caller may not do this (403).
+
+    Re-authenticating changes nothing: the token is fine, the action is not the caller's
+    to take (e.g. a sub-agent reaching for something only the supervisor owns). Grouped
+    with the other "fix the call" errors, hence exit ``1``.
+    """
+
+    exit_code = 1
+    code = "permission_error"
 
 
 class ServerError(CliError):

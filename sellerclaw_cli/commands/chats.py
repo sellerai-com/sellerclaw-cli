@@ -11,8 +11,18 @@ SPECS = (
         "list",
         "GET",
         "/agent/chat/chats",
-        summary="List the owner's chats.",
-        flags=(flag("agent_id", help="Filter by agent id."),),
+        summary="List the owner's chats, most recently active first.",
+        flags=(
+            flag("agent_id", help="Filter by agent id."),
+            flag(
+                "limit",
+                type=int,
+                minimum=1,
+                maximum=200,
+                help="Max chats to return. Omitted returns every chat; `--limit 5` is the usual ask.",
+            ),
+            flag("offset", type=int, minimum=0, help="Pagination offset."),
+        ),
     ),
     Cmd("get", "GET", "/agent/chat/chats/{chat_id}", summary="Get one chat by id."),
     Cmd(

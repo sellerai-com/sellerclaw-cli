@@ -7,7 +7,14 @@ import pytest
 import respx
 
 from sellerclaw_cli._client import MAX_RETRIES, Client
-from sellerclaw_cli._errors import ApiError, AuthError, CliError, NetworkError, ServerError
+from sellerclaw_cli._errors import (
+    ApiError,
+    AuthError,
+    CliError,
+    NetworkError,
+    PermissionDeniedError,
+    ServerError,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -84,6 +91,20 @@ class TestSuccess:
         assert sent_url.params["limit"] == "10"
 
     @respx.mock
+    def test_request_says_what_this_client_is(self, fake_api_url: str, fake_token: str) -> None:
+        """A token minted for a request that never said would be treated as an unattended agent."""
+        client = Client(base_url=fake_api_url, token=fake_token)
+        route = respx.post(f"{fake_api_url}/agent/auth/device/token").mock(
+            return_value=httpx.Response(200, json={})
+        )
+
+        client.request("POST", "/agent/auth/device/token")
+
+        sent = route.calls.last.request
+        assert sent.headers["X-Client-Kind"] == "cli"
+        assert sent.headers["X-Client-Name"] == "SellerClaw CLI"
+
+    @respx.mock
     def test_request_without_token_omits_authorization_header(
         self, fake_api_url: str
     ) -> None:
@@ -106,7 +127,7 @@ class TestErrorMapping:
         ("status", "expected_exc"),
         [
             pytest.param(401, AuthError, id="401-unauthorized"),
-            pytest.param(403, AuthError, id="403-forbidden"),
+            pytest.param(403, PermissionDeniedError, id="403-forbidden-is-not-auth"),
             pytest.param(400, ApiError, id="400-bad-request"),
             pytest.param(404, ApiError, id="404-not-found"),
             pytest.param(422, ApiError, id="422-validation"),

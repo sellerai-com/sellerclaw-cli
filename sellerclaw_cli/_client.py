@@ -8,7 +8,13 @@ from typing import Any
 import httpx
 
 from sellerclaw_cli._agent_id import resolve_agent_id
-from sellerclaw_cli._errors import ApiError, AuthError, NetworkError, ServerError
+from sellerclaw_cli._errors import (
+    ApiError,
+    AuthError,
+    NetworkError,
+    PermissionDeniedError,
+    ServerError,
+)
 
 #: Budget for a command that has none of its own. Deliberately short: most calls are reads, and a
 #: fast, honest failure beats a long wait. Commands that do real work inside the request declare
@@ -26,6 +32,13 @@ _UNSENT_TRANSPORT_ERRORS = (httpx.ConnectError, httpx.ConnectTimeout, httpx.Pool
 MAX_RETRIES = 3
 _BACKOFF_CAP_SECONDS = 10.0
 _BACKOFF_JITTER_MAX = 0.25
+#: What this client tells the cloud it is. Read when a token is minted: ``cli`` means a person is
+#: sitting in front of this call, which is what lets them answer an approval where they already are
+#: instead of only by pressing a button in the web app. It is also the name shown next to anything
+#: this client approved. Sent on every request — the identity does not change between them, and the
+#: cloud reads it where it matters.
+CLIENT_KIND = "cli"
+CLIENT_NAME = "SellerClaw CLI"
 
 
 @dataclass
@@ -38,7 +51,11 @@ class Client:
     _http: httpx.Client | None = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
-        headers = {"Accept": "application/json"}
+        headers = {
+            "Accept": "application/json",
+            "X-Client-Kind": CLIENT_KIND,
+            "X-Client-Name": CLIENT_NAME,
+        }
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
         agent_id = resolve_agent_id()
@@ -79,8 +96,9 @@ class Client:
     ) -> Any:
         """Execute an HTTP request and return the parsed JSON body.
 
-        Raises AuthError (401/403), ApiError (other 4xx), ServerError (5xx after retries),
-        NetworkError (timeout/connection) — never raises httpx exceptions directly.
+        Raises AuthError (401), PermissionDeniedError (403), ApiError (other 4xx),
+        ServerError (5xx after retries), NetworkError (timeout/connection) — never raises
+        httpx exceptions directly.
 
         Retries exist to ride out a transient glitch on a *read*. A write (POST/PATCH) is only
         resent when the server provably never ran it — the connection never opened, or it answered
@@ -200,8 +218,12 @@ def _error_for_response(response: httpx.Response) -> Exception:
     status = response.status_code
     message, details = _parse_error_body(response)
 
-    if status in (401, 403):
+    if status == 401:
         return AuthError(message, status=status, details=details)
+    if status == 403:
+        # Authenticated, but not allowed. Signing in again would change nothing, so this
+        # must not reach the caller wearing an auth error's "run auth login" hint.
+        return PermissionDeniedError(message, status=status, details=details)
     if 400 <= status < 500:
         return ApiError(message, status=status, details=details)
     if 500 <= status < 600:

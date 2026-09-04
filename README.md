@@ -389,16 +389,17 @@ Field presence:
 - `code` and `message` — always present.
 - `status` — present when the error originated from an HTTP response.
 - `details` — present when the API returned a structured error body.
-- `hint` — present for `auth_error` (currently always points at `sellerclaw auth login`).
+- `hint` — present for `auth_error` (points at `sellerclaw auth login`) and for
+  `permission_error` (says the opposite: do not re-authenticate).
 
 ### Exit codes
 
 | Code | Meaning | Typical triggers |
 | --- | --- | --- |
 | `0` | Success | any 2xx |
-| `1` | User error | invalid CLI args, invalid JSON body, 4xx (non-auth), unknown group/command |
+| `1` | User error | invalid CLI args, invalid JSON body, other 4xx, unknown group/command, `403` (`permission_error`) |
 | `2` | Server / network error | 5xx after retries, connection refused, timeout |
-| `3` | Auth error | 401, 403, missing token |
+| `3` | Auth error | `401`, missing token |
 
 These are stable and categorical — scripts can switch on them without parsing stderr.
 
@@ -692,6 +693,9 @@ The header is purely informational on the server side; requests without it work 
 
 **`{"error":{"code":"auth_error",…,"status":401,…}}` / exit 3**
 No token found, or token is wrong / expired. Run `sellerclaw auth login`, or check `sellerclaw auth whoami` to see which sources are in play and what `api_url` the CLI is targeting.
+
+**`{"error":{"code":"permission_error",…,"status":403,…}}` / exit 1**
+The token is fine; this caller may not do this. Signing in again changes nothing — read `message` for what is not allowed and stop, or have it done by whoever owns that action.
 
 **`{"error":{"code":"network_error",…}}` / exit 2**
 Can't reach the API. Verify `SELLERCLAW_API_URL` / config `api_url`, DNS, firewall. The CLI already retries transient failures 3× with backoff — a persistent `network_error` usually indicates a misconfigured URL or blocked egress.

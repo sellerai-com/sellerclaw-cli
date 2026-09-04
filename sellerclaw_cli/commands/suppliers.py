@@ -218,6 +218,73 @@ SPECS = (
         ),
     ),
     Cmd(
+        "search-batch",
+        "POST",
+        "/agent/suppliers/{provider}/products/search-batch",
+        summary=(
+            "Run a WHOLE round of guesses in one call: several keywords and/or categories at "
+            "once, merged. Each product comes back once with found_by naming the guesses that "
+            "turned it up, rows agreed on by several guesses lead, and categories_seen says which "
+            "categories the hits are filed under. Prefer this over looping search-products per "
+            "word."
+        ),
+        # Up to 20 legs at roughly a second each under the supplier's pacer: the same long timeout
+        # inspect-batch takes, for the same reason.
+        timeout=LONG_TIMEOUT_SECONDS,
+        body=(
+            body_field(
+                "queries",
+                repeatable=True,
+                help=(
+                    "Keywords to search, one search each. Send the whole round at once — a word "
+                    "the catalogue does not use costs nothing but a zero in `searches`."
+                ),
+                example=["grill", "bbq", "barbecue"],
+            ),
+            body_field(
+                "category_ids",
+                repeatable=True,
+                help=(
+                    "Whole categories to browse, one search each. Ids come from "
+                    "`suppliers categories <provider>`. This is the axis that asks for a KIND of "
+                    "product rather than for a word that happens to be in its name."
+                ),
+            ),
+            body_field(
+                "queries_within_categories",
+                type=bool,
+                help=(
+                    "Search every keyword INSIDE every category instead of side by side. Off by "
+                    "default: the intersection is how a search silently empties, since a category "
+                    "full of grills returns nothing for a word none of its names happens to use. "
+                    "Turn it on only to narrow a category you already confirmed."
+                ),
+            ),
+            body_field(
+                "page_size",
+                type=int,
+                help="Rows per search (default 20). Keep it small — a fan-out is for breadth.",
+            ),
+            body_field(
+                "stocked_in",
+                help=(
+                    "Only products already held in a warehouse in this country (ISO alpha-2) — "
+                    "where the goods SIT, not where they are going. A hard filter that empties "
+                    "narrow searches; leave it out on a first pass."
+                ),
+            ),
+            body_field(
+                "verified_only",
+                type=bool,
+                help="Only products with verified warehouse inventory.",
+            ),
+            body_field("min_price", type=float, help="Minimum supplier sell price."),
+            body_field("max_price", type=float, help="Maximum supplier sell price."),
+            body_field("sort", help="Provider sort key (e.g. listings, price, newest)."),
+            body_field("order_by", help="Sort direction (asc / desc)."),
+        ),
+    ),
+    Cmd(
         "get-product",
         "GET",
         "/agent/suppliers/{provider}/products/{product_id}",

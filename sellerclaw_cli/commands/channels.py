@@ -80,6 +80,39 @@ SPECS = (
         ),
     ),
     Cmd(
+        "set-listing-quantity",
+        "PATCH",
+        "/agent/sales-channels/{sales_channel_id}",
+        summary=(
+            "Cap how many units one listing on this store may offer, whatever the supplier holds. "
+            "A dropshipping supplier states factory capacity — often 6,000-40,000 units for an "
+            "ordinary product — and a marketplace that caps a new seller refuses a listing "
+            "carrying it (eBay error 21919188, counted in units offered rather than listings). The "
+            "figure cannot be corrected in the catalog: stock on a supplier-bound product belongs "
+            "to the supplier and is overwritten at the next check. This is the store's standing "
+            "answer instead, applied to every draft made here and every stock push afterwards. It "
+            "only ever lowers a number — an item with 12 in stock still offers 12, and a sold-out "
+            "one stays sold out. Send null to remove the cap and go back to publishing whatever "
+            "the supplier reports. Read the current value from `channels get` (`specifics."
+            "listing_quantity_cap`); read the marketplace's own limit from `ebay-store "
+            "get-account` (`selling_limit`)."
+        ),
+        body=(
+            body_field(
+                "listing_quantity_cap",
+                type=int,
+                required=True,
+                nullable=True,
+                help=(
+                    "Most units one listing may offer here (1-1000000). null removes the cap. "
+                    "0 is refused: to stop offering an item, take the listing down."
+                ),
+                example=50,
+                option="--units",
+            ),
+        ),
+    ),
+    Cmd(
         "set-default-policies",
         "PATCH",
         "/agent/sales-channels/{sales_channel_id}",
