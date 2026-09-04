@@ -12,6 +12,7 @@ from sellerclaw_cli._errors import (
     AuthError,
     CliError,
     NetworkError,
+    PermissionDeniedError,
     ServerError,
     UserInputError,
 )
@@ -100,10 +101,10 @@ class TestPrintError:
                 id="auth-error-401-exit-3",
             ),
             pytest.param(
-                AuthError("forbidden", status=403),
-                "auth_error",
-                3,
-                id="auth-error-403-exit-3",
+                PermissionDeniedError("forbidden", status=403),
+                "permission_error",
+                1,
+                id="permission-error-403-exit-1",
             ),
             pytest.param(
                 ServerError("internal", status=500),
@@ -162,6 +163,23 @@ class TestPrintError:
         hint: Any = parsed["error"].get("hint")
         assert isinstance(hint, str) and hint, "auth_error must include a non-empty 'hint' field"
         assert "auth login" in hint.lower()
+
+    def test_permission_error_does_not_tell_the_caller_to_log_in(self) -> None:
+        # A 403 means the token is fine and the action is not this caller's. Sending them to
+        # `auth login` wastes a turn and reads as a broken connection; the hint must say so.
+        stderr = io.StringIO()
+        print_error(
+            PermissionDeniedError("Only supervisor can reopen agent task", status=403),
+            stderr=stderr,
+        )
+
+        parsed = json.loads(stderr.getvalue())
+        assert parsed["error"]["code"] == "permission_error"
+        assert parsed["error"]["status"] == 403
+        hint: Any = parsed["error"].get("hint")
+        assert isinstance(hint, str) and hint
+        assert "auth login" not in hint.lower()
+        assert "re-authenticate" in hint.lower()
 
     def test_never_writes_to_stdout_on_error(self) -> None:
         stdout = io.StringIO()

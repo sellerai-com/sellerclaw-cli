@@ -7,7 +7,7 @@ from typing import IO, Any
 
 import yaml
 
-from sellerclaw_cli._errors import AuthError, CliError
+from sellerclaw_cli._errors import AuthError, CliError, PermissionDeniedError
 
 
 class OutputFormat(StrEnum):
@@ -18,6 +18,9 @@ class OutputFormat(StrEnum):
 
 
 AUTH_HINT = "Run `sellerclaw auth login` to authenticate."
+#: 403 is not fixed by signing in — saying so stops a caller burning turns on a re-login,
+#: and stops an agent reporting a permission limit as a broken connection.
+PERMISSION_HINT = "Authenticated, but this caller may not do this. Do not retry or re-authenticate."
 
 
 def print_ok(
@@ -59,6 +62,8 @@ def print_error(
         payload["details"] = error.details
     if isinstance(error, AuthError):
         payload["hint"] = AUTH_HINT
+    elif isinstance(error, PermissionDeniedError):
+        payload["hint"] = PERMISSION_HINT
 
     envelope = {"error": payload}
     err_out.write(json.dumps(envelope, separators=(",", ":"), ensure_ascii=False) + "\n")

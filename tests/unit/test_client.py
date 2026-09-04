@@ -7,7 +7,14 @@ import pytest
 import respx
 
 from sellerclaw_cli._client import MAX_RETRIES, Client
-from sellerclaw_cli._errors import ApiError, AuthError, CliError, NetworkError, ServerError
+from sellerclaw_cli._errors import (
+    ApiError,
+    AuthError,
+    CliError,
+    NetworkError,
+    PermissionDeniedError,
+    ServerError,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -120,7 +127,7 @@ class TestErrorMapping:
         ("status", "expected_exc"),
         [
             pytest.param(401, AuthError, id="401-unauthorized"),
-            pytest.param(403, AuthError, id="403-forbidden"),
+            pytest.param(403, PermissionDeniedError, id="403-forbidden-is-not-auth"),
             pytest.param(400, ApiError, id="400-bad-request"),
             pytest.param(404, ApiError, id="404-not-found"),
             pytest.param(422, ApiError, id="422-validation"),

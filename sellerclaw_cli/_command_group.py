@@ -562,8 +562,54 @@ def _build_option_body(cmd: Cmd, values: dict[str, Any], *, raw_body: str | None
         if field.item_key:
             body[field.name] = [{field.item_key: item} for item in value]
         else:
-            body[field.name] = value
+            body[field.name] = _option_value(field, value)
     return body
+
+
+def _option_value(field: BodyField, raw: str) -> Any:
+    """The option's text as the type the field declares — the shell only ever hands over strings.
+
+    Every body option was a string field until one carried a number, and then the CLI refused its own
+    option: the caller typed exactly what ``--help`` asked for and got "expected integer, got string"
+    from the local body check, with nothing to act on. So the conversion happens here, once, for
+    whatever a field declares.
+
+    A ``nullable`` field also accepts the word ``null`` (or ``none``), because otherwise the option
+    can set a value but never take it back, and the caller is pushed into hand-writing JSON for the
+    one operation that undoes the other. Case-insensitive: an agent writing ``None`` means the same
+    thing as one writing ``null``.
+    """
+    if not isinstance(raw, str):
+        return raw
+    text = raw.strip()
+    if field.nullable and text.lower() in {"null", "none"}:
+        return None
+    if field.type is int:
+        try:
+            return int(text)
+        except ValueError:
+            raise UserInputError(
+                f"{field.option} takes a whole number"
+                + (" (or null to unset it)" if field.nullable else "")
+                + f", got {raw!r}."
+            ) from None
+    if field.type is float:
+        try:
+            return float(text)
+        except ValueError:
+            raise UserInputError(
+                f"{field.option} takes a number"
+                + (" (or null to unset it)" if field.nullable else "")
+                + f", got {raw!r}."
+            ) from None
+    if field.type is bool:
+        lowered = text.lower()
+        if lowered in {"true", "yes", "1", "on"}:
+            return True
+        if lowered in {"false", "no", "0", "off"}:
+            return False
+        raise UserInputError(f"{field.option} takes true or false, got {raw!r}.")
+    return raw
 
 
 def _option_given(field: BodyField, value: Any) -> bool:

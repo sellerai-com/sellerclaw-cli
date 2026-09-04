@@ -8,7 +8,13 @@ from typing import Any
 import httpx
 
 from sellerclaw_cli._agent_id import resolve_agent_id
-from sellerclaw_cli._errors import ApiError, AuthError, NetworkError, ServerError
+from sellerclaw_cli._errors import (
+    ApiError,
+    AuthError,
+    NetworkError,
+    PermissionDeniedError,
+    ServerError,
+)
 
 #: Budget for a command that has none of its own. Deliberately short: most calls are reads, and a
 #: fast, honest failure beats a long wait. Commands that do real work inside the request declare
@@ -90,8 +96,9 @@ class Client:
     ) -> Any:
         """Execute an HTTP request and return the parsed JSON body.
 
-        Raises AuthError (401/403), ApiError (other 4xx), ServerError (5xx after retries),
-        NetworkError (timeout/connection) — never raises httpx exceptions directly.
+        Raises AuthError (401), PermissionDeniedError (403), ApiError (other 4xx),
+        ServerError (5xx after retries), NetworkError (timeout/connection) — never raises
+        httpx exceptions directly.
 
         Retries exist to ride out a transient glitch on a *read*. A write (POST/PATCH) is only
         resent when the server provably never ran it — the connection never opened, or it answered
@@ -211,8 +218,12 @@ def _error_for_response(response: httpx.Response) -> Exception:
     status = response.status_code
     message, details = _parse_error_body(response)
 
-    if status in (401, 403):
+    if status == 401:
         return AuthError(message, status=status, details=details)
+    if status == 403:
+        # Authenticated, but not allowed. Signing in again would change nothing, so this
+        # must not reach the caller wearing an auth error's "run auth login" hint.
+        return PermissionDeniedError(message, status=status, details=details)
     if 400 <= status < 500:
         return ApiError(message, status=status, details=details)
     if 500 <= status < 600:
