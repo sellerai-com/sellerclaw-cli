@@ -57,6 +57,47 @@ SPECS = (
         ),
     ),
     Cmd(
+        "seo",
+        "PUT",
+        "/agent/sellercart/products/{reference}/seo",
+        summary=(
+            "Write what a search engine should read about one product: the title of its search "
+            "result and the description under it. Without these the shop falls back to the "
+            "product's own name and the supplier's copy, shortened. A patch — a field left out "
+            "keeps what it had, a field sent empty is cleared. Pass the product id or any of its "
+            "variation ids; the answer names the id the words were stored under."
+        ),
+        body=(
+            body_field(
+                "title",
+                clearable=True,
+                option="--title",
+                help=(
+                    "The headline of the search result. Aim for roughly sixty characters — past "
+                    "that a result is cut, and where it is cut is not ours to decide."
+                ),
+            ),
+            body_field(
+                "description",
+                clearable=True,
+                option="--description",
+                help=(
+                    "The sentence under the headline: what this product is and who it is for. "
+                    "Aim for roughly a hundred and fifty characters."
+                ),
+            ),
+        ),
+    ),
+    Cmd(
+        "clear-seo",
+        "DELETE",
+        "/agent/sellercart/products/{reference}/seo",
+        summary=(
+            "Forget what was written about a product for search, so its page describes itself "
+            "from the product again."
+        ),
+    ),
+    Cmd(
         "delete",
         "POST",
         "/agent/sellercart/products/delete",
