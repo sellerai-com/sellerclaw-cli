@@ -15,6 +15,7 @@ from sellerclaw_cli._errors import (
     PermissionDeniedError,
     ServerError,
 )
+from sellerclaw_cli._session_key import resolve_session_key
 
 #: Budget for a command that has none of its own. Deliberately short: most calls are reads, and a
 #: fast, honest failure beats a long wait. Commands that do real work inside the request declare
@@ -61,6 +62,9 @@ class Client:
         agent_id = resolve_agent_id()
         if agent_id is not None:
             headers["X-Agent-Id"] = agent_id
+        session_key = resolve_session_key()
+        if session_key is not None:
+            headers["X-Session-Key"] = session_key
         self._http = httpx.Client(
             base_url=self.base_url,
             headers=headers,

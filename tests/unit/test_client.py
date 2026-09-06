@@ -513,6 +513,56 @@ class TestNetworkErrors:
 
 
 # ---------------------------------------------------------------------------
+# X-Session-Key header injection (resolved from the environment)
+# ---------------------------------------------------------------------------
+
+
+class TestSessionKeyHeader:
+    @respx.mock
+    def test_session_in_environment_is_sent_as_header(
+        self,
+        fake_api_url: str,
+        fake_token: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("SELLERCLAW_SESSION_KEY", "agent:supervisor:sellerclaw-ui:direct:c1")
+
+        client = Client(base_url=fake_api_url, token=fake_token)
+        route = respx.get(f"{fake_api_url}/agent/stores").mock(
+            return_value=httpx.Response(200, json={})
+        )
+        client.request("GET", "/agent/stores")
+
+        sent = route.calls.last.request
+        assert sent.headers["x-session-key"] == "agent:supervisor:sellerclaw-ui:direct:c1"
+
+    @respx.mock
+    @pytest.mark.parametrize(
+        "value",
+        [pytest.param(None, id="unset"), pytest.param("hook:dev", id="not-a-session-key")],
+    )
+    def test_no_usable_session_omits_the_header(
+        self,
+        fake_api_url: str,
+        fake_token: str,
+        monkeypatch: pytest.MonkeyPatch,
+        value: str | None,
+    ) -> None:
+        if value is None:
+            monkeypatch.delenv("SELLERCLAW_SESSION_KEY", raising=False)
+        else:
+            monkeypatch.setenv("SELLERCLAW_SESSION_KEY", value)
+
+        client = Client(base_url=fake_api_url, token=fake_token)
+        route = respx.get(f"{fake_api_url}/agent/stores").mock(
+            return_value=httpx.Response(200, json={})
+        )
+        client.request("GET", "/agent/stores")
+
+        assert "x-session-key" not in route.calls.last.request.headers
+
+
+# ---------------------------------------------------------------------------
 # X-Agent-Id header injection (resolved from cwd)
 # ---------------------------------------------------------------------------
 
