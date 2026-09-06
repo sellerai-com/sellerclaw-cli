@@ -677,6 +677,12 @@ cwd /home/node                       (no workspace segment)
 
 The header is purely informational on the server side; requests without it work exactly the same. There is no override knob — by design, the id is whatever the cwd says it is.
 
+### Session identification
+
+Inside an OpenClaw run, SellerClaw's channel plugin sets `SELLERCLAW_SESSION_KEY` in the shell every `exec` command runs in. When it is present, the CLI sends it as `X-Session-Key` on every request. The server uses it to tie a team task to the conversation it was created in, and an executor's task to the run doing it — so a result, a question or a stall notice about a job reaches the chat where the job was asked for.
+
+The value must look like an OpenClaw session key (`agent:<agent id>:…`, at most 256 characters); anything else is dropped silently. A CLI run from a terminal has no session and sends no header.
+
 ---
 
 ## Environment variables reference
@@ -685,6 +691,7 @@ The header is purely informational on the server side; requests without it work 
 | --- | --- | --- |
 | `SELLERCLAW_TOKEN` | every command | Agent token, sent as `Authorization: Bearer <token>`. Highest priority. |
 | `SELLERCLAW_API_URL` | every command | Base URL of the Agent API. Overrides config file and default. |
+| `SELLERCLAW_SESSION_KEY` | every command | OpenClaw session of the calling run, sent as `X-Session-Key`. Set by SellerClaw's channel plugin; unset from a terminal. |
 | `XDG_CONFIG_HOME` | `auth *`, `whoami` | Base dir for the config file. Defaults to `~/.config`. |
 
 ---
