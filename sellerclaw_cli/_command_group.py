@@ -286,6 +286,11 @@ class Cmd:
     # command, so the caller is never left holding an id it cannot use. ``--wait`` makes the CLI hold
     # on and return the finished job instead.
     job_poll_path: str | None = None
+    # Body keys this command always sends, whatever the caller passed. For a verb that is one shape
+    # of a general endpoint (``attributes map`` is a bulk-listing job of one kind), so the caller
+    # states what is theirs — the products — and never the constant that picks the endpoint's branch.
+    # Merged in after validation, so ``describe`` and the schema stay about the caller's own fields.
+    body_const: tuple[tuple[str, Any], ...] = ()
     # HTTP budget for this command, when the default is wrong for it. Set it on commands that do real
     # work inside the request (drafting a product places a category and fills item specifics with a
     # model call, publishing then waits on the marketplace) — there, the default refuses a call that
@@ -737,6 +742,8 @@ def _make_callback(group: str, cmd: Cmd):
                 emit_error(err)
         # Reject a body that breaks the declared schema before spending a network round-trip.
         validate_body(group, cmd, body)
+        if cmd.body_const:
+            body = {**(body if isinstance(body, dict) else {}), **dict(cmd.body_const)}
         # Map each flag to its API query key, validating constraints first; drop unset values so
         # we don't send `?status=`.
         params: dict[str, Any] = {}

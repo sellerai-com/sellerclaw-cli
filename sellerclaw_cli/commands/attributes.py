@@ -8,30 +8,43 @@ NAME = "attributes"
 
 # Every marketplace lets a category define which attributes a listing may carry, splits them into
 # variation axes (Colour/Size) vs shared vs per-variation, and often fixes their allowed values.
-# `map` does all of that for you: hand it a product and the category you chose, get back the product's
-# attributes already matched to the marketplace's system attributes and sorted into those buckets, so
-# you never have to guess item specifics. `schema` just shows what a category expects — with each
-# attribute's values when the list is short enough to read. The long ones (Brand runs to ~13 800
-# entries, Country of Origin to 244) come back as a count instead; `values` searches those.
+# Drafting fills what follows from the product's own attributes and stops there, so a batch answers
+# in one command; `map` is the model pass that finishes the job on the drafts it left short — it
+# matches each product's attributes onto its category and writes the result onto the rows. `schema`
+# shows what a category expects, with each attribute's values when the list is short enough to read.
+# The long ones (Brand runs to ~13 800 entries, Country of Origin to 244) come back as a count
+# instead; `values` searches those.
 #
-# Flow: `categories suggest` -> pick a category -> `attributes map` -> build the listing from the
-# result. Put `common_attributes` (+ `custom_attributes`) on the listing, declare
-# `variation_attributes` as its axes, give each variation its `own_attributes`; act on
-# `missing_required` and `warnings` first. Supported today: eBay, Etsy, TikTok Shop.
+# Flow: `listings create-drafts` -> read `needs_attributes` -> `attributes map` on exactly those
+# products -> set by hand whatever the finished job still names -> publish.
 SPECS = (
     Cmd(
         "map",
         "POST",
-        "/agent/attributes/map",
-        summary="Match a product's attributes to a category's system attributes (variation/common/own).",
+        "/agent/stores/{store_id}/bulk-listing-jobs",
+        job_poll_path="/agent/stores/{store_id}/bulk-listing-jobs/{job_id}",
+        # The endpoint is the generic bulk-job one; this verb is its mapping shape, so the caller
+        # never states the kind.
+        body_const=(("kind", "map_attributes"),),
+        summary=(
+            "Fill the item specifics of drafts that already exist: match each product's own "
+            "attributes onto its listing's category and write the result onto the rows. One product "
+            "costs about a minute of model time, so this is a background job — poll it with "
+            "'listings bulk-job', or --wait for the finished answer. Each product comes back with "
+            "'filled_attributes' and a fresh 'needs_attributes' (what is still yours to set with "
+            "'listings bulk-update'). Max 10 products, and eBay only: elsewhere the specifics are "
+            "settled when the draft is created."
+        ),
         body=(
-            body_field("store_id", required=True, help="Store to publish on (from `channels list`)."),
             body_field(
-                "category_external_id",
+                "product_ids",
+                repeatable=True,
                 required=True,
-                help="Marketplace category id you chose (the `external_id` from `categories suggest`).",
+                help=(
+                    "Catalog products whose drafts came back short — the ones the draft response "
+                    "named in 'needs_attributes', not the whole batch."
+                ),
             ),
-            body_field("product_id", required=True, help="Catalog product to map."),
         ),
     ),
     Cmd(
@@ -76,7 +89,7 @@ SPECS = (
 
 app = build_group(
     NAME,
-    "Match a product's attributes to a marketplace category — stop guessing item specifics.",
+    "Fill and inspect the item specifics a marketplace category expects — stop guessing them.",
     SPECS,
 )
 

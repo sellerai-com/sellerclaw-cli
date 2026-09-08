@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typer
 
-from sellerclaw_cli._command_group import Cmd, body_field, build_group
+from sellerclaw_cli._command_group import Cmd, body_field, build_group, flag
 
 NAME = "action-requests"
 
@@ -11,7 +11,18 @@ SPECS = (
         "list",
         "GET",
         "/agent/goals/action-requests",
-        summary="List action requests you raised to the owner (still open).",
+        summary=(
+            "List action requests you raised to the owner, newest first. Narrow it with --status "
+            "(pending is the one that still needs the owner) and --limit."
+        ),
+        flags=(
+            flag(
+                "status",
+                choices=("pending", "resolved", "rejected", "cancelled"),
+                help="Keep only requests in this state. Omit for every state.",
+            ),
+            flag("limit", type=int, minimum=1, maximum=200, help="Max requests to return."),
+        ),
     ),
     Cmd(
         "get",
