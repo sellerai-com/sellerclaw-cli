@@ -186,6 +186,67 @@ SPECS = (
         ),
     ),
     Cmd(
+        "markup",
+        "GET",
+        "/agent/products/markup",
+        summary=(
+            "Which of these products carry a markup of their own, and where it applies. A row with "
+            "no sales_channel_id applies wherever the product is sold; one naming a store applies "
+            "there and outranks the general one. A product with no row here is priced by its "
+            "store's markup, which `channels get` reports."
+        ),
+        flags=(
+            flag(
+                "product_ids",
+                repeatable=True,
+                required=True,
+                help="Catalog product id to read the markup of (repeat for several, up to 200).",
+            ),
+        ),
+    ),
+    Cmd(
+        "set-markup",
+        "POST",
+        "/agent/products/markup",
+        summary=(
+            "Give these products a markup of their own, overriding their store's default for them "
+            "— cost x this percent, and like any markup the price goes on following the supplier's "
+            "cost. That is what separates it from a hand-set sell price, which holds its number and "
+            "takes the listing off catalog pricing for good. Not applied here: the markup is what "
+            "the seller earns on every sale, so the change is staged for the owner and answered "
+            "`202` with `status: pending_approval`. A batch is one approval, not one per product. "
+            "Omit `sales_channel_id` to apply it wherever these products are sold; name a store to "
+            "apply it there only, and the store-specific one wins. `markup_percent` as null "
+            "WITHDRAWS their own markup, handing them back to the store's default — which is not "
+            "the same as 0, and 0 pins them at cost."
+        ),
+        body=(
+            body_field(
+                "product_ids",
+                repeatable=True,
+                required=True,
+                help="Catalog product ids to price this way (1-200).",
+                example=["<uuid>"],
+            ),
+            body_field(
+                "sales_channel_id",
+                help=(
+                    "Store this markup applies to. Omit it for every store that sells these "
+                    "products."
+                ),
+            ),
+            body_field(
+                "markup_percent",
+                type=float,
+                help=(
+                    "Percent over cost (0-500; 30 = +30%). Null withdraws the products' own "
+                    "markup."
+                ),
+                example=30,
+            ),
+        ),
+    ),
+    Cmd(
         "set-prices",
         "PATCH",
         "/agent/products/{product_id}/prices",
