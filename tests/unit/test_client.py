@@ -563,7 +563,7 @@ class TestSessionKeyHeader:
 
 
 # ---------------------------------------------------------------------------
-# X-Agent-Id header injection (resolved from cwd)
+# X-Agent-Id header injection (resolved from cwd, else from the session key)
 # ---------------------------------------------------------------------------
 
 
@@ -590,7 +590,35 @@ class TestAgentIdHeader:
         assert sent.headers["x-agent-id"] == "supervisor"
 
     @respx.mock
-    def test_non_workspace_cwd_omits_x_agent_id_header(
+    def test_session_key_names_the_agent_from_any_directory(
+        self,
+        fake_api_url: str,
+        fake_token: str,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A sub-agent that stepped out of its workspace still calls as itself.
+
+        ``cd /tmp && sellerclaw subagent-tasks request-review …`` used to arrive unnamed, and the
+        cloud read an unnamed call as the supervisor — which may not report an executor's work.
+        """
+        plain = tmp_path / "no-workspace-here"
+        plain.mkdir()
+        monkeypatch.chdir(plain)
+        monkeypatch.setenv("SELLERCLAW_SESSION_KEY", "agent:supplier:subagent:590fc53a")
+
+        client = Client(base_url=fake_api_url, token=fake_token)
+        route = respx.get(f"{fake_api_url}/agent/stores").mock(
+            return_value=httpx.Response(200, json={})
+        )
+        client.request("GET", "/agent/stores")
+
+        sent = route.calls.last.request
+        assert sent.headers["x-agent-id"] == "supplier"
+        assert sent.headers["x-session-key"] == "agent:supplier:subagent:590fc53a"
+
+    @respx.mock
+    def test_no_workspace_and_no_session_omits_x_agent_id_header(
         self,
         fake_api_url: str,
         fake_token: str,
@@ -600,6 +628,7 @@ class TestAgentIdHeader:
         plain = tmp_path / "no-workspace-here"
         plain.mkdir()
         monkeypatch.chdir(plain)
+        monkeypatch.delenv("SELLERCLAW_SESSION_KEY", raising=False)
 
         client = Client(base_url=fake_api_url, token=fake_token)
         route = respx.get(f"{fake_api_url}/agent/stores").mock(

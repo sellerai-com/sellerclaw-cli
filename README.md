@@ -658,9 +658,14 @@ from everything the repo offers.
 
 ## Agent identification
 
-When the CLI is invoked from inside an LLM agent's workspace directory, it automatically attaches an `X-Agent-Id` header to every request so the server can attribute the call to the right agent. No flag, no env var, no caller-side wiring — the identifier is derived purely from the current working directory.
+When the CLI is invoked from inside an LLM agent's workspace directory, it automatically attaches an `X-Agent-Id` header to every request so the server can attribute the call to the right agent. No flag, no caller-side wiring — the identifier is read from the environment the agent already runs in.
 
-The CLI looks for a `workspace-<id>` segment in `os.getcwd()` and uses the **last** match. The id must match `^[A-Za-z0-9_-]+$` and be 1–64 characters; otherwise it is dropped silently and the header is not sent.
+Two sources, in this order:
+
+1. **The workspace in the path.** The CLI looks for a `workspace-<id>` segment in `os.getcwd()` and uses the **last** match.
+2. **The session key.** When the cwd names no workspace, the agent id is taken from `SELLERCLAW_SESSION_KEY` (`agent:<agent id>:…`), which the runtime sets in every shell it opens. This is what keeps a command that stepped outside its workspace — `cd /tmp && sellerclaw …` to reach a file it just wrote — calling as itself.
+
+Either way the id must match `^[A-Za-z0-9_-]+$` and be 1–64 characters; otherwise it is dropped silently and the header is not sent.
 
 Example:
 
@@ -671,11 +676,14 @@ cwd /home/node/.openclaw/workspace-supervisor
 cwd /home/node/.openclaw/workspace-product_scout/sub/dir
   → X-Agent-Id: product_scout
 
-cwd /home/node                       (no workspace segment)
+cwd /tmp, SELLERCLAW_SESSION_KEY=agent:supplier:subagent:590fc53a
+  → X-Agent-Id: supplier
+
+cwd /home/node                       (no workspace, no session key)
   → header omitted
 ```
 
-The header is purely informational on the server side; requests without it work exactly the same. There is no override knob — by design, the id is whatever the cwd says it is.
+The header is not decoration: the cloud reads a call that names no agent as the supervisor, and endpoints only a task's assignee may use — reporting its work, replacing its plan — refuse anyone else. There is no override knob; the id is whatever the workspace or the session says it is.
 
 ### Session identification
 
@@ -691,7 +699,7 @@ The value must look like an OpenClaw session key (`agent:<agent id>:…`, at mos
 | --- | --- | --- |
 | `SELLERCLAW_TOKEN` | every command | Agent token, sent as `Authorization: Bearer <token>`. Highest priority. |
 | `SELLERCLAW_API_URL` | every command | Base URL of the Agent API. Overrides config file and default. |
-| `SELLERCLAW_SESSION_KEY` | every command | OpenClaw session of the calling run, sent as `X-Session-Key`. Set by SellerClaw's channel plugin; unset from a terminal. |
+| `SELLERCLAW_SESSION_KEY` | every command | OpenClaw session of the calling run, sent as `X-Session-Key`, and the fallback source of `X-Agent-Id`. Set by SellerClaw's channel plugin; unset from a terminal. |
 | `XDG_CONFIG_HOME` | `auth *`, `whoami` | Base dir for the config file. Defaults to `~/.config`. |
 
 ---

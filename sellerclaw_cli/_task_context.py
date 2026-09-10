@@ -9,8 +9,8 @@ Two ergonomics helpers live here:
     the id and act on the active task;
   * **prefix expansion** — a short id prefix is expanded against the caller's task list.
 
-State is keyed by the caller's agent id (derived from the ``workspace-<id>`` cwd) so concurrent
-subagents on one machine never clobber each other's active task.
+State is keyed by the caller's agent id (see :mod:`._agent_id`) so concurrent subagents on one
+machine never clobber each other's active task.
 """
 
 from __future__ import annotations

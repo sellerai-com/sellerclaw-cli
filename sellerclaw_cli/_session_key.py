@@ -21,7 +21,7 @@ ENV_SESSION_KEY = "SELLERCLAW_SESSION_KEY"
 
 #: The shape OpenClaw gives every session key: ``agent:<agent id>:<the rest>``. Anything else is
 #: not a session key and is dropped rather than sent as one.
-_SESSION_KEY_PATTERN = re.compile(r"^agent:[A-Za-z0-9_-]+:\S+$")
+_SESSION_KEY_PATTERN = re.compile(r"^agent:(?P<agent_id>[A-Za-z0-9_-]+):\S+$")
 _MAX_SESSION_KEY_LENGTH = 256
 
 
@@ -34,3 +34,17 @@ def resolve_session_key(environ: Mapping[str, str] | None = None) -> str | None:
     if not _SESSION_KEY_PATTERN.match(raw):
         return None
     return raw
+
+
+def session_key_agent_id(environ: Mapping[str, str] | None = None) -> str | None:
+    """The agent the session key names, or ``None`` when the environment names no valid key.
+
+    A session key always opens with the agent it belongs to, so it answers "who is calling" for
+    any shell the runtime opened — including one that has since walked out of the agent's own
+    workspace. See :mod:`._agent_id`, which uses it exactly for that.
+    """
+    key = resolve_session_key(environ)
+    if key is None:
+        return None
+    match = _SESSION_KEY_PATTERN.match(key)
+    return None if match is None else match.group("agent_id")
