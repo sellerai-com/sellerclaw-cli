@@ -54,7 +54,13 @@ def test_files_group_discoverable() -> None:
     result = runner.invoke(app, ["commands", "--group", "files"])
     assert result.exit_code == 0, result.output
     cmds = {row["command"] for row in _data(result.stdout)}
-    assert cmds == {"list", "from-url", "upload"}
+    assert cmds == {"list", "get", "from-url", "upload"}
+
+    by_id = runner.invoke(app, ["describe", "files", "get"])
+    assert by_id.exit_code == 0, by_id.output
+    by_id_detail = _data(by_id.stdout)
+    assert by_id_detail["method"] == "GET"
+    assert by_id_detail["positionals"] == ["file_id"]
 
     described = runner.invoke(app, ["describe", "files", "from-url"])
     assert described.exit_code == 0, described.output
