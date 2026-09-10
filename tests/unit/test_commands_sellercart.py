@@ -332,6 +332,33 @@ def test_connecting_stripe_without_a_country_is_refused_locally() -> None:
     assert "country" in (result.stderr or result.stdout)
 
 
+@respx.mock
+def test_the_shelf_can_be_read_in_its_draft_state(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """Products staged while the shop was a draft are invisible to the default listing.
+
+    Without a way to ask for them the only other answer the caller gets is 'listing already exists'
+    from `add` — a contradiction that reads as data loss and invites deleting the rows.
+    """
+    route = respx.get(f"{fake_api_url}/agent/sellercart/products").mock(
+        return_value=httpx.Response(200, json={"items": [], "total": 0})
+    )
+
+    result = runner.invoke(app, ["sellercart-products", "list", "--status", "draft"])
+
+    assert result.exit_code == 0, result.stderr or result.stdout
+    assert route.calls.last.request.url.params["status"] == "draft"
+
+
+def test_the_shelf_status_offers_the_states_the_api_knows() -> None:
+    """Every other channel's listing command already filters by status; the shop is not special."""
+    listing = _data(runner.invoke(app, ["describe", "sellercart-products", "list"]).stdout)
+    status_flag = {f["flag"]: f for f in listing["flags"]}["--status"]
+    assert set(status_flag["choices"]) == {"published", "draft", "withdrawn", "all"}
+
+
 def test_money_is_a_number_across_the_shop_commands() -> None:
     """One shape for money everywhere, so an agent that learned one command can write the next.
 
