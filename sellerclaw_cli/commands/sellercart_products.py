@@ -11,8 +11,18 @@ SPECS = (
         "list",
         "GET",
         "/agent/sellercart/products",
-        summary="What is on the storefront right now.",
+        summary=(
+            "What is on the storefront right now. Shows what a buyer sees, so a shelf staged while "
+            "the shop was still a draft reads as empty here — pass `--status draft` to see what is "
+            "staged and not yet published, or `--status all` for the whole shelf."
+        ),
         flags=(
+            flag(
+                "status",
+                choices=("published", "draft", "withdrawn", "all"),
+                default="published",
+                help="Shelf state to list; 'draft' is staged-not-published, 'all' is everything.",
+            ),
             flag("limit", type=int, minimum=1, maximum=200, default=25, help="Max results."),
             flag("offset", type=int, minimum=0, default=0, help="Skip this many."),
             flag("search", help="Match against title or SKU."),
