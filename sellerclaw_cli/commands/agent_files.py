@@ -1,8 +1,9 @@
 """Hand-written CLI module for the ``agent-files`` tag.
 
-Covers three operations the standard JSON-only generator can't model cleanly:
+Covers four operations the standard JSON-only generator can't model cleanly:
 
 - ``list`` — GET /agent/files/ (list user files for the agent's user).
+- ``get`` — GET /agent/files/{file_id} (one file by the id an attachment arrives with).
 - ``from-url`` — POST /agent/files/from-url (download a remote URL into S3 + DB).
 - ``upload`` — POST /agent/files/upload-for-user (multipart binary upload from a local path).
 
@@ -17,7 +18,14 @@ from pathlib import Path
 import typer
 
 from sellerclaw_cli._client import Client
-from sellerclaw_cli._command_group import LONG_TIMEOUT_SECONDS, REGISTRY, Cmd, GroupSpec, flag
+from sellerclaw_cli._command_group import (
+    LONG_TIMEOUT_SECONDS,
+    REGISTRY,
+    SEARCH_FLAG_SPELLINGS,
+    Cmd,
+    GroupSpec,
+    flag,
+)
 from sellerclaw_cli._errors import CliError, UserInputError
 from sellerclaw_cli._output import OutputFormat, print_error, print_ok
 from sellerclaw_cli._runtime import run_operation
@@ -43,7 +51,23 @@ _SPECS = (
         flags=(
             flag("offset", type=int, help="Skip this many files."),
             flag("limit", type=int, help="Max files to return."),
+            flag(
+                "q",
+                aliases=tuple(s for s in SEARCH_FLAG_SPELLINGS if s != "--q"),
+                help="Match against the filename.",
+            ),
+            flag(
+                "category",
+                choices=("image", "video", "file"),
+                help="Narrow to one kind: image, video, or everything else.",
+            ),
         ),
+    ),
+    Cmd(
+        "get",
+        "GET",
+        "/agent/files/{file_id}",
+        summary="One file by its id; answers its download_url without paging the library.",
     ),
     Cmd(
         "from-url",
@@ -86,11 +110,33 @@ def list_user_files(
     ctx: typer.Context,
     offset: int | None = typer.Option(None, "--offset", help="offset"),
     limit: int | None = typer.Option(None, "--limit", help="limit"),
+    q: str | None = typer.Option(None, *SEARCH_FLAG_SPELLINGS, help="Match against the filename."),
+    category: str | None = typer.Option(
+        None, "--category", help="Narrow to one kind: image, video, or everything else."
+    ),
 ) -> None:
     path = "/agent/files/"
-    _query = dict((k, v) for k, v in [("offset", offset), ("limit", limit)] if v is not None)
+    _query = dict(
+        (k, v)
+        for k, v in [("offset", offset), ("limit", limit), ("q", q), ("category", category)]
+        if v is not None
+    )
     params = _query or None
     run_operation(ctx, "GET", path, params=params, json_body=None)
+
+
+@app.command(
+    "get",
+    help=(
+        "Get User File For Agent | GET /agent/files/{file_id} | "
+        "operation_id: get_user_file_for_agent_files__file_id__get"
+    ),
+)
+def get_user_file(
+    ctx: typer.Context,
+    file_id: str = typer.Argument(..., help="The file's id, as it arrives with an attachment."),
+) -> None:
+    run_operation(ctx, "GET", f"/agent/files/{file_id}", params=None, json_body=None)
 
 
 @app.command(
