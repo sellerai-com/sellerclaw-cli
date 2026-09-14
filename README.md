@@ -504,7 +504,9 @@ research recipes), and a session-start primer hook together, from our marketplac
 /plugin install sellerclaw@sellerclaw
 ```
 
-On **claude.ai (web)** the easiest path is Customize → Personal plugins → *Add marketplace* with
+On **claude.ai (web)** the MCP tools alone are one press away: open
+[SellerClaw in the Claude Directory](https://claude.ai/directory/sellerclaw) and press **Connect to
+Claude**. For the task skills too, the easiest path is Customize → Personal plugins → *Add marketplace* with
 `sellerai-com/sellerclaw-cli`. Prefer to upload by hand? Download the packaged web plugin and use
 *Upload plugin* instead:
 
@@ -617,9 +619,11 @@ too and vice versa. The extension's optional token field is only for headless se
 To build the bundle yourself: `make mcpb` (produces `dist/sellerclaw.mcpb`); the source lives under
 [`plugin/targets/claude-desktop/`](plugin/targets/claude-desktop/).
 
-> Prefer no local process at all? The same hosted server can be added directly as a **custom
-> connector** (Claude → Settings → Connectors → Add custom connector), which also covers Claude on
-> the web and mobile. Create the connector credentials in SellerClaw → Settings → Connected apps.
+> Prefer no local process at all? Connect the hosted server from the **Claude Directory**: open
+> [SellerClaw's listing](https://claude.ai/directory/sellerclaw) and press **Connect to Claude**. The
+> connection follows your Claude account, so it also covers Claude on the web, mobile and Cowork.
+> Where the directory isn't available, add `https://mcp.sellerclaw.ai/mcp` as a **custom connector**
+> (Customize → Connectors → Add). Claude registers itself, so there are no credentials to create.
 
 ### Teach Claude to use it (skill)
 
