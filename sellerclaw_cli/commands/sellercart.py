@@ -123,6 +123,17 @@ SPECS = (
                 example="ru",
             ),
             body_field(
+                "display_currencies",
+                repeatable=True,
+                help=(
+                    "Up to four extra currencies buyers may *read* prices in, beside `currency`. "
+                    "Display only: the shop still prices and charges in `currency`, buyers get a "
+                    "switcher, and the basket says what they will be charged. Optional — set it "
+                    "only when the owner sells abroad or asks."
+                ),
+                example=["EUR", "GBP"],
+            ),
+            body_field(
                 "markup_percent",
                 type=float,
                 help=(
@@ -181,6 +192,39 @@ SPECS = (
                     "that when you switch it."
                 ),
                 example="ru",
+            ),
+            body_field(
+                "display_currencies",
+                repeatable=True,
+                help=(
+                    "The shop's FULL list of extra currencies buyers may *read* prices in (up to "
+                    "four). It REPLACES the current list — to add or drop one currency, send "
+                    "add_display_currencies / remove_display_currencies instead. [] goes back to one "
+                    "price. Display only and never locked by the shelf. This, not `currency`, is the "
+                    "answer to 'let buyers see prices in euros'. A currency no rate source can quote "
+                    "today comes back as display_currency_unavailable."
+                ),
+                example=["GBP", "EUR", "JPY"],
+            ),
+            body_field(
+                "add_display_currencies",
+                repeatable=True,
+                help=(
+                    "Extra currencies to add to the ones the shop already shows, e.g. [\"JPY\"] "
+                    "for 'add the yen'. Everything already on the list stays; a code already there "
+                    "is kept once. Can go with remove_display_currencies, not with "
+                    "display_currencies."
+                ),
+                example=["JPY"],
+            ),
+            body_field(
+                "remove_display_currencies",
+                repeatable=True,
+                help=(
+                    "Extra currencies to stop showing; the rest stay. A code the shop does not show "
+                    "is ignored. Can go with add_display_currencies, not with display_currencies."
+                ),
+                example=["GBP"],
             ),
             body_field(
                 "markup_percent",

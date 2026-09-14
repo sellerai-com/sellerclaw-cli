@@ -39,7 +39,7 @@ SPECS = (
                 "effort",
                 required=True,
                 choices=("medium", "high", "max"),
-                help="Chat and image/video generation both move to this level.",
+                help="Moves the chat models only; image and video generation are unaffected.",
             ),
             _REASON,
         ),
