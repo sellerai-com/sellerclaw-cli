@@ -112,6 +112,65 @@ def test_the_shop_language_is_offered_on_both_paths(command: str) -> None:
     assert "language" in {f["field"] for f in detail["body_fields"]}
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        pytest.param("create", id="create"),
+        pytest.param("update", id="update"),
+    ],
+)
+def test_extra_display_currencies_are_offered_on_both_paths(command: str) -> None:
+    """The strict body check refuses a key it does not know, so an unlisted field is one the agent
+    is told to send and then cannot."""
+    detail = _data(runner.invoke(app, ["describe", "sellercart", command]).stdout)
+
+    fields = {f["field"]: f for f in detail["body_fields"]}
+    assert fields["display_currencies"]["repeatable"] is True
+
+
+@respx.mock
+def test_update_sends_the_whole_list_of_extra_currencies(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """The list replaces what the shop has, so it travels as the list — including an empty one."""
+    route = respx.patch(f"{fake_api_url}/agent/sellercart").mock(
+        return_value=httpx.Response(200, json={"display_currencies": ["EUR", "GBP"]})
+    )
+
+    for body in ({"display_currencies": ["EUR", "GBP"]}, {"display_currencies": []}):
+        result = runner.invoke(app, ["sellercart", "update", "-b", json.dumps(body)])
+
+        assert result.exit_code == 0, result.stderr
+        assert json.loads(route.calls.last.request.content) == body
+
+
+def test_update_offers_adding_and_removing_one_currency() -> None:
+    """The whole-list field replaces; these change the list the shop has, so asking to add one
+    currency cannot cost the owner the others."""
+    detail = _data(runner.invoke(app, ["describe", "sellercart", "update"]).stdout)
+
+    fields = {f["field"]: f for f in detail["body_fields"]}
+    assert fields["add_display_currencies"]["repeatable"] is True
+    assert fields["remove_display_currencies"]["repeatable"] is True
+
+
+@respx.mock
+def test_update_sends_currency_additions_and_removals_as_given(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.patch(f"{fake_api_url}/agent/sellercart").mock(
+        return_value=httpx.Response(200, json={"display_currencies": ["EUR", "JPY"]})
+    )
+    body = {"add_display_currencies": ["JPY"], "remove_display_currencies": ["GBP"]}
+
+    result = runner.invoke(app, ["sellercart", "update", "-b", json.dumps(body)])
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == body
+
+
 @respx.mock
 def test_update_turns_the_shop_into_a_catalog(
     env_pointing_at_fake_api: None,  # noqa: ARG001
