@@ -418,6 +418,23 @@ def test_the_shelf_status_offers_the_states_the_api_knows() -> None:
     assert set(status_flag["choices"]) == {"published", "draft", "withdrawn", "all"}
 
 
+@respx.mock
+def test_adding_to_the_shelf_carries_the_shops_own_copy(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """The shop's copy travels with the add, so it lands on the listing and not on the catalog."""
+    route = respx.post(f"{fake_api_url}/agent/sellercart/products").mock(
+        return_value=httpx.Response(200, json={"items": [], "total": 0})
+    )
+    body = {"products": [{"product_id": "0b1c2d3e-4f50-6172-8394-a5b6c7d8e9f0", "description": "Shop copy"}]}
+
+    result = runner.invoke(app, ["sellercart-products", "add", "-b", json.dumps(body)])
+
+    assert result.exit_code == 0, result.stderr or result.stdout
+    assert json.loads(route.calls.last.request.content) == body
+
+
 def test_money_is_a_number_across_the_shop_commands() -> None:
     """One shape for money everywhere, so an agent that learned one command can write the next.
 
@@ -590,3 +607,166 @@ def test_media_delete_takes_the_image_id_as_a_positional(
 
     assert result.exit_code == 0, result.stderr
     assert route.call_count == 1
+
+
+# --- The draft of a live shop -------------------------------------------------------------------
+
+
+@respx.mock
+def test_publish_asks_the_owner_with_an_optional_version_name(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """Publishing raises an approval; the name travels as a short option, no JSON quoting."""
+    route = respx.post(f"{fake_api_url}/agent/sellercart/publish").mock(
+        return_value=httpx.Response(202, json={"status": "pending_approval"})
+    )
+
+    result = runner.invoke(app, ["sellercart", "publish", "--summary", "Owner's summer look"])
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {"summary": "Owner's summer look"}
+    assert _data(result.stdout) == {"status": "pending_approval"}
+
+
+@pytest.mark.parametrize(
+    ("command", "method", "path"),
+    [
+        pytest.param("changes", "GET", "/agent/sellercart/changes", id="changes"),
+        pytest.param("discard", "POST", "/agent/sellercart/discard", id="discard"),
+        pytest.param("versions", "GET", "/agent/sellercart/versions", id="versions"),
+    ],
+)
+@respx.mock
+def test_the_draft_commands_reach_their_routes(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+    command: str,
+    method: str,
+    path: str,
+) -> None:
+    route = respx.route(method=method, url=f"{fake_api_url}{path}").mock(
+        return_value=httpx.Response(200, json={"ok": True})
+    )
+
+    result = runner.invoke(app, ["sellercart", command])
+
+    assert result.exit_code == 0, result.stderr
+    assert route.called
+
+
+@respx.mock
+def test_versions_takes_a_limit(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.get(f"{fake_api_url}/agent/sellercart/versions").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+
+    result = runner.invoke(app, ["sellercart", "versions", "--limit", "3"])
+
+    assert result.exit_code == 0, result.stderr
+    assert route.calls.last.request.url.params["limit"] == "3"
+
+
+@pytest.mark.parametrize(
+    ("argv", "method", "path"),
+    [
+        pytest.param(
+            ["sellercart", "update", "-b", '{"name": "Acme Home", "note": "New name"}'],
+            "PATCH",
+            "/agent/sellercart",
+            id="settings",
+        ),
+        pytest.param(
+            ["sellercart", "theme", "-b", '{"primary": "#000000", "note": "New name"}'],
+            "PATCH",
+            "/agent/sellercart/theme",
+            id="theme",
+        ),
+        pytest.param(
+            ["sellercart", "apply-preset", "-b", '{"preset": "minimal", "note": "New name"}'],
+            "POST",
+            "/agent/sellercart/presets/apply",
+            id="preset",
+        ),
+        pytest.param(
+            ["sellercart-pages", "update", "about", "-b", '{"title": "About", "note": "New name"}'],
+            "PUT",
+            "/agent/sellercart/pages/about",
+            id="page",
+        ),
+        pytest.param(
+            ["sellercart-menus", "update", "header", "-b", '{"items": [], "note": "New name"}'],
+            "PUT",
+            "/agent/sellercart/menus/header",
+            id="menu",
+        ),
+    ],
+)
+@respx.mock
+def test_writes_carry_the_agents_note_in_the_body(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+    argv: list[str],
+    method: str,
+    path: str,
+) -> None:
+    """The owner reads the note beside the change it explains — it has to arrive with the write."""
+    route = respx.route(method=method, url=f"{fake_api_url}{path}").mock(
+        return_value=httpx.Response(200, json={})
+    )
+
+    result = runner.invoke(app, argv)
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content)["note"] == "New name"
+
+
+@respx.mock
+def test_product_search_text_takes_the_note_as_an_option(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """Every field of this one is an option already, so the note is one too — no JSON to quote."""
+    product_id = "0b1c2d3e-4f50-6172-8394-a5b6c7d8e9f0"
+    route = respx.put(f"{fake_api_url}/agent/sellercart/products/{product_id}/seo").mock(
+        return_value=httpx.Response(200, json={})
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "sellercart-products",
+            "seo",
+            product_id,
+            "--title",
+            "Linen apron",
+            "--note",
+            "The owner's own wording",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {
+        "title": "Linen apron",
+        "note": "The owner's own wording",
+    }
+
+
+@respx.mock
+def test_deleting_a_page_carries_the_note_as_a_query(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.delete(f"{fake_api_url}/agent/sellercart/pages/blog").mock(
+        return_value=httpx.Response(204)
+    )
+
+    result = runner.invoke(
+        app, ["sellercart-pages", "delete", "blog", "--note", "The owner asked to drop it"]
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert route.calls.last.request.url.params["note"] == "The owner asked to drop it"
