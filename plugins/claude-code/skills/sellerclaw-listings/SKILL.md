@@ -61,9 +61,33 @@ To stop being asked on every draft, pin the store's defaults once with `channels
 Same shape under `amazon-listings` — read offers and sync price/stock (`store_id` is the path
 argument). `sellerclaw_describe` the exact command before the first call.
 
+## Etsy
+
+```text
+sellerclaw_run(group="etsy-listings", command="draft",
+  positionals={"store_id": STORE_ID}, body={"product_ids": [PRODUCT_ID]})
+sellerclaw_run(group="etsy-listings", command="publish",
+  positionals={"store_id": STORE_ID}, body={"listing_ids": [LISTING_ID]})
+```
+
+Etsy refuses a physical listing without a shipping profile and a processing profile (how long until
+the item is ready to send). Leave them out and the shop's default — or its only one — is used; when
+the shop has several, the drafts come back with a `needs_policies` question. Answer it for the whole
+batch with `etsy-listings set-policies` (`shipping_profile_id`, `return_policy_id`,
+`readiness_state_id`), taking the ids from `etsy-store list-policies` — SellerClaw's ids, not Etsy's.
+
+## Other storefronts
+
+WooCommerce, Wix and BigCommerce work the same way under `woocommerce-listings` / `wix-listings` /
+`bigcommerce-listings`: `draft`, then `publish`. `sellerclaw_describe` the group before the first call.
+
 ## Watch for
 
 - **Stock sync ≠ publish.** `create` / `publish` create the listing; `sync-stock` only updates
   quantities (and optional price).
-- **Raw fallback:** the `shopify` / `ebay` / `amazon` groups pass raw API calls through when no curated
-  command fits.
+- **`withdraw` is not `delete`.** `withdraw` takes a listing off the storefront and can be undone;
+  `delete` destroys it — on Etsy the listing, its address and the reviews and favourites on it go
+  with it, and re-listing costs a new listing fee. An unqualified "take this off my shop" means
+  `withdraw`; only delete when the owner said to delete.
+- **Raw fallback:** the `shopify` / `ebay` / `amazon` / `etsy` / `woocommerce` / `wix` /
+  `bigcommerce` groups pass raw API calls through when no curated command fits.

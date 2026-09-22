@@ -130,6 +130,15 @@ SPECS = (
                 ),
             ),
             body_field(
+                "readiness_state_id",
+                help=(
+                    "The shop's processing profile (how long until the item is ready to send). "
+                    "Etsy will not create a physical listing without one; omit it and the store's "
+                    "default or its only profile is used, and you are asked when the shop has "
+                    "several."
+                ),
+            ),
+            body_field(
                 "who_made",
                 choices=("i_did", "someone_else", "collective"),
                 help="Who made the item — required to publish; falls back to the shop default.",
@@ -194,6 +203,14 @@ SPECS = (
                 "return_policy_id",
                 help="Return policy id from `etsy-store list-policies`; omit to leave it as it is.",
             ),
+            body_field(
+                "readiness_state_id",
+                help=(
+                    "The shop's processing profile (how long until the item is ready to send). "
+                    "Etsy will not create a physical listing without one; omit it to leave it as "
+                    "it is."
+                ),
+            ),
         ),
     ),
     Cmd(
@@ -214,6 +231,28 @@ SPECS = (
         ),
     ),
     Cmd(
+        "delete",
+        "POST",
+        "/agent/etsy/stores/{store_id}/listings/delete",
+        summary=(
+            "Permanently delete these Etsy listings (irreversible) "
+            '(body: {"listing_ids": ["<uuid>", ...]}). The listing, its address on Etsy and the '
+            "reviews and favourites attached to it are gone, and re-listing means a new listing "
+            "and a new listing fee — so this needs the owner's explicit say-so. `withdraw` is the "
+            'recoverable one and is what an unqualified "take this off my shop" means. The rows '
+            "are kept as REMOVED for history; a listing already deleted reports success with "
+            "nothing done, and a DRAFT is refused (Etsy holds nothing to delete)."
+        ),
+        body=(
+            body_field(
+                "listing_ids",
+                repeatable=True,
+                required=True,
+                help="Listing UUIDs whose Etsy listings to delete.",
+            ),
+        ),
+    ),
+    Cmd(
         "update",
         "PATCH",
         "/agent/etsy/stores/{store_id}/listings/{listing_id}",
@@ -221,8 +260,8 @@ SPECS = (
             "Edit one Etsy listing group — local only, nothing reaches Etsy here. The change is "
             "recorded as owed and the next publish delivers it "
             '(body: {"title"?, "description"?, "sell_prices"?: {sku: price}, "quantities"?: {sku: qty}, '
-            '"shipping_profile_id"?, "return_policy_id"?}). To fix the policies on many drafts at '
-            "once, use `set-policies` instead."
+            '"shipping_profile_id"?, "return_policy_id"?, "readiness_state_id"?}). To fix the '
+            "policies on many drafts at once, use `set-policies` instead."
         ),
         body=(
             body_field("title", help="New listing title."),
@@ -247,13 +286,21 @@ SPECS = (
                 "return_policy_id",
                 help="Return policy id from `etsy-store list-policies`; omit to leave it as it is.",
             ),
+            body_field(
+                "readiness_state_id",
+                help=(
+                    "The shop's processing profile (how long until the item is ready to send). "
+                    "Etsy will not create a physical listing without one; omit it to leave it as "
+                    "it is."
+                ),
+            ),
         ),
     ),
 )
 
 app = build_group(
     NAME,
-    "Etsy listings: read (mirror, --live on search), sync price/stock, and publish/withdraw.",
+    "Etsy listings: read (mirror, --live on search), sync price/stock, and publish/withdraw/delete.",
     SPECS,
 )
 

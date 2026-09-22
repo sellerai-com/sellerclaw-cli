@@ -73,10 +73,42 @@ _HIDDEN_FROM_MCP = {
 }
 
 
+#: Every storefront a seller can connect. The allowlist has to cover all of them: someone who
+#: connected a shop expects to run it from Claude, and a channel left out is not "not exposed yet" —
+#: it is a connected store the person cannot touch at all, with no error that explains why. Etsy sat
+#: in exactly that hole: fully supported by the CLI, invisible to every MCP client.
+_SUPPORTED_STOREFRONTS = ("shopify", "ebay", "amazon", "etsy", "woocommerce", "wix", "bigcommerce")
+#: The groups a channel carries whatever it is: raw passthrough, shop admin, listings, orders.
+_CHANNEL_GROUP_SUFFIXES = ("", "-store", "-listings", "-orders")
+
+
 def test_allowlist_names_all_exist_in_registry() -> None:
     """Guard against a typo in MCP_VISIBLE_GROUPS — every name must be a real CLI group."""
     unknown = MCP_VISIBLE_GROUPS - {g.name for g in REGISTRY}
     assert not unknown, f"MCP_VISIBLE_GROUPS names absent from the CLI registry: {sorted(unknown)}"
+
+
+@pytest.mark.parametrize("channel", [pytest.param(c, id=c) for c in _SUPPORTED_STOREFRONTS])
+def test_every_supported_storefront_channel_is_visible(channel: str) -> None:
+    in_registry = {g.name for g in REGISTRY}
+    channel_groups = {f"{channel}{suffix}" for suffix in _CHANNEL_GROUP_SUFFIXES} & in_registry
+
+    assert channel_groups, f"no {channel} groups in the CLI registry — the naming must have changed"
+    missing = sorted(channel_groups - MCP_VISIBLE_GROUPS)
+    assert not missing, (
+        f"a connected {channel} store cannot be managed over MCP: "
+        f"{', '.join(missing)} exists in the CLI but is not in MCP_VISIBLE_GROUPS."
+    )
+
+
+def test_an_etsy_shop_is_reachable_from_an_mcp_client() -> None:
+    """The regression this guards: Etsy was missing from the allowlist entirely, finances included,
+    so a connected Etsy shop could not be managed from Claude at all."""
+    groups = {g["group"]: g for g in list_groups()}
+
+    assert {"etsy", "etsy-store", "etsy-listings", "etsy-orders", "etsy-finances"} <= set(groups)
+    listing_commands = {c["name"] for c in groups["etsy-listings"]["commands"]}
+    assert {"draft", "publish", "withdraw", "delete"} <= listing_commands
 
 
 def test_list_groups_exposes_exactly_the_allowlist() -> None:

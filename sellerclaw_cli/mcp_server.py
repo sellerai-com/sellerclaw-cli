@@ -131,6 +131,12 @@ _GUIDE_TOOL_DESC = (
 # callable. Everything else stays in the CLI but is invisible to `sellerclaw_groups` /
 # `sellerclaw_describe` / `sellerclaw_run`. An allowlist (not a denylist) means a new
 # agent-internal group added later never leaks to users by default.
+#
+# The rule for what belongs here: **every store channel the product supports is visible; the
+# agent-orchestration groups stay hidden.** Someone who connected a shop expects to run it from
+# Claude, whichever shop it is — a channel left out of this set is not "not exposed yet", it is a
+# connected store the person cannot touch at all, with no error that explains why (Etsy sat in that
+# hole). So a new channel's groups join this list in the same change that adds them to the CLI.
 MCP_VISIBLE_GROUPS: frozenset[str] = frozenset(
     {
         # Stores, integrations, account
@@ -155,6 +161,29 @@ MCP_VISIBLE_GROUPS: frozenset[str] = frozenset(
         "amazon-listings",
         "amazon-orders",
         "amazon",
+        # Etsy
+        "etsy-store",
+        "etsy-listings",
+        "etsy-orders",
+        "etsy-finances",
+        "etsy",
+        # WooCommerce
+        "woocommerce-store",
+        "woocommerce-listings",
+        "woocommerce-orders",
+        "woocommerce",
+        # Wix
+        "wix-store",
+        "wix-listings",
+        "wix-orders",
+        "wix",
+        # BigCommerce
+        "bigcommerce-store",
+        "bigcommerce-listings",
+        "bigcommerce-orders",
+        "bigcommerce",
+        # Buyer feedback across the connected channels
+        "reviews",
         # Internal catalog, orders, analytics
         "catalog",
         "orders",

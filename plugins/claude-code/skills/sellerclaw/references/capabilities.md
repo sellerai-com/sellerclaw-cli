@@ -16,6 +16,12 @@ Many groups take an id as the **first positional** (e.g. a store id for `shopify
 | `ebay-store` / `ebay-listings` / `ebay-orders` | eBay admin (policies, locations), listings & drafts, orders & fulfillment. |
 | `ebay-finances` / `ebay-promoted` | eBay fees/payouts (read-only); Promoted Listings campaigns & reports. |
 | `amazon-store` / `amazon-listings` / `amazon-orders` | Amazon account, offers + price/stock sync, orders & merchant-fulfilled shipments. |
+| `etsy-store` / `etsy-listings` / `etsy-orders` | Etsy shop admin (shipping profiles, return policies), listings & drafts, receipts & shipment confirmation. |
+| `etsy-finances` | Etsy ledger summary — fees, credits, debits, net over a period (read-only). |
+| `woocommerce-store` / `woocommerce-listings` / `woocommerce-orders` | WooCommerce store admin, listings & drafts, orders & tracking. |
+| `wix-store` / `wix-listings` / `wix-orders` | Wix site admin, listings & drafts, orders & tracking. |
+| `bigcommerce-store` / `bigcommerce-listings` / `bigcommerce-orders` | BigCommerce store admin, listings & drafts, orders & tracking. |
+| `reviews` | Customer reviews and ratings on a store (WooCommerce / Wix / Etsy; BigCommerce per product). eBay feedback lives elsewhere. |
 
 ## Internal catalog, orders & analytics
 
@@ -61,5 +67,6 @@ Many groups take an id as the **first positional** (e.g. a store id for `shopify
 
 ## Raw API passthrough (fallback)
 
-When no curated command fits: `shopify` (Admin GraphQL), `ebay` (REST + Trading), `amazon` (SP-API).
+When no curated command fits: `shopify` (Admin GraphQL), `ebay` (REST + Trading), `amazon` (SP-API),
+`etsy` (Open API), `woocommerce` (REST), `wix` (REST), `bigcommerce` (REST).
 Use only after checking the curated groups with `describe`.
