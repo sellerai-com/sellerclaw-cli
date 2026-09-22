@@ -34,7 +34,9 @@ SPECS = (
         "/agent/stores/{store_id}/listings/summary",
         summary=(
             "Aggregate stats over the store's Amazon listings (row count, total & zero stock, "
-            "price min/max/avg, currencies). Use this instead of listing every row for an overview."
+            "price min/max/avg, currencies). FBA offers, stocked in Amazon's warehouse, count in "
+            "amazon_warehouse_rows, not as zero stock. Use this instead of listing every row for an "
+            "overview."
         ),
         flags=(
             flag(
