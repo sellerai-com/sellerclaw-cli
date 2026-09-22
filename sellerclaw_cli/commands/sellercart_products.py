@@ -6,6 +6,13 @@ from sellerclaw_cli._command_group import Cmd, body_field, build_group, flag
 
 NAME = "sellercart-products"
 
+#: The same sentence for every write that changes what buyers see — see `sellercart changes`.
+_NOTE_HELP = (
+    "One sentence for the owner about why, in their language — shown beside this change while it "
+    "waits in the draft of a live shop, and kept with the version it is published in. Ignored "
+    "before the shop first opens."
+)
+
 SPECS = (
     Cmd(
         "list",
@@ -36,14 +43,26 @@ SPECS = (
             "Put catalog products on the storefront, one listing per variation. Price defaults to the "
             "shop's markup over the catalog cost; pass 'prices' to override. A product with no cost, "
             "or a shop with no markup set, is refused rather than listed at zero — get a markup on "
-            "the shop (the owner approves it) or pass an explicit price first."
+            "the shop (the owner approves it) or pass an explicit price first. Copy for the shop "
+            "goes in 'products' and lands on the listing; the catalog product keeps its own."
         ),
         body=(
             body_field(
+                "products",
+                type=list,
+                help=(
+                    "List of {product_id, title?, description?, images?} — this shop's own copy "
+                    "for each product, written onto its listing. Omit a field to take the catalog's."
+                ),
+                example=[
+                    {"product_id": "<uuid>", "description": "<the shop's own copy>"},
+                    {"product_id": "<uuid>"},
+                ],
+            ),
+            body_field(
                 "product_ids",
                 type=list,
-                required=True,
-                help="Catalog product ids to put on the shelf.",
+                help="Shorthand: catalog product ids to put on the shelf with the catalog's own copy.",
             ),
             body_field(
                 "prices",
@@ -96,6 +115,11 @@ SPECS = (
                     "Aim for roughly a hundred and fifty characters."
                 ),
             ),
+            body_field(
+                "note",
+                option="--note",
+                help=_NOTE_HELP,
+            ),
         ),
     ),
     Cmd(
@@ -106,6 +130,7 @@ SPECS = (
             "Forget what was written about a product for search, so its page describes itself "
             "from the product again."
         ),
+        flags=(flag("note", help=_NOTE_HELP),),
     ),
     Cmd(
         "delete",

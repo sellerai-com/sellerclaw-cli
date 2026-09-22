@@ -103,7 +103,10 @@ SPECS = (
         "update",
         "PATCH",
         "/agent/orders/{order_id}",
-        summary="Update order status, supplier info, or tracking.",
+        summary=(
+            "Update order status, supplier info or tracking, or fill in buyer details the store did "
+            "not send (some marketplaces share only the town and postcode). Only what you send changes."
+        ),
         body=(
             body_field(
                 "status",
@@ -128,6 +131,18 @@ SPECS = (
             body_field("tracking_carrier", help="Shipment carrier name."),
             body_field("tracking_url", help="Public tracking URL."),
             body_field("supplier_pay_url", help="Supplier payment URL, if any."),
+            body_field(
+                "shipping_address",
+                type=dict,
+                help=(
+                    "Delivery details to write in: any of full_name, address1, address2, city, province, "
+                    "zip_code, country_code (two letters), phone. Refused once the order was bought at "
+                    "the supplier or is closed."
+                ),
+                example={"full_name": "Jane Doe", "address1": "1 Main St", "phone": "+15125550100"},
+            ),
+            body_field("customer_name", help="The buyer's name."),
+            body_field("customer_email", help="The buyer's email address."),
         ),
     ),
     Cmd(

@@ -147,7 +147,7 @@ SPECS = (
             flag(
                 "fresh",
                 type=bool,
-                help="Bypass the local mirror and fetch live from the store (slower).",
+                help="Bypass the local mirror and fetch live from the store (slower). Amazon always reads the mirror.",
             ),
         ),
         # A fee read goes out to each platform's finance API and pages through transactions.
@@ -186,7 +186,7 @@ SPECS = (
             flag(
                 "fresh",
                 type=bool,
-                help="Bypass the local mirror and fetch live from the store (slower).",
+                help="Bypass the local mirror and fetch live from the store (slower). Amazon always reads the mirror.",
             ),
         ),
     ),

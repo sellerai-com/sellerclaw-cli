@@ -11,10 +11,19 @@ SPECS = (
         "list",
         "GET",
         "/agent/amazon/stores/{store_id}/orders",
-        summary="List Amazon orders (both FBA and merchant-fulfilled), order-level detail.",
+        summary=(
+            "List Amazon orders (both FBA and merchant-fulfilled), newest first, order-level detail. "
+            "`truncated: true` means the window held more orders than --limit: narrow --created-after."
+        ),
         flags=(
             flag("limit", type=int, minimum=1, maximum=100, default=100, help="Max results."),
-            flag("created_after", help="ISO timestamp (defaults to a wide window)."),
+            flag(
+                "created_after",
+                help=(
+                    "ISO timestamp. Defaults to 3 days before --created-before (or now); 30 days when "
+                    "only open statuses (Unshipped, PartiallyShipped, Pending) are asked for."
+                ),
+            ),
             flag("created_before", help="ISO timestamp."),
             flag("order_statuses", help="Comma-separated order statuses (e.g. Unshipped,Shipped)."),
             flag("fulfillment_channels", help="Comma-separated channels: AFN (FBA) or MFN (merchant)."),

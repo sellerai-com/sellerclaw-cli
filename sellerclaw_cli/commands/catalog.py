@@ -104,8 +104,9 @@ SPECS = (
             "product id is a positional, so a set of products needs `catalog bulk-update` (up to "
             "200 in one call) or, for a whole catalog, the `catalog-file` import. Catalog only — a "
             "listing built from this product keeps its own copy of the text and pictures, so this "
-            "changes nothing already on a marketplace. To change what a store shows, edit the "
-            "listing (`listings bulk-update`) and publish."
+            "changes nothing already on a marketplace. Copy for one store belongs to its listing: "
+            "'products' on the draft call for a new one, `listings bulk-update` and a publish for "
+            "an existing one."
         ),
         body=(
             body_field("name", help="New product name."),

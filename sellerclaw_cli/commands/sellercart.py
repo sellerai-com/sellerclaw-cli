@@ -12,6 +12,13 @@ from sellerclaw_cli._command_group import (
 
 NAME = "sellercart"
 
+#: The same sentence for every write that changes what buyers see — see `sellercart changes`.
+_NOTE_HELP = (
+    "One sentence for the owner about why, in their language — shown beside this change while it "
+    "waits in the draft of a live shop, and kept with the version it is published in. Ignored "
+    "before the shop first opens."
+)
+
 #: The typefaces a shop may use. A whitelist server-side (every name becomes a Google Fonts request
 #: from the buyer's browser), enumerated here so a wrong one is refused locally instead of costing a
 #: round-trip. Keep in step with the API.
@@ -264,23 +271,74 @@ SPECS = (
                 example="/contacts",
                 clearable=True,
             ),
+            body_field("note", help=_NOTE_HELP, example="Led with free delivery, as you asked"),
         ),
     ),
     Cmd(
         "publish",
         "POST",
         "/agent/sellercart/publish",
-        summary="Take the storefront live. Refused until the home page is published — its address would 404 otherwise.",
+        summary=(
+            "Ask the owner to put the shop's draft live — every change at once — or to open a shop "
+            "that is not open yet. Nothing buyers see changes here: it raises an approval carrying "
+            "the change list and the preview link and answers 202 with status pending_approval (or "
+            "approved_queued when the owner's Autopilot answers it). Their 'publish it' from before "
+            "this call cannot close it; hand only their reply from now on to `action-requests "
+            "confirm`. Refused before asking: nothing_to_publish, home_page_required, "
+            "payments_required, publish_already_pending."
+        ),
+        body=(
+            body_field(
+                "summary",
+                option="--summary",
+                help="A few words naming this version for the owner, e.g. 'Summer sale look'.",
+                example="Summer sale look",
+            ),
+        ),
     ),
     Cmd(
         "unpublish",
         "POST",
         "/agent/sellercart/unpublish",
         summary=(
-            "Take the shop off the air. Pages, images and products survive; buyers stop seeing it. "
-            "Reversible with `publish`. Closing a shop for good is the seller's own button in "
-            "SellerClaw and has no command here."
+            "Ask the owner to take the live shop off the air: answers 202 with status "
+            "pending_approval, and the shop closes once they approve. Pages, images and products "
+            "survive; buyers stop seeing it. A shop already closed answers 200 with nothing asked. "
+            "Closing a shop for good is the seller's own button in SellerClaw and has no command "
+            "here."
         ),
+    ),
+    Cmd(
+        "changes",
+        "GET",
+        "/agent/sellercart/changes",
+        summary=(
+            "What the draft changes compared with what buyers see, change by change, with your notes "
+            "and the preview link. On a live shop every edit waits here until the owner approves a "
+            "publish. pending_request_id is your publish ask still waiting for them."
+        ),
+    ),
+    Cmd(
+        "discard",
+        "POST",
+        "/agent/sellercart/discard",
+        summary=(
+            "Throw the draft away: the shop goes back to exactly what buyers see. Cannot be undone — "
+            "only when the owner asks for it. Answers with what was discarded; say it back to them. "
+            "Any publish ask still waiting is withdrawn. never_published: the shop has never been "
+            "open, so there is no version to go back to."
+        ),
+    ),
+    Cmd(
+        "versions",
+        "GET",
+        "/agent/sellercart/versions",
+        summary=(
+            "The shop's published versions, newest first: what each one changed, and whether the "
+            "owner published it, approved your ask, or it was the shop as it stood when versions "
+            "arrived."
+        ),
+        flags=(flag("limit", type=int, minimum=1, maximum=50, default=10, help="How many."),),
     ),
     Cmd(
         "preview",
@@ -407,6 +465,7 @@ SPECS = (
                 ),
                 clearable=True,
             ),
+            body_field("note", help=_NOTE_HELP, example="Led with free delivery, as you asked"),
         ),
     ),
     Cmd(
@@ -430,6 +489,7 @@ SPECS = (
                 help="Preset id from `sellercart presets`.",
                 example="boutique",
             ),
+            body_field("note", help=_NOTE_HELP, example="Led with free delivery, as you asked"),
         ),
     ),
 )

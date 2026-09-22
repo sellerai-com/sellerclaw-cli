@@ -6,6 +6,13 @@ from sellerclaw_cli._command_group import Cmd, body_field, build_group
 
 NAME = "sellercart-menus"
 
+#: The same sentence for every write that changes what buyers see — see `sellercart changes`.
+_NOTE_HELP = (
+    "One sentence for the owner about why, in their language — shown beside this change while it "
+    "waits in the draft of a live shop, and kept with the version it is published in. Ignored "
+    "before the shop first opens."
+)
+
 SPECS = (
     Cmd(
         "list",
@@ -32,6 +39,7 @@ SPECS = (
                     {"label": "Delivery", "href": "/delivery"},
                 ],
             ),
+            body_field("note", help=_NOTE_HELP, example="Led with free delivery, as you asked"),
         ),
     ),
 )
