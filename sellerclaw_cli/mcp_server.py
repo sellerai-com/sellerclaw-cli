@@ -87,8 +87,9 @@ SERVER_INSTRUCTIONS = (
     "week/month, or `from`+`to` dates) and the same store selection (a store id, `all` for every "
     "store, or a repeated `store` flag). Ask for several stores in one call rather than adding up "
     "per-store answers — totals add, averages and shares do not. Answers carry a `coverage` block: "
-    'a `history_status` of "syncing" means that store is still importing its sales history, so the '
-    "figures are real but partial and must be reported as such."
+    "`window_complete: false` means the store's imported sales history does not reach back to the "
+    "start of the period asked about, so the figures are real but partial and must be reported as "
+    "such."
 )
 
 _GROUPS_TOOL_DESC = (

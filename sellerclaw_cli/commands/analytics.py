@@ -98,8 +98,9 @@ _ONE_CURRENCY = (
 )
 _COVERAGE = (
     "Every answer carries `coverage`: which `store_ids` it covers, `history_status` "
-    "(ready / syncing / unavailable) and `history_covered_from`. `syncing` means the store is "
-    "still importing its sales history — say so instead of reporting the figures as complete."
+    "(ready / syncing / unavailable), `history_covered_from` and `window_complete`. "
+    "`window_complete: false` means the imported sales history does not reach back to the start "
+    "of the span asked about — say the figures are partial, and read no missing sale as real."
 )
 
 SPECS = (

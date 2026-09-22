@@ -81,9 +81,10 @@ sellerclaw_run(group="analytics", command="operations-digest", positionals={"sto
 
 ## Watch for
 
-- **Say when the data is incomplete.** Every answer carries `coverage`. `history_status: "syncing"`
-  means the store is still importing its sales history — the figures are real but partial, so say so
-  instead of presenting them as the full picture.
+- **Say when the data is incomplete.** Every answer carries `coverage`. `window_complete: false`
+  means the imported sales history does not reach back to the start of the period asked about
+  (`history_status` says why: `syncing` — still importing, `unavailable` — the import failed). The
+  figures are real but partial, so say so, and don't read a missing sale as real.
 - **Gross is not net.** Profit is revenue minus cost of goods; marketplace fees are not in it unless
   you passed `with_fees`. And cost exists only for supplier-sourced products, so when
   `cost_coverage_pct` is low, call it "profit on sourced products", not whole-store profit.
