@@ -410,17 +410,20 @@ def test_marking_an_order_shipped_hands_back_the_whole_board(
     shipped = respx.post(f"{fake_api_url}/agent/orders/{ORDER_ID}/shipped").mock(
         return_value=httpx.Response(200, json={"id": ORDER_ID, "status": "shipped"})
     )
-    respx.get(f"{fake_api_url}/agent/orders").mock(
+    board = respx.get(f"{fake_api_url}/agent/orders").mock(
         return_value=httpx.Response(200, json={"items": []})
     )
     respx.get(f"{fake_api_url}/agent/orders/overview").mock(
         return_value=httpx.Response(200, json={"total": 0, "by_status": {}})
     )
 
-    result = _call("sellerclaw_order_mark_shipped", {"order": ORDER_ID})
+    result = _call("sellerclaw_order_mark_shipped", {"order": ORDER_ID, "status": "new"})
 
     assert shipped.call_count == 1
     assert set(result.structured_content) == {"orders", "overview"}
+    # Through the board's own filter. Answering with every status would redraw the card with rows
+    # the chip above them excludes.
+    assert dict(board.calls[0].request.url.params) == {"status": "new"}
 
 
 @respx.mock
@@ -560,8 +563,8 @@ def test_the_model_gets_a_sentence_while_the_owner_gets_the_card(
     result = _call("sellerclaw_orders", {})
 
     text = result.content[0].text
-    assert "7 are waiting to ship" in text
-    assert len(text) < 400
+    assert "7 across the account are waiting to ship" in text
+    assert len(text) < 500
     # The payload is still whole — it is the card's, not the model's.
     assert len(result.structured_content["orders"]["items"]) == 50
 
@@ -596,7 +599,10 @@ def test_the_model_is_told_the_owner_answers_the_card_themselves() -> None:
 
     assert "Send the email" in summary
     assert "3 more also waiting" in summary
-    assert "do not answer for them" in summary
+    assert "you have no tool that closes it" in summary
+    # The fallback for a client with no card, so the model is never left stuck.
+    assert "action-requests confirm" in summary
+    assert "Never decide for them" in summary
 
 
 @respx.mock
@@ -623,3 +629,33 @@ def test_a_refusal_the_owner_can_act_on_is_not_flattened_into_a_generic_failure(
         _call("sellerclaw_approval", {"request": REQUEST_ID})
 
     assert "trust this app for approvals" in str(excinfo.value)
+
+
+def test_a_summary_covering_several_shops_does_not_speak_of_one() -> None:
+    """"The store" over five shops' combined figures names a shop that does not exist."""
+    many = mcp_apps._summarize_store_summary({"metrics": {"period": "last_30d", "revenue": "9.00"}})
+    one = mcp_apps._summarize_store_summary(
+        {"store_name": "Pawpilot Supply", "metrics": {"period": "last_30d", "revenue": "9.00"}}
+    )
+
+    assert many.startswith("Store summary, last_30d.")
+    assert one.startswith("Pawpilot Supply, last_30d.")
+
+
+@pytest.mark.parametrize(
+    "summary",
+    [
+        pytest.param(
+            mcp_apps._summarize_store_summary({"metrics": {"revenue": "1.00"}}), id="store-summary"
+        ),
+        pytest.param(mcp_apps._summarize_orders({"orders": {"items": []}}), id="orders"),
+    ],
+)
+def test_a_client_without_cards_is_not_told_the_owner_is_looking_at_one(summary: str) -> None:
+    """These tools answer any MCP client, and only some of them render our screens.
+
+    A model told flatly "the owner is looking at this" in a terminal would talk about something
+    nobody can see, and would stop reciting figures that are then shown nowhere.
+    """
+    assert "If this client shows SellerClaw cards" in summary
+    assert "structured result" in summary

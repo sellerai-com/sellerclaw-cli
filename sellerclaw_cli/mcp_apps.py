@@ -105,8 +105,10 @@ def document_url(screen: str) -> str:
 # The documents
 # ---------------------------------------------------------------------------------------------
 
-#: ``{url: (fetched_at, html)}``. A lock rather than a bare dict because the SDK reads resources on
-#: a worker thread, and two clients opening the same card at once should cost one fetch, not two.
+#: ``{url: (fetched_at, html)}``, guarded because the SDK reads resources on a worker thread and a
+#: plain dict would be mutated from several at once. The lock covers the lookup and the store, not
+#: the fetch in between: two clients opening the same card on a cold cache do both fetch, which
+#: costs one extra request against holding every reader behind one ten-second timeout.
 _documents: dict[str, tuple[float, str]] = {}
 _documents_lock = threading.Lock()
 
@@ -253,6 +255,20 @@ def _store_display_name(client: Client, store: str) -> str | None:
 # left out, never rendered as zero.
 
 
+#: What the order board treats as "still owed to the buyer" — the same set the screen leads with.
+_AWAITING_SHIPMENT_STATUSES = frozenset(
+    {"new", "pending_approval", "approved", "purchasing", "purchased", "awaiting_payment"}
+)
+
+#: How every summary ends. Deliberately conditional: a client that did not negotiate MCP Apps gets
+#: these same answers with no card at all, and telling its model "the owner is looking at it" would
+#: be a plain untruth. The full payload is in the structured result either way.
+_SHOWN_TO_THE_OWNER = (
+    "If this client shows SellerClaw cards, the owner is looking at this one and can act on it "
+    "there; the full figures are in the structured result."
+)
+
+
 def _money(value: Any, currency: str | None) -> str | None:
     if value is None:
         return None
@@ -262,9 +278,11 @@ def _money(value: Any, currency: str | None) -> str | None:
 def _summarize_store_summary(payload: dict[str, Any]) -> str:
     metrics = payload.get("metrics") or {}
     currency = metrics.get("currency")
-    name = payload.get("store_name") or "The store"
+    # No name means the answer covers more than one shop, or a store row we could not read.
+    # "The store" would put several shops' figures under a singular that names none of them.
+    name = payload.get("store_name")
     period = metrics.get("period") or "the period"
-    lines = [f"{name}, {period}."]
+    lines = [f"{name}, {period}." if name else f"Store summary, {period}."]
 
     revenue = _money(metrics.get("revenue"), currency)
     if revenue is not None:
@@ -277,7 +295,7 @@ def _summarize_store_summary(payload: dict[str, Any]) -> str:
     profit = _money(net, currency) or _money(metrics.get("gross_profit"), currency)
     if profit is not None:
         lines.append(f"Profit {profit}.")
-    lines.append("The owner is looking at the interactive summary; it has the rest.")
+    lines.append(_SHOWN_TO_THE_OWNER)
     return " ".join(lines)
 
 
@@ -291,15 +309,11 @@ def _summarize_orders(payload: dict[str, Any]) -> str:
         count for status, count in by_status.items() if status in _AWAITING_SHIPMENT_STATUSES
     )
     if waiting:
-        lines.append(f"{waiting} are waiting to ship.")
-    lines.append("The owner is looking at the board and can act on it there.")
+        # Said as "across the account" because that is what it is: the overview counts every order,
+        # while the rows above may be one filtered page of them.
+        lines.append(f"{waiting} across the account are waiting to ship.")
+    lines.append(_SHOWN_TO_THE_OWNER)
     return " ".join(lines)
-
-
-#: What the order board treats as "still owed to the buyer" — the same set the screen leads with.
-_AWAITING_SHIPMENT_STATUSES = frozenset(
-    {"new", "pending_approval", "approved", "purchasing", "purchased", "awaiting_payment"}
-)
 
 
 def _summarize_approval(payload: dict[str, Any]) -> str:
@@ -313,8 +327,9 @@ def _summarize_approval(payload: dict[str, Any]) -> str:
     if waiting:
         lines.append(f"{waiting} more also waiting.")
     lines.append(
-        "They answer on the card itself — do not answer for them, and do not ask them to "
-        "repeat it here."
+        "Only they can answer it: you have no tool that closes it. If this client shows the "
+        "card, they press the button on it; if they answer you in words instead, close it with "
+        "`action-requests confirm` quoting what they said. Never decide for them."
     )
     return " ".join(lines)
 
@@ -372,7 +387,10 @@ status; omit it for the whole board.\
 
 _ORDER_MARK_SHIPPED_DESC = """\
 Close one order as shipped and hand back the board. Records a shipment that already exists on the
-sales channel — it does not create one there.\
+sales channel — it does not create one there.
+
+Pass the `status` the board is currently filtered to, so the answer comes back through the same
+filter the person is looking at.\
 """
 
 _APPROVAL_DESC = """\
@@ -552,12 +570,16 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
         description=_ORDER_MARK_SHIPPED_DESC,
         annotations=_acts("Mark an order shipped"),
     )
-    def sellerclaw_order_mark_shipped(order: str) -> Any:
+    def sellerclaw_order_mark_shipped(
+        order: str, status: str | None = None, limit: int | None = None
+    ) -> Any:
         with _refusals_in_their_own_words(), client_for_tool(DEFAULT_TIMEOUT_SECONDS) as client:
             # A refusal here is the channel saying it holds no shipment, and its wording names the
             # command that would create one. Let it travel: the board shows it verbatim.
             client.request("POST", f"/agent/orders/{order}/shipped")
-            payload = _read_orders(client, None, None)
+            # Re-read through the board's *own* filter. Answering with everything would leave the
+            # card showing every status under a chip that still says "awaiting shipment".
+            payload = _read_orders(client, status, limit)
         return _result(payload, _summarize_orders(payload))
 
     @apps.tool(
