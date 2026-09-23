@@ -68,9 +68,7 @@ def run_operation(
             )
             if job_poll_path is not None and looks_like_job(result):
                 poll_command = _poll_command(job_poll_path)
-                if not _waits(ctx):
-                    result = {**result, "note": queued_note(result, poll_command)}
-                else:
+                if _waits(ctx):
                     result = wait_for_job(
                         result,
                         fetch=lambda job_id: client.request(
@@ -80,6 +78,12 @@ def run_operation(
                     )
                     if not is_finished(result):
                         result = {**result, "note": unfinished_note(result, poll_command)}
+                elif not is_finished(result):
+                    # Only while there is still something to read. A small batch can be done — or
+                    # refused — by the time the call returns, and then this payload *is* the outcome:
+                    # "running in the background, read it later" would send the caller after a job with
+                    # nothing left to say, or hide a refusal behind a promise that it went fine.
+                    result = {**result, "note": queued_note(result, poll_command)}
     except CliError as err:
         code = print_error(err)
         raise typer.Exit(code=code) from err
