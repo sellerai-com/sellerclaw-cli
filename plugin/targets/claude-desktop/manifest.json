@@ -4,7 +4,7 @@
   "display_name": "SellerClaw",
   "version": "0.1.0",
   "description": "Operate your SellerClaw e-commerce and marketing channels from Claude — eBay, Shopify, Amazon, Meta Ads, Google Ads and more.",
-  "long_description": "SellerClaw connects your e-commerce and marketing channels — eBay, Shopify, Amazon, Meta Ads, Google Ads and more — and this extension lets you operate them from Claude. Nothing to install first: the extension talks to SellerClaw's hosted MCP server, so there is no Python, no uv and no CLI to set up. Ask Claude to sign in (the `sellerclaw_login` tool opens your browser to approve access — no API key to copy), then browse command groups, read a command's schema, and run it through three discovery tools. Some actions (e.g. sending email or launching ad campaigns) still require the owner's approval, enforced server-side.",
+  "long_description": "SellerClaw connects your e-commerce and marketing channels — eBay, Shopify, Amazon, Meta Ads, Google Ads and more — and this extension lets you operate them from Claude. Nothing to install first: the extension talks to SellerClaw's hosted MCP server, so there is no Python, no uv and no CLI to set up. Ask Claude to sign in (the `sellerclaw_login` tool opens your browser to approve access — no API key to copy), then browse command groups, read a command's schema, and run it through three discovery tools. Some answers come back as interactive cards you can act on right in the conversation — a store's numbers, the order board, and anything waiting for your approval. Some actions (e.g. sending email or launching ad campaigns) still require the owner's approval, enforced server-side.",
   "author": {
     "name": "SellerAI",
     "email": "hello@sellerai.com",
@@ -49,7 +49,9 @@
     "entry_point": "server/index.js",
     "mcp_config": {
       "command": "node",
-      "args": ["${__dirname}/server/index.js"],
+      "args": [
+        "${__dirname}/server/index.js"
+      ],
       "env": {
         "SELLERCLAW_TOKEN": "${user_config.token}"
       }
@@ -73,6 +75,18 @@
       "description": "Run a SellerClaw command and return the API response."
     },
     {
+      "name": "sellerclaw_store_summary",
+      "description": "Show how a store is doing as an interactive card: revenue, orders, profit and best sellers."
+    },
+    {
+      "name": "sellerclaw_orders",
+      "description": "Show the order board as an interactive card: who is waiting, for how long, for how much."
+    },
+    {
+      "name": "sellerclaw_approval",
+      "description": "Show something waiting on you as a card, with the buttons to approve or decline it."
+    },
+    {
       "name": "sellerclaw_login",
       "description": "Sign in to SellerClaw by approving access in the browser."
     }
@@ -88,7 +102,11 @@
     }
   },
   "compatibility": {
-    "platforms": ["darwin", "win32", "linux"],
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
     "runtimes": {
       "node": ">=18.0.0"
     }
