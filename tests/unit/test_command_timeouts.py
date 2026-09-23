@@ -23,6 +23,7 @@ from sellerclaw_cli import _runtime
 from sellerclaw_cli._client import DEFAULT_TIMEOUT_SECONDS, Client
 from sellerclaw_cli._command_group import LONG_TIMEOUT_SECONDS, REGISTRY, Cmd, _as_provider_read
 from sellerclaw_cli.cli import app
+from sellerclaw_cli.mcp_server import run_command
 
 pytestmark = pytest.mark.unit
 
@@ -345,6 +346,51 @@ class TestDescribeReportsTheBudget:
         commands = json.loads(result.stdout)["data"]["commands"]
         assert commands, "describe returned no commands"
         assert all(item["timeout_seconds"] > 0 for item in commands)
+
+
+class TestTheMcpFaceSpendsTheSameBudget:
+    """The MCP proxy is a second door onto the same commands, and it must not wait differently.
+
+    There is one deliberate difference: over MCP nothing can hold on for a background job, so a
+    command that only queues one gets the short default however long a budget it declares.
+    """
+
+    @respx.mock
+    def test_a_synchronous_publish_waits_the_long_budget(
+        self, env: str, recorded_timeouts: list[float]
+    ) -> None:
+        respx.post(f"{env}/agent/stores/{STORE_ID}/ebay-listings/publish").mock(
+            return_value=httpx.Response(200, json={"results": [], "errors": []})
+        )
+
+        run_command(
+            "ebay-listings",
+            "publish",
+            positionals={"store_id": STORE_ID},
+            body={"listing_ids": [PRODUCT_ID]},
+        )
+
+        assert recorded_timeouts == [LONG_TIMEOUT_SECONDS]
+
+    @respx.mock
+    def test_a_job_starter_keeps_the_short_one(
+        self, env: str, recorded_timeouts: list[float]
+    ) -> None:
+        """``amazon-listings draft`` declares the long budget and still only queues a job."""
+        respx.post(f"{env}/agent/amazon/stores/{STORE_ID}/listings/draft").mock(
+            return_value=httpx.Response(202, json={"id": JOB_ID, "status": "queued"})
+        )
+
+        result = run_command(
+            "amazon-listings",
+            "draft",
+            positionals={"store_id": STORE_ID},
+            body={"product_ids": [PRODUCT_ID]},
+        )
+
+        assert recorded_timeouts == [DEFAULT_TIMEOUT_SECONDS]
+        # And the caller is told how to read it, rather than left holding an id.
+        assert JOB_ID in result["note"]
 
 
 def test_run_operation_defaults_to_the_client_default(monkeypatch: pytest.MonkeyPatch) -> None:

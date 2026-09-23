@@ -1,8 +1,9 @@
 """Handing back a background job, and waiting one out when the caller asks.
 
 Publishing became a job on the server because a model call per product does not belong inside an
-HTTP request. The caller must not be left holding an id it cannot use, so the queued job always
-comes back carrying the exact command that reads it.
+HTTP request. The caller must not be left holding an id it cannot use, so a job that is still running
+comes back carrying the exact command that reads it — and one that already finished comes back as the
+answer it is, with nothing added.
 
 Waiting is opt-in (``--wait``) rather than the default, because the caller is usually an agent, not
 a person at a terminal: its sandbox detaches anything still running after a few seconds and then
@@ -205,6 +206,33 @@ class TestThroughTheCommand:
         assert f"listings bulk-job {STORE_ID} {JOB_ID}" in note
         assert "nothing needs re-sending" in note
         assert "--wait" in note
+
+    @pytest.mark.parametrize(
+        "status",
+        [
+            pytest.param("succeeded", id="done-already"),
+            pytest.param("failed", id="refused-already"),
+            pytest.param("partial", id="partly-done-already"),
+        ],
+    )
+    @respx.mock
+    def test_a_job_that_is_already_over_is_the_answer_itself(self, env: str, status: str) -> None:
+        """Small batches finish inside the request, and then the note would be a lie.
+
+        "Queued and running in the background … read the result later" sends the caller after a job
+        with nothing left to say — and on a failure it wraps the refusal in a promise that it went
+        fine, which is the one reading we can least afford.
+        """
+        respx.post(f"{env}/agent/stores/{STORE_ID}/ebay-draft-listings").mock(
+            return_value=httpx.Response(200, json=_job(status, error="nothing was draftable"))
+        )
+
+        result = _create_drafts()
+
+        assert result.exit_code == 0, result.output
+        payload = json.loads(result.stdout)["data"]
+        assert payload["status"] == status
+        assert "note" not in payload
 
     @respx.mock
     def test_wait_answers_with_the_finished_job(self, env: str) -> None:

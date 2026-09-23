@@ -12,8 +12,9 @@ SPECS = (
         "GET",
         "/agent/goals/action-requests",
         summary=(
-            "List action requests you raised to the owner, newest first. Narrow it with --status "
-            "(pending is the one that still needs the owner) and --limit."
+            "Everything waiting on the owner, newest first — every ask raised on this account, "
+            "whoever raised it, not only your own. `--status pending` is what still needs them; "
+            "narrow further with --limit."
         ),
         flags=(
             flag(
@@ -114,16 +115,31 @@ SPECS = (
         "confirm",
         "POST",
         "/agent/goals/action-requests/{request_id}/confirm-from-chat",
-        summary="Close a request using the owner's chat reply instead of making them press a button.",
+        summary=(
+            "Close a request with the owner's own answer instead of sending them to the app to "
+            "press a button. Two forms, exactly one per call: `quote` — what they just said to "
+            "you, when you are talking to them somewhere SellerClaw cannot read (Claude, a "
+            "terminal); or `chat_id` + `message_id`, when they answered in SellerClaw's own chat. "
+            "Quote them verbatim and only once they have actually answered: the cloud judges those "
+            "words against the action that would really run, and anything short of a plain yes or "
+            "no comes back as an error rather than an approval."
+        ),
         body=(
             body_field(
+                "quote",
+                help=(
+                    "What the owner said, in their words, in the conversation you are having with "
+                    "them. One sentence — their answer, not the exchange around it, and never "
+                    "words you supplied for them."
+                ),
+                example="yes, go ahead and send it",
+            ),
+            body_field(
                 "chat_id",
-                required=True,
-                help="Chat the owner answered in (from `chats list`).",
+                help="Chat the owner answered in, for a reply inside SellerClaw (from `chats list`).",
             ),
             body_field(
                 "message_id",
-                required=True,
                 help=(
                     "The owner's message that answers this request (from `chats list-messages`). "
                     "Point at their reply — not your own question, and not an earlier line."
@@ -139,7 +155,11 @@ SPECS = (
     ),
 )
 
-app = build_group(NAME, "Action requests (ask the owner to act).", SPECS)
+app = build_group(
+    NAME,
+    "Action requests: what is waiting on the owner, and closing one with their answer.",
+    SPECS,
+)
 
 
 def register(parent: typer.Typer) -> None:

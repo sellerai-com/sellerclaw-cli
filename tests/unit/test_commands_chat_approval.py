@@ -1,8 +1,15 @@
 """Answering an ask from the chat, and changing a task the owner already gave you.
 
-Both commands take *pointers* — which chat, which message — and never the words themselves. The
-tests below pin that: the body that leaves the machine names ids, so the cloud reads the owner's
-reply from storage rather than taking the agent's account of it.
+`confirm` carries the owner's answer in whichever of two shapes the caller can honestly produce.
+*Pointers* — which chat, which message — when they answered inside SellerClaw: the cloud reads the
+reply from storage and the caller never authors the evidence. A *quote* when the conversation
+happens somewhere SellerClaw cannot read, which is every connected app and every terminal; without
+it an assistant that hits a gate has nothing to offer but "go to the website", which is the friction
+the connector exists to remove.
+
+Which shape is acceptable from which caller, and whether the words really answer the action, is the
+cloud's decision — it refuses both halves at once, neither, and anything short of a plain yes or no.
+What these tests pin is that the CLI passes each shape through intact and invents nothing.
 """
 
 from __future__ import annotations
@@ -75,28 +82,25 @@ def test_confirm_sends_only_the_pointers_to_the_owners_reply(env: str) -> None:
 
 
 @respx.mock
-@pytest.mark.parametrize(
-    "body",
-    [
-        pytest.param({"chat_id": CHAT_ID}, id="message_id_missing"),
-        pytest.param({"message_id": MESSAGE_ID}, id="chat_id_missing"),
-    ],
-)
-def test_confirm_needs_both_halves_of_the_pointer(env: str, body: dict[str, str]) -> None:
-    route = respx.post(f"{env}/agent/goals/action-requests/{REQUEST_ID}/confirm-from-chat")
+def test_confirm_carries_the_owners_words_when_the_conversation_is_elsewhere(env: str) -> None:
+    """The shape a connected app or a terminal uses: their sentence, passed through untouched.
 
-    result = runner.invoke(
-        app, ["action-requests", "confirm", REQUEST_ID, "-b", json.dumps(body)]
+    Untouched matters — the cloud weighs these exact words against the action that would run, so a
+    CLI that trimmed, rephrased or re-cased them would be editing the evidence.
+    """
+    route = respx.post(
+        f"{env}/agent/goals/action-requests/{REQUEST_ID}/confirm-from-chat"
+    ).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "decision": "approved",
+                "reason": "Owner said go ahead",
+                "quoted": "yes, publish it",
+                "request": {"id": REQUEST_ID, "status": "resolved"},
+            },
+        )
     )
-
-    assert result.exit_code != 0
-    assert route.call_count == 0  # caught before the network call
-
-
-@respx.mock
-def test_confirm_refuses_to_carry_the_owners_words_itself(env: str) -> None:
-    """Passing the quote instead of the message is exactly the shortcut this route exists to block."""
-    route = respx.post(f"{env}/agent/goals/action-requests/{REQUEST_ID}/confirm-from-chat")
 
     result = runner.invoke(
         app,
@@ -105,13 +109,34 @@ def test_confirm_refuses_to_carry_the_owners_words_itself(env: str) -> None:
             "confirm",
             REQUEST_ID,
             "-b",
-            json.dumps({"chat_id": CHAT_ID, "message_id": MESSAGE_ID, "quote": "they said yes"}),
+            json.dumps({"quote": "yes, publish it"}),
         ],
     )
 
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {"quote": "yes, publish it"}
+    assert "approved" in result.stdout
+
+
+@respx.mock
+def test_confirm_leaves_the_choice_between_the_two_shapes_to_the_cloud(env: str) -> None:
+    """A body carrying both is not refused locally — the CLI must not hold its own opinion here.
+
+    The rule ("exactly one piece of evidence") lives with the judge that acts on it; duplicating it
+    in the client is how the two drift apart and a legal call starts being refused on the way out.
+    """
+    route = respx.post(
+        f"{env}/agent/goals/action-requests/{REQUEST_ID}/confirm-from-chat"
+    ).mock(return_value=httpx.Response(422, json={"detail": "one call, one piece of evidence"}))
+    body = {"chat_id": CHAT_ID, "message_id": MESSAGE_ID, "quote": "they said yes"}
+
+    result = runner.invoke(
+        app, ["action-requests", "confirm", REQUEST_ID, "-b", json.dumps(body)]
+    )
+
+    assert json.loads(route.calls.last.request.content) == body
     assert result.exit_code != 0
-    assert "unknown field" in result.stderr
-    assert route.call_count == 0
+    assert "one piece of evidence" in result.stderr
 
 
 @respx.mock

@@ -25,7 +25,17 @@ pytestmark = pytest.mark.unit
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PLUGIN_SRC = REPO_ROOT / "plugin"
 
-RECIPE_TOPICS = ("listings", "orders", "catalog", "suppliers", "email", "ads", "research", "analytics")
+RECIPE_TOPICS = (
+    "listings",
+    "orders",
+    "catalog",
+    "suppliers",
+    "storefront",
+    "email",
+    "ads",
+    "research",
+    "analytics",
+)
 
 
 def test_every_declared_topic_resolves_to_a_readable_guide() -> None:

@@ -51,6 +51,12 @@ def poll_intervals(budget_seconds: float) -> list[float]:
     return intervals
 
 
+#: The half of the note that is true for every caller, whatever door they came in by.
+_QUEUED_HEAD = (
+    "Queued and running in the background — the work has started, nothing needs re-sending."
+)
+
+
 def queued_note(payload: dict[str, Any], poll_command: str) -> str:
     """What to tell a caller who was handed a job rather than a result.
 
@@ -60,9 +66,24 @@ def queued_note(payload: dict[str, Any], poll_command: str) -> str:
     though that were the outcome. Naming the read command costs one line and removes both.
     """
     return (
-        f"Queued and running in the background — the work has started, nothing needs re-sending. "
+        f"{_QUEUED_HEAD} "
         f"Read the result with `{poll_command} {payload.get('id')}` once it has had time to finish, "
         f"or re-run this command with `--wait` to hold until it does."
+    )
+
+
+def queued_note_for_call(poll_call: str) -> str:
+    """The same note for a caller with no command line — an MCP client.
+
+    Two differences from :func:`queued_note`, both of them about what that caller can actually do:
+    ``poll_call`` is a tool call with the ids already in it rather than a shell command, and there is
+    no ``--wait`` to offer, so the note says plainly that re-sending starts a second job rather than
+    hurrying this one along.
+    """
+    return (
+        f"{_QUEUED_HEAD} "
+        f"Read the result with {poll_call} once it has had time to finish. There is no waiting "
+        f"variant here, and re-sending this call would start a second job."
     )
 
 
