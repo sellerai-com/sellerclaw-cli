@@ -88,9 +88,15 @@ _SPECS = (
         "/agent/files/upload-for-user",
         # The bytes go up inside this request and are virus-scanned before the answer comes back.
         timeout=LONG_TIMEOUT_SECONDS,
+        # Declared for the discovery/MCP face as well as the hand-written Typer command below:
+        # without it an MCP caller sends the path as an ordinary field and the request arrives
+        # carrying no file at all. It only works where caller and server share a filesystem (a local
+        # MCP server, the CLI); a remote connector has no local path to offer and uses `from-url`.
+        upload_file=True,
         summary=(
             "Upload a local file (multipart). Pass the local path as the positional "
-            "argument; --filename overrides the name sent to the server."
+            "argument; --filename overrides the name sent to the server. Needs a path the server "
+            "can read — from a remote connector use `from-url` instead."
         ),
         flags=(flag("filename", help="Override the filename sent to the server."),),
     ),
