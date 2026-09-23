@@ -34,6 +34,31 @@ sellerclaw_run(group="catalog", command="create",
                    "variations": [{"sku": "WM-01", "purchase_price": 9.5}]}]})
 ```
 
+## A whole catalog from a spreadsheet
+
+When the owner has their goods in a file rather than at a supplier with an API, take the file — don't
+retype it into `create` row by row.
+
+```text
+sellerclaw_run(group="catalog-file", command="template")                 # blank file + column notes
+sellerclaw_run(group="files", command="list", flags={"limit": 10})       # what they have uploaded
+sellerclaw_run(group="files", command="from-url", flags={"url": "https://..."})   # or pull one in
+sellerclaw_run(group="catalog-file", command="check",   body={"file_id": FILE_ID})
+sellerclaw_run(group="catalog-file", command="preview", body={"file_id": FILE_ID})
+sellerclaw_run(group="catalog-file", command="apply",   body={"file_id": FILE_ID})
+```
+
+Every step takes a `file_id`, so the file has to reach SellerClaw first: either the owner uploads it
+in the web app, or it is somewhere with a URL and `files from-url` fetches it. A spreadsheet attached
+to this conversation is not reachable from here — ask for a link, or ask them to add it to their file
+library.
+
+Always `check` then `preview` before `apply`, and show the owner the preview: it says what would be
+created, what would change and which rows could not be read, with row numbers. A refusal quotes the
+heading row back, which is what you write `columns` from when their file uses its own wording. A
+supplier's own price list (no API, prices that move) is the same shape under `price-list` — see the
+`suppliers` guide.
+
 ## Maintain
 
 ```text

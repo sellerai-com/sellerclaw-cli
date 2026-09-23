@@ -1,6 +1,6 @@
 ---
 name: sellerclaw-listings
-description: "Use when the user wants to list, publish, update, or withdraw a product on Shopify, eBay, or Amazon through SellerClaw — create a listing, change price or stock, fix a draft, or push a catalog product to a store."
+description: "Use when the user wants to list, publish, update, or withdraw a product on a marketplace or store through SellerClaw — Shopify, eBay, Amazon, Etsy, Walmart, TikTok Shop, WooCommerce, Wix or BigCommerce: create a listing, change price or stock, push a catalog product to a store, or work out why a marketplace refused one (category, item specifics, missing photo)."
 ---
 
 # SellerClaw — listings
@@ -76,10 +76,51 @@ the shop has several, the drafts come back with a `needs_policies` question. Ans
 batch with `etsy-listings set-policies` (`shipping_profile_id`, `return_policy_id`,
 `readiness_state_id`), taking the ids from `etsy-store list-policies` — SellerClaw's ids, not Etsy's.
 
-## Other storefronts
+## Other storefronts and marketplaces
 
-WooCommerce, Wix and BigCommerce work the same way under `woocommerce-listings` / `wix-listings` /
-`bigcommerce-listings`: `draft`, then `publish`. `sellerclaw_describe` the group before the first call.
+WooCommerce, Wix, BigCommerce, Walmart and TikTok Shop work the same way under
+`woocommerce-listings` / `wix-listings` / `bigcommerce-listings` / `walmart-listings` /
+`tiktok-shop-listings`: `draft`, then `publish`. `sellerclaw_describe` the group before the first
+call. TikTok Shop wants a category and its attributes up front — `tiktok-shop-store categories` and
+`category-attributes` — and Walmart reports the outcome asynchronously, so read `publish-status`
+rather than assuming the publish call's answer was the last word.
+
+The owner's own shop is not here: SellerCart has its own guide (`storefront`).
+
+## When a marketplace refuses
+
+A refused publish is a normal step, not a dead end. The reason is nearly always the category or the
+item specifics, and there are commands for both — never guess a category id or invent an attribute
+value.
+
+```text
+# 1. Where does this product belong on this store?  Pick from the shortlist, then remember it.
+sellerclaw_run(group="categories", command="suggest",
+  body={"store_id": STORE_ID, "product_id": PRODUCT_ID})
+sellerclaw_run(group="categories", command="confirm",
+  body={"store_id": STORE_ID, "product_id": PRODUCT_ID, "category_id": CATEGORY_ID})
+
+# 2. What does that category demand, and what values are allowed?
+sellerclaw_run(group="attributes", command="schema",
+  body={"store_id": STORE_ID, "category_external_id": CATEGORY_EXTERNAL_ID})
+sellerclaw_run(group="attributes", command="values",
+  body={"store_id": STORE_ID, "category_external_id": CATEGORY_EXTERNAL_ID, "attribute": "Brand", "q": "acme"})
+
+# 3. Fill the specifics of drafts that already exist, from each product's own attributes.
+sellerclaw_run(group="attributes", command="map",
+  positionals={"store_id": STORE_ID}, body={"product_ids": [PRODUCT_ID]})
+```
+
+`listings readiness` says whether a product is publishable before you try. Afterwards,
+`listing-problems list` is the standing list of everything any channel refused or flagged across all
+stores — work it top-down (errors first), and `hide` only what is genuinely dealt with.
+
+## Missing photos
+
+A listing with no image sells nothing and several marketplaces refuse it outright. `media
+generate-image` returns a URL in the same turn, which can go straight into an `images` field. Product
+photography invented by a model is a picture of something the owner does not sell — use it for
+backgrounds, lifestyle scenes and banners, and ask before it stands in for the product itself.
 
 ## Watch for
 
