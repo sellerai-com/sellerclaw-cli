@@ -8,7 +8,7 @@
   {
     "topic": "listings",
     "skill": "sellerclaw-listings",
-    "description": "Use when the user wants to list, publish, update, or withdraw a product on Shopify, eBay, or Amazon through SellerClaw — create a listing, change price or stock, fix a draft, or push a catalog product to a store.",
+    "description": "Use when the user wants to list, publish, update, or withdraw a product on a marketplace or store through SellerClaw — Shopify, eBay, Amazon, Etsy, Walmart, TikTok Shop, WooCommerce, Wix or BigCommerce: create a listing, change price or stock, push a catalog product to a store, or work out why a marketplace refused one (category, item specifics, missing photo).",
     "file": "listings.md"
   },
   {
@@ -30,9 +30,15 @@
     "file": "suppliers.md"
   },
   {
+    "topic": "storefront",
+    "skill": "sellerclaw-storefront",
+    "description": "Use when the user wants to work on their own SellerCart storefront — create the shop, change its look, pages, menus or images, put products on its shelves, set delivery and Stripe payouts, connect a domain they own, preview it, or publish it live.",
+    "file": "storefront.md"
+  },
+  {
     "topic": "email",
     "skill": "sellerclaw-email",
-    "description": "Use when the user wants to read their connected mailbox or send an email through SellerClaw — reply to a buyer, draft a message, or check what arrived.",
+    "description": "Use when the user wants to read their connected mailbox or send a message through SellerClaw — reply to a buyer by email or Instagram/WhatsApp DM, draft a message, or check what arrived.",
     "file": "email.md"
   },
   {
