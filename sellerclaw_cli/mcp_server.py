@@ -25,10 +25,12 @@ It serves :mod:`sellerclaw_cli.guides` — the same files the plugin's skills ar
 The screens
 -----------
 Alongside those four, :mod:`sellerclaw_cli.mcp_apps` contributes a small set of tools that answer
-with an *interactive card* instead of JSON — the store summary, the order board, the approval
-request. They are a deliberate exception to the proxy design above, because a card is bound to one
-named tool and cannot be carried by a general-purpose one. Two of them are callable only by the card
-itself, so the owner's answer on an approval can only come from the owner pressing the button.
+with an *interactive card* instead of JSON — what needs the owner, the store summary, orders,
+listings, ads, connections and the approval request. They are a deliberate exception to the proxy
+design above, because a card is bound to one named tool and cannot be carried by a general-purpose
+one; to keep the list short, one tool covers both a list and one of its rows. Two of them are
+callable only by the card itself, so the owner's answer on an approval can only come from the owner
+pressing the button.
 
 Running
 -------
@@ -73,12 +75,17 @@ SERVER_INSTRUCTIONS = (
     "Run the seller's whole e-commerce business: their stores, catalog, orders, suppliers, own "
     "storefront, ads, mailbox and numbers. For many sellers this conversation is the only place "
     "they operate from, so treat it as the main interface, not a side channel.\n"
-    "Three questions answer better as an interactive card than as text, and have their own tools: "
-    "how a store is doing (`sellerclaw_store_summary`), what is waiting to ship "
-    "(`sellerclaw_orders`), and something waiting on the owner (`sellerclaw_approval`). Reach for "
-    "these first when the question is one of those — the owner gets figures they can act on "
-    "instead of a wall of numbers — and do not also run a command for the same data. You get a "
-    "short summary back; they are reading the card, so do not recite it to them.\n"
+    "Some questions answer better as an interactive card than as text, and have their own tools: "
+    "what needs the owner today (`sellerclaw_attention`), how a store is doing "
+    "(`sellerclaw_store_summary`), the orders, or one order (`sellerclaw_orders`), listings, or one "
+    "listing (`sellerclaw_listings`), how the ads are doing (`sellerclaw_ads`), whether the "
+    "connections are healthy (`sellerclaw_connections`), and something waiting on the owner "
+    "(`sellerclaw_approval`). Reach for these first when the question is one of those — the owner "
+    "gets something they can look at and act on instead of a wall of numbers — and do not also run "
+    "a command for the same data. You get a short summary back; they are reading the card, so do "
+    "not recite it to them. The cards only show: changing anything is still done with the commands "
+    "below, and when the owner presses a card's button to ask you for something, it reaches you as "
+    "an ordinary message from them.\n"
     "The surface is large, so for everything else start with the guide for the job:\n"
     "0. `sellerclaw_guide(topic)` — a short guide with ready-to-run calls for publishing and "
     "maintaining listings, fulfilling orders, the catalog, suppliers, the seller's own SellerCart "
@@ -105,13 +112,14 @@ SERVER_INSTRUCTIONS = (
     "Finding things: read one row by its SellerClaw id with the channel-agnostic groups — "
     "`listings get`, `orders get`, `catalog get` (the per-channel groups like `shopify-listings` "
     "do not read by id). `listings search` finds listings by product_id, store, SKU, marketplace "
-    "id, channel or status, one entry per listing (a multi-variant product is one result, with "
-    "every variation's id in `listing_ids`); `catalog list` finds a product by exact SKU or by "
+    "id, channel or status, one entry per listing (a multi-variant product is one result: its "
+    "`listing_id` is what every listing command takes, and `variations` names each "
+    "variation by its own id); `catalog list` finds a product by exact SKU or by "
     "supplier item; `orders list` takes a product_id (who bought this).\n"
     "How the business is doing — sales, profit, best sellers, trends, what to reorder, where buyers "
-    "are, cash tied up in stock, what needs attention today — is the `analytics` group (for the "
-    "headline numbers of one store or all of them, prefer the `sellerclaw_store_summary` card "
-    "above). Every "
+    "are, cash tied up in stock — is the `analytics` group (for the headline numbers of one store or "
+    "all of them, prefer the `sellerclaw_store_summary` card above, and for what needs the owner "
+    "today, the `sellerclaw_attention` card). Every "
     "command there takes the same period (a `period` keyword, or `week`/`month` for a COMPLETED "
     "week/month, or `from`+`to` dates) and the same store selection (a store id, `all` for every "
     "store, or a repeated `store` flag). Ask for several stores in one call rather than adding up "

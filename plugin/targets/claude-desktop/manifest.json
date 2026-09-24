@@ -4,7 +4,7 @@
   "display_name": "SellerClaw",
   "version": "0.1.0",
   "description": "Operate your SellerClaw e-commerce and marketing channels from Claude — eBay, Shopify, Amazon, Meta Ads, Google Ads and more.",
-  "long_description": "SellerClaw connects your e-commerce and marketing channels — eBay, Shopify, Amazon, Meta Ads, Google Ads and more — and this extension lets you operate them from Claude. Nothing to install first: the extension talks to SellerClaw's hosted MCP server, so there is no Python, no uv and no CLI to set up. Ask Claude to sign in (the `sellerclaw_login` tool opens your browser to approve access — no API key to copy), then browse command groups, read a command's schema, and run it through three discovery tools. Some answers come back as interactive cards you can act on right in the conversation — a store's numbers, the order board, and anything waiting for your approval. Some actions (e.g. sending email or launching ad campaigns) still require the owner's approval, enforced server-side.",
+  "long_description": "SellerClaw connects your e-commerce and marketing channels — eBay, Shopify, Amazon, Meta Ads, Google Ads and more — and this extension lets you operate them from Claude. Nothing to install first: the extension talks to SellerClaw's hosted MCP server, so there is no Python, no uv and no CLI to set up. Ask Claude to sign in (the `sellerclaw_login` tool opens your browser to approve access — no API key to copy), then browse command groups, read a command's schema, and run it through three discovery tools. Some answers come back as interactive cards you can act on right in the conversation — what needs you today, a store's numbers, your orders and listings, your ads, the health of your connections, and anything waiting for your approval. Some actions (e.g. sending email or launching ad campaigns) still require the owner's approval, enforced server-side.",
   "author": {
     "name": "SellerAI",
     "email": "hello@sellerai.com",
@@ -85,6 +85,22 @@
     {
       "name": "sellerclaw_approval",
       "description": "Show something waiting on you as a card, with the buttons to approve or decline it."
+    },
+    {
+      "name": "sellerclaw_attention",
+      "description": "Show what needs you right now as an interactive card: the verdict and the queue behind it."
+    },
+    {
+      "name": "sellerclaw_listings",
+      "description": "Show your listings as an interactive card: which sell, which don't and why, one in full."
+    },
+    {
+      "name": "sellerclaw_ads",
+      "description": "Show your ads across Google, Meta and eBay as an interactive card: spend, sales and return."
+    },
+    {
+      "name": "sellerclaw_connections",
+      "description": "Show your connections as an interactive card, broken ones first with the page that fixes them."
     },
     {
       "name": "sellerclaw_login",

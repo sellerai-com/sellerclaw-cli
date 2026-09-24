@@ -487,6 +487,15 @@ Rather than emit ~250 tools (one per command), the server mirrors the CLI's own 
 
 New CLI commands appear automatically — there is nothing per-command to maintain.
 
+Alongside those four, a client that supports [MCP Apps](https://modelcontextprotocol.io) gets
+**interactive cards** for the questions a seller asks most — what needs them today
+(`sellerclaw_attention`), how a store is doing (`sellerclaw_store_summary`), the orders or one
+order (`sellerclaw_orders`), listings or one listing (`sellerclaw_listings`), ads across every
+platform (`sellerclaw_ads`), the health of every connection (`sellerclaw_connections`), and a
+request waiting on the owner (`sellerclaw_approval`). The cards show; changing anything still goes
+through `sellerclaw_run`. A client without cards gets the same answers as a short text summary plus
+the full structured result.
+
 The guides live in the package ([`sellerclaw_cli/guides/`](sellerclaw_cli/guides/)) and are the same
 text the Claude plugin ships as skills — `make plugin` compiles each one into its `SKILL.md`, so a
 recipe is written once and reaches both audiences. Clients that have no skills at all (the Claude
@@ -515,7 +524,7 @@ https://github.com/sellerai-com/sellerclaw-cli/releases/download/plugin-latest/s
 ```
 
 Unzip it, then pick the `sellerclaw` folder in the *Upload plugin* dialog. Either way, sign in once
-with `sellerclaw auth login` so the three MCP tools can act on your account.
+with `sellerclaw auth login` so the MCP tools can act on your account.
 
 > All variants are built from one source tree (`plugin/`) with `make plugin`. Claude Code runs the
 > MCP locally via `uvx`; the Desktop extension and the web/cowork variant both talk to the hosted

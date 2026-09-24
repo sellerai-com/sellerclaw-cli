@@ -485,6 +485,10 @@ def test_build_server_registers_the_proxy_tools_and_the_screens() -> None:
         "sellerclaw_order_mark_shipped",
         "sellerclaw_approval",
         "sellerclaw_approval_decide",
+        "sellerclaw_attention",
+        "sellerclaw_listings",
+        "sellerclaw_ads",
+        "sellerclaw_connections",
     }
     run_props = set(by_name["sellerclaw_run"].input_schema["properties"])
     assert {"group", "command", "positionals", "flags", "body"} <= run_props
@@ -507,6 +511,10 @@ def test_every_tool_carries_a_human_title() -> None:
         "sellerclaw_order_mark_shipped": "Mark an order shipped",
         "sellerclaw_approval": "Show a request waiting on the owner",
         "sellerclaw_approval_decide": "Record the owner's answer",
+        "sellerclaw_attention": "Show what needs the owner",
+        "sellerclaw_listings": "Show listings",
+        "sellerclaw_ads": "Show the ads",
+        "sellerclaw_connections": "Show the connections",
     }
 
 

@@ -94,8 +94,12 @@ def test_both_ways_of_building_the_server_carry_the_screens(builder: Any) -> Non
     assert "io.modelcontextprotocol/ui" in server._lowlevel_server.extensions
     listed = {str(resource.uri) for resource in asyncio.run(server.list_resources())}
     assert listed == {
+        "ui://sellerclaw/attention.html",
         "ui://sellerclaw/store-summary.html",
         "ui://sellerclaw/orders.html",
+        "ui://sellerclaw/listings.html",
+        "ui://sellerclaw/ads.html",
+        "ui://sellerclaw/connections.html",
         "ui://sellerclaw/approval.html",
     }
     assert {tool.name for tool in asyncio.run(server.list_tools())} >= set(mcp_apps.tool_names())
@@ -115,14 +119,33 @@ def test_the_model_cannot_answer_an_approval_for_the_owner() -> None:
         name: (by_name[name].meta or {})["ui"]["visibility"] for name in mcp_apps.tool_names()
     }
     assert visibility == {
+        "sellerclaw_attention": ["model", "app"],
         "sellerclaw_store_summary": ["model", "app"],
         "sellerclaw_orders": ["model", "app"],
         # The board's own button. The model already has this verb on sellerclaw_run, with the
         # channel rule spelled out in its description.
         "sellerclaw_order_mark_shipped": ["app"],
+        "sellerclaw_listings": ["model", "app"],
+        "sellerclaw_ads": ["model", "app"],
+        "sellerclaw_connections": ["model", "app"],
         "sellerclaw_approval": ["model", "app"],
         "sellerclaw_approval_decide": ["app"],
     }
+
+
+def test_the_cards_that_only_show_things_are_read_only() -> None:
+    """Only two tools a card calls change anything, and both are the card's alone.
+
+    Everything the new cards offer beyond reading is a request to Claude or a link to our website,
+    so their tools must say they read — a client asking permission per write would otherwise put a
+    confirmation in front of opening a list.
+    """
+    by_name = {tool.name: tool for tool in asyncio.run(build_server().list_tools())}
+
+    writes = {
+        name for name in mcp_apps.tool_names() if not by_name[name].annotations.read_only_hint
+    }
+    assert writes == {"sellerclaw_order_mark_shipped", "sellerclaw_approval_decide"}
 
 
 def test_every_screen_tool_points_at_a_resource_that_exists() -> None:
@@ -154,6 +177,8 @@ def test_the_resource_declares_our_origin_and_asks_for_no_network() -> None:
     assert csp["connectDomains"] == []
     assert csp["resourceDomains"][0] == APPS_BASE
     assert "https://i.ebayimg.com" in csp["resourceDomains"]
+    # A draft built from a CJ product still shows CJ's photos until it is published.
+    assert "https://*.cjdropshipping.com" in csp["resourceDomains"]
     assert not any(domain in ("https://*", "*") for domain in csp["resourceDomains"])
     assert meta["ui"]["prefersBorder"] is False
     assert resources["ui://sellerclaw/orders.html"].mime_type == "text/html;profile=mcp-app"
@@ -543,6 +568,255 @@ def test_a_plain_yes_carries_no_option(
     assert json.loads(decide.calls[0].request.content) == {"decision": "reject"}
 
 
+LISTING_ID = "66666666-6666-4666-8666-666666666666"
+PRODUCT_ID = "77777777-7777-4777-8777-777777777777"
+OTHER_LISTING = "88888888-8888-4888-8888-888888888888"
+
+
+@respx.mock
+def test_what_needs_the_owner_is_the_home_pages_own_answer(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    """One read of the same summary the web home page draws — never a second opinion assembled here."""
+    summary = respx.get(f"{fake_api_url}/agent/dashboard/summary").mock(
+        return_value=httpx.Response(200, json={"status": "all_clear", "attention": []})
+    )
+
+    result = _call("sellerclaw_attention", {})
+
+    assert summary.call_count == 1
+    assert result.structured_content == {"summary": {"status": "all_clear", "attention": []}}
+
+
+@respx.mock
+def test_one_order_opens_with_its_items_pictured_by_their_listings(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    """An order line names the listing it came from; the picture is the listing's. A listing that no
+    longer reads costs that line its thumbnail and nothing else, and a listing sold twice in one
+    order is read once."""
+    respx.get(f"{fake_api_url}/agent/orders/{ORDER_ID}").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": ORDER_ID,
+                "line_items": [
+                    {"title": "Harness", "listing_id": LISTING_ID},
+                    {"title": "Harness again", "listing_id": LISTING_ID},
+                    {"title": "Bowl", "listing_id": OTHER_LISTING},
+                    {"title": "Unlinked", "listing_id": None},
+                ],
+            },
+        )
+    )
+    harness = respx.get(f"{fake_api_url}/agent/listings/{LISTING_ID}").mock(
+        return_value=httpx.Response(200, json={"image_url": "https://i.ebayimg.com/h.jpg"})
+    )
+    respx.get(f"{fake_api_url}/agent/listings/{OTHER_LISTING}").mock(
+        return_value=httpx.Response(404, json={"detail": "Listing not found"})
+    )
+    board = respx.get(f"{fake_api_url}/agent/orders")
+
+    result = _call("sellerclaw_orders", {"order": ORDER_ID})
+
+    assert result.structured_content["item_images"] == {LISTING_ID: "https://i.ebayimg.com/h.jpg"}
+    assert harness.call_count == 1
+    assert board.call_count == 0
+
+
+@respx.mock
+def test_an_order_without_pictures_carries_no_empty_map(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    respx.get(f"{fake_api_url}/agent/orders/{ORDER_ID}").mock(
+        return_value=httpx.Response(200, json={"id": ORDER_ID, "line_items": [{"title": "Harness"}]})
+    )
+
+    result = _call("sellerclaw_orders", {"order": ORDER_ID})
+
+    assert set(result.structured_content) == {"order"}
+
+
+@respx.mock
+def test_marking_shipped_from_one_order_answers_with_that_order(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    """Pressed on the one-order view, the card must come back as that order — not as a board the
+    person was not looking at."""
+    respx.post(f"{fake_api_url}/agent/orders/{ORDER_ID}/shipped").mock(
+        return_value=httpx.Response(200, json={"id": ORDER_ID, "status": "shipped"})
+    )
+    respx.get(f"{fake_api_url}/agent/orders/{ORDER_ID}").mock(
+        return_value=httpx.Response(200, json={"id": ORDER_ID, "status": "shipped", "line_items": []})
+    )
+    board = respx.get(f"{fake_api_url}/agent/orders")
+
+    result = _call("sellerclaw_order_mark_shipped", {"order": ORDER_ID, "return_to": "order"})
+
+    assert result.structured_content["order"]["status"] == "shipped"
+    assert board.call_count == 0
+
+
+@respx.mock
+def test_the_listing_list_asks_only_for_the_filters_it_was_given(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    """And hands the card each store's id, platform and name — not its categories and settings."""
+    search = respx.get(f"{fake_api_url}/agent/listings/search").mock(
+        return_value=httpx.Response(200, json={"items": [], "total": 0})
+    )
+    respx.get(f"{fake_api_url}/agent/sales-channels").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {
+                    "id": STORE_ID,
+                    "platform": "ebay",
+                    "display_name": "Pawpilot Supply",
+                    "categories": [{"id": 1}] * 40,
+                    "specifics": {"a": 1},
+                }
+            ],
+        )
+    )
+
+    result = _call("sellerclaw_listings", {"store": STORE_ID, "status": "draft", "query": "harness"})
+
+    assert dict(search.calls[0].request.url.params) == {
+        "q": "harness",
+        "store_id": STORE_ID,
+        "status": "draft",
+    }
+    assert result.structured_content["stores"] == [
+        {"id": STORE_ID, "platform": "ebay", "display_name": "Pawpilot Supply"}
+    ]
+    assert result.structured_content["filters"] == {
+        "store": STORE_ID,
+        "status": "draft",
+        "query": "harness",
+    }
+
+
+@respx.mock
+def test_one_listing_brings_its_refusals_and_the_same_product_elsewhere(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    respx.get(f"{fake_api_url}/agent/listings/{LISTING_ID}").mock(
+        return_value=httpx.Response(
+            200,
+            json={"id": LISTING_ID, "product_id": PRODUCT_ID, "sales_channel_id": STORE_ID, "title": "Bowl"},
+        )
+    )
+    problems = respx.get(f"{fake_api_url}/agent/listing-problems").mock(
+        return_value=httpx.Response(200, json={"items": [{"id": "p1"}]})
+    )
+    elsewhere = respx.get(f"{fake_api_url}/agent/listings/search").mock(
+        return_value=httpx.Response(200, json={"items": [], "total": 0})
+    )
+    respx.get(f"{fake_api_url}/agent/sales-channels").mock(return_value=httpx.Response(200, json=[]))
+
+    result = _call("sellerclaw_listings", {"listing": LISTING_ID})
+
+    assert set(result.structured_content) == {"listing", "problems", "elsewhere", "stores", "filters"}
+    assert dict(problems.calls[0].request.url.params) == {
+        "product_id": PRODUCT_ID,
+        "sales_channel_id": STORE_ID,
+    }
+    assert dict(elsewhere.calls[0].request.url.params) == {"product_id": PRODUCT_ID, "limit": "50"}
+
+
+@pytest.mark.parametrize(
+    "variations_key",
+    [
+        pytest.param("variations", id="compact-variations"),
+        pytest.param("variants", id="server-older-than-this-client"),
+    ],
+)
+@respx.mock
+def test_a_variation_group_is_handed_over_as_a_group(
+    env_pointing_at_fake_api: None, fake_api_url: str, variations_key: str
+) -> None:
+    """The same route answers a row or a whole group; the card is told which, rather than guessing.
+    A group already carries its own refusals, so they are not read twice."""
+    respx.get(f"{fake_api_url}/agent/listings/{LISTING_ID}").mock(
+        return_value=httpx.Response(
+            200,
+            json={"title": "Blanket", "product_id": PRODUCT_ID, variations_key: [], "problems": []},
+        )
+    )
+    problems = respx.get(f"{fake_api_url}/agent/listing-problems")
+    respx.get(f"{fake_api_url}/agent/listings/search").mock(
+        return_value=httpx.Response(200, json={"items": [], "total": 0})
+    )
+    respx.get(f"{fake_api_url}/agent/sales-channels").mock(return_value=httpx.Response(200, json=[]))
+
+    result = _call("sellerclaw_listings", {"listing": LISTING_ID})
+
+    assert "group" in result.structured_content
+    assert "listing" not in result.structured_content
+    assert problems.call_count == 0
+
+
+@respx.mock
+def test_a_listing_still_opens_when_what_surrounds_it_cannot_be_read(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    """Refusals, other stores and store names are sections around the listing: losing one costs
+    that section, not the card."""
+    respx.get(f"{fake_api_url}/agent/listings/{LISTING_ID}").mock(
+        return_value=httpx.Response(200, json={"title": "Bowl", "product_id": PRODUCT_ID})
+    )
+    respx.get(f"{fake_api_url}/agent/listing-problems").mock(
+        return_value=httpx.Response(404, json={"detail": "not found"})
+    )
+    respx.get(f"{fake_api_url}/agent/listings/search").mock(
+        return_value=httpx.Response(404, json={"detail": "not found"})
+    )
+    respx.get(f"{fake_api_url}/agent/sales-channels").mock(
+        return_value=httpx.Response(403, json={"detail": "no"})
+    )
+
+    result = _call("sellerclaw_listings", {"listing": LISTING_ID})
+
+    assert result.structured_content["listing"]["title"] == "Bowl"
+    assert "problems" not in result.structured_content
+    assert "elsewhere" not in result.structured_content
+    assert result.structured_content["stores"] == []
+
+
+@respx.mock
+def test_the_ads_card_reads_both_halves_for_the_same_window(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    """Totals and campaigns from one window — the card must never show a 30-day total over 7-day
+    campaign rows."""
+    overview = respx.get(f"{fake_api_url}/agent/ads/overview").mock(
+        return_value=httpx.Response(200, json={"window_days": 30, "totals": [], "accounts": []})
+    )
+    campaigns = respx.get(f"{fake_api_url}/agent/ads/campaigns").mock(
+        return_value=httpx.Response(200, json={"window_days": 30, "items": []})
+    )
+
+    result = _call("sellerclaw_ads", {"days": 30, "account": STORE_ID})
+
+    assert dict(overview.calls[0].request.url.params) == {"window_days": "30"}
+    assert dict(campaigns.calls[0].request.url.params) == {"window_days": "30", "account_id": STORE_ID}
+    assert set(result.structured_content) == {"overview", "campaigns"}
+
+
+@respx.mock
+def test_the_connections_card_is_the_agents_own_overview(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    respx.get(f"{fake_api_url}/agent/integrations").mock(
+        return_value=httpx.Response(200, json=[{"kind": "ebay_store", "connections": []}])
+    )
+
+    result = _call("sellerclaw_connections", {})
+
+    assert result.structured_content == {"integrations": [{"kind": "ebay_store", "connections": []}]}
+
+
 # --------------------------------------------------------------------------- what the model reads
 
 
@@ -642,6 +916,172 @@ def test_a_summary_covering_several_shops_does_not_speak_of_one() -> None:
     assert one.startswith("Pawpilot Supply, last_30d.")
 
 
+def test_the_queue_is_told_as_a_verdict_and_its_first_rows() -> None:
+    summary = mcp_apps._summarize_attention(
+        {
+            "summary": {
+                "status": "at_risk",
+                "attention": [
+                    {"title": "eBay stopped accepting our access", "severity": "critical"},
+                    {"title": "3 orders are late to ship", "severity": "critical"},
+                    {"title": "Credits are running low", "severity": "attention"},
+                    {"title": "A fourth thing", "severity": "attention"},
+                ],
+                "degraded_blocks": ["connections"],
+            }
+        }
+    )
+
+    assert summary.startswith("Something urgent needs the owner. 4 items, 2 urgent.")
+    assert '"3 orders are late to ship"' in summary
+    assert "A fourth thing" not in summary
+    assert "Could not check: connections." in summary
+
+
+def test_a_quiet_queue_is_not_called_all_clear_when_a_check_did_not_run() -> None:
+    summary = mcp_apps._summarize_attention({"summary": {"status": "unknown", "attention": []}})
+
+    assert summary.startswith("Nothing turned up, but not every check ran.")
+
+
+def test_a_list_of_listings_is_summed_up_by_what_does_not_sell() -> None:
+    summary = mcp_apps._summarize_listings(
+        {
+            "listings": {
+                "items": [
+                    {"sale_state": "selling"},
+                    {"sale_state": "not_selling"},
+                    {"sale_state": "out_of_stock"},
+                ],
+                "total": 42,
+            }
+        }
+    )
+
+    assert summary.startswith("Showing 3 of 42 listings. Among them, 1 not selling and 1 out of stock.")
+
+
+def test_one_listing_is_named_with_its_store_and_what_is_wrong_with_it() -> None:
+    summary = mcp_apps._summarize_listings(
+        {
+            "listing": {
+                "title": "Slow-feeder puzzle bowl",
+                "sales_channel_id": STORE_ID,
+                "group_id": "g1",
+                "sale_state": "not_selling",
+                "price": "24.99",
+                "currency": "USD",
+                "quantity": 12,
+            },
+            "problems": {"items": [{"id": "p1"}]},
+            "elsewhere": {"items": [{"listing_id": "g1"}, {"listing_id": "g2"}]},
+            "stores": [{"id": STORE_ID, "platform": "ebay", "display_name": "Pawpilot Supply"}],
+        }
+    )
+
+    assert summary.startswith(
+        '"Slow-feeder puzzle bowl" on Pawpilot Supply: not selling. Price 24.99 USD, 12 in stock. '
+        "1 marketplace problem on it. Also listed in 1 other store."
+    )
+
+
+def test_one_order_is_named_by_its_marketplace_number() -> None:
+    summary = mcp_apps._summarize_order(
+        {
+            "order": {
+                "remote_order_name": "#1001",
+                "store_name": "Pawpilot Supply",
+                "status": "purchased",
+                "total_revenue": "94.00",
+                "currency": "USD",
+                "line_items": [{}, {}],
+                "tracking_number": "CJ883012774US",
+                "tracking_carrier": "YunExpress",
+                "has_unresolved_items": True,
+            }
+        }
+    )
+
+    assert summary.startswith(
+        "Order #1001 from Pawpilot Supply: purchased. Total 94.00 USD for 2 items. "
+        "Tracking CJ883012774US (YunExpress). Some items are not matched to a supplier yet."
+    )
+
+
+def test_ad_totals_are_told_per_currency_and_never_added_together() -> None:
+    summary = mcp_apps._summarize_ads(
+        {
+            "overview": {
+                "window_days": 7,
+                "totals": [
+                    {"currency": "USD", "metrics": {"spend": 310.0, "conversion_value": 1302.0}},
+                    {"currency": "EUR", "metrics": {"spend": 84.0, "conversion_value": 0}},
+                ],
+                "accounts": [
+                    {"account": {"display_name": "Pawpilot — Google Ads", "status": "token_expired"}},
+                ],
+            },
+            "campaigns": {"items": [{"status": "enabled"}, {"status": "paused"}]},
+        }
+    )
+
+    assert summary.startswith(
+        "Ads, last 7 days. Spent 310.00 USD, 1302.00 USD in sales from ads. Spent 84.00 EUR. "
+        "1 campaign running. Needs reconnecting: Pawpilot — Google Ads."
+    )
+
+
+def test_an_account_without_ad_accounts_is_told_so() -> None:
+    summary = mcp_apps._summarize_ads({"overview": {"accounts": []}, "campaigns": {"items": []}})
+
+    assert summary.startswith("No ad accounts are connected.")
+
+
+@pytest.mark.parametrize(
+    ("integrations", "opening"),
+    [
+        pytest.param(
+            [
+                {
+                    "display_name": "eBay",
+                    "connections": [
+                        {"name": "pawpilot", "custom_name": "Pawpilot Supply", "status": "credentials_invalid"},
+                    ],
+                },
+                {
+                    "display_name": "Shopify",
+                    "connections": [
+                        {"name": "shop", "status": "active"},
+                        {"name": "shop2", "status": "provider_suspended"},
+                    ],
+                },
+                {
+                    "display_name": "eBay Promoted Listings",
+                    "connections": [{"name": "Pawpilot", "status": "active", "setup_warning": {"message": "x"}}],
+                },
+            ],
+            "3 connections need the owner: Pawpilot Supply (eBay) needs reconnecting; shop2 (Shopify) "
+            "switched off by the platform; Pawpilot (eBay Promoted Listings) has setup unfinished. "
+            "1 working. Fixing one happens on the SellerClaw website",
+            id="broken",
+        ),
+        pytest.param(
+            [
+                {
+                    "display_name": "eBay",
+                    "connections": [{"name": "a", "status": "active"}, {"name": "b", "status": "active"}],
+                }
+            ],
+            "All 2 connections are working.",
+            id="healthy",
+        ),
+        pytest.param([], "Nothing is connected yet.", id="empty"),
+    ],
+)
+def test_connections_are_told_by_what_needs_the_owner(integrations: list[Any], opening: str) -> None:
+    assert mcp_apps._summarize_connections({"integrations": integrations}).startswith(opening)
+
+
 @pytest.mark.parametrize(
     "summary",
     [
@@ -649,6 +1089,15 @@ def test_a_summary_covering_several_shops_does_not_speak_of_one() -> None:
             mcp_apps._summarize_store_summary({"metrics": {"revenue": "1.00"}}), id="store-summary"
         ),
         pytest.param(mcp_apps._summarize_orders({"orders": {"items": []}}), id="orders"),
+        pytest.param(mcp_apps._summarize_order({"order": {"status": "new"}}), id="order"),
+        pytest.param(
+            mcp_apps._summarize_attention({"summary": {"status": "all_clear"}}), id="attention"
+        ),
+        pytest.param(mcp_apps._summarize_listings({"listings": {"items": []}}), id="listings"),
+        pytest.param(
+            mcp_apps._summarize_ads({"overview": {"accounts": []}}), id="ads"
+        ),
+        pytest.param(mcp_apps._summarize_connections({"integrations": []}), id="connections"),
     ],
 )
 def test_a_client_without_cards_is_not_told_the_owner_is_looking_at_one(summary: str) -> None:
