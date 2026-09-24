@@ -84,7 +84,12 @@ SPECS = (
                     "Array of products to create. Each item: name*, description*, category*, "
                     "variations* (array of {supplier_variant_id, sku, name, available_quantity, "
                     "shipping_cost, purchase_price?, images?, attributes?, barcode?, "
-                    "weight_grams?}), and optional images. barcode is the variation's GTIN/UPC/EAN "
+                    "weight_grams?}), and optional images, brand, country_of_origin (two-letter "
+                    "code) and attributes — the product's own characteristics, e.g. "
+                    '{"Material": "100% Cotton", "Care": "Machine wash cold"}; marketplace item '
+                    "specifics are built from them, so state every known fact there rather than only "
+                    "in the description. A variation's attributes are its axes (Color, Size). "
+                    "barcode is the variation's GTIN/UPC/EAN "
                     "— marketplaces identify the item by it and Walmart refuses a listing without "
                     "one. weight_grams is what one packed unit weighs; eBay refuses a listing under "
                     "a calculated-rate shipping policy without it. Omit it when the weight is "
@@ -100,7 +105,8 @@ SPECS = (
         "PATCH",
         "/agent/products/{product_id}",
         summary=(
-            "Update ONE product's metadata (name, description, images, category, status) — the "
+            "Update ONE product's metadata (name, description, images, category, status, brand, "
+            "country of origin, characteristics, weight) — the "
             "product id is a positional, so a set of products needs `catalog bulk-update` (up to "
             "200 in one call) or, for a whole catalog, the `catalog-file` import. Catalog only — a "
             "listing built from this product keeps its own copy of the text and pictures, so this "
@@ -136,6 +142,17 @@ SPECS = (
             body_field(
                 "country_of_origin",
                 help="Two-letter country code where the goods were made, e.g. 'PT'.",
+            ),
+            body_field(
+                "attributes",
+                type=dict,
+                help=(
+                    "The product's own characteristics, one value each, e.g. "
+                    '{"Material": "70% Polyester, 25% Lyocell", "Care": "Machine wash cold"}. '
+                    "Marketplace item specifics are built from them when a listing is drafted. "
+                    "Replaced wholesale, not merged: send the full map you want ({} clears it). "
+                    "Not the variation axes (Color, Size) — those live on each variation."
+                ),
             ),
             body_field(
                 "weight_grams",
@@ -175,7 +192,7 @@ SPECS = (
                 help=(
                     "Array of {product_id*, patch*}. `patch` takes the same fields as `catalog "
                     "update`: name, description, images, category, status, brand, "
-                    "country_of_origin, weight_grams. Omit a field to leave it unchanged; "
+                    "country_of_origin, attributes, weight_grams. Omit a field to leave it unchanged; "
                     "weight_grams accepts an explicit null to clear it back to unknown."
                 ),
                 example=[
