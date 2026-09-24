@@ -16,6 +16,18 @@ sellerclaw_run(group="listings", command="search", flags={"q": "wireless mouse"}
 sellerclaw_run(group="shopify-listings", command="summary", positionals={"store_id": STORE_ID})
 ```
 
+## Listing ids: one per listing
+
+Every listing command — the shared `listings` group and each store's own (`ebay-listings`,
+`shopify-listings`, …) — takes the **listing's own id**: the `listing_id` on a list or search entry,
+one per product however many variations it holds. A variation's id is refused with the listing id to
+use instead (`use_instead` in the error); swap and re-send. Lists and write answers come back one
+entry per listing, with `variations` naming each variation by its own `variation_id`. The few
+per-variation commands take that id: a `delete-drafts` variation belongs in its own `variation_ids`
+list, a publish brings one withdrawn size back by naming it there (WooCommerce, SellerCart), and one
+Amazon offer alone is `amazon-listings update` with its `variation_id`, or `withdraw` with it in
+`variation_ids`.
+
 ## Shopify
 
 ```text

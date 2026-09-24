@@ -77,7 +77,11 @@ sellerclaw_run(group="analytics", command="operations-digest", positionals={"sto
   `tied_up_value: 0` beside a large supplier figure means "none of your money is on a shelf", not
   "we could not work it out".
 - **operations-digest** — one store, right now: unshipped orders, stockouts, and on eBay also
-  parcels, disputes and account health. Best answer to "anything urgent today".
+  parcels, disputes and account health. For "anything urgent today" across the whole account,
+  call `sellerclaw_attention` first: it is the same queue the SellerClaw home page shows — every
+  store's overnight check plus broken connections, supplier payments on hold and requests waiting
+  on the owner — drawn as a card where the client supports one and summed up in text everywhere.
+  Come here for the detail of one store.
 
 ## Watch for
 

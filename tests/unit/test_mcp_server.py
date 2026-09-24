@@ -8,7 +8,7 @@ import httpx
 import pytest
 import respx
 
-from sellerclaw_cli import __version__
+from sellerclaw_cli import __version__, mcp_apps
 from sellerclaw_cli._client import DEFAULT_TIMEOUT_SECONDS
 from sellerclaw_cli._command_group import LONG_TIMEOUT_SECONDS, REGISTRY
 from sellerclaw_cli._errors import UserInputError
@@ -207,7 +207,7 @@ def test_describe_command_surfaces_flag_choices_and_ranges() -> None:
     flags = {f["name"]: f for f in detail["flags"]}
     assert "limit" in flags
     assert flags["limit"]["minimum"] == 1
-    assert flags["limit"]["maximum"] == 500
+    assert flags["limit"]["maximum"] == 100
 
 
 _LISTINGS_COMMANDS = {
@@ -466,7 +466,12 @@ def test_describe_says_which_commands_queue_work_and_how_long_a_call_may_take() 
 # --------------------------------------------------------------------------- wiring
 
 
-def test_build_server_registers_exactly_the_four_proxy_tools() -> None:
+def test_build_server_registers_the_proxy_tools_and_the_screens() -> None:
+    """The whole surface, pinned: four discovery/proxy tools plus one per screen action.
+
+    An exact set rather than a containment check, because every addition here is a line item in
+    every client's tool list — it should not be possible to add one without saying so.
+    """
     server = build_server()
     tools = asyncio.run(server.list_tools())
     by_name = {t.name: t for t in tools}
@@ -475,6 +480,15 @@ def test_build_server_registers_exactly_the_four_proxy_tools() -> None:
         "sellerclaw_groups",
         "sellerclaw_describe",
         "sellerclaw_run",
+        "sellerclaw_store_summary",
+        "sellerclaw_orders",
+        "sellerclaw_order_mark_shipped",
+        "sellerclaw_approval",
+        "sellerclaw_approval_decide",
+        "sellerclaw_attention",
+        "sellerclaw_listings",
+        "sellerclaw_ads",
+        "sellerclaw_connections",
     }
     run_props = set(by_name["sellerclaw_run"].input_schema["properties"])
     assert {"group", "command", "positionals", "flags", "body"} <= run_props
@@ -492,15 +506,24 @@ def test_every_tool_carries_a_human_title() -> None:
         "sellerclaw_groups": "List SellerClaw commands",
         "sellerclaw_describe": "Describe a SellerClaw command",
         "sellerclaw_run": "Run a SellerClaw command",
+        "sellerclaw_store_summary": "Show the store summary",
+        "sellerclaw_orders": "Show the order board",
+        "sellerclaw_order_mark_shipped": "Mark an order shipped",
+        "sellerclaw_approval": "Show a request waiting on the owner",
+        "sellerclaw_approval_decide": "Record the owner's answer",
+        "sellerclaw_attention": "Show what needs the owner",
+        "sellerclaw_listings": "Show listings",
+        "sellerclaw_ads": "Show the ads",
+        "sellerclaw_connections": "Show the connections",
     }
 
 
-def test_only_run_is_advertised_as_writing_and_reaching_the_outside_world() -> None:
+def test_discovery_is_advertised_as_reading_and_the_acting_tools_as_writing() -> None:
     """An unannotated tool is treated as destructive, which made reading a guide look dangerous.
 
     A client renders these hints in the dialog where someone decides whether to allow the call, so
-    a warning on all four is a warning on none. Discovery reads this process's own registry; only
-    ``sellerclaw_run`` touches the account.
+    a warning on everything is a warning on nothing. Discovery reads this process's own registry
+    and never leaves it; the screens and ``sellerclaw_run`` touch the account.
     """
     by_name = {t.name: t.annotations for t in asyncio.run(build_server().list_tools())}
 
@@ -547,9 +570,20 @@ def test_the_static_lists_are_advertised_as_cacheable() -> None:
     """
     hints = build_server()._lowlevel_server.cache_hints
 
-    assert set(hints) == {"server/discover", "tools/list", "prompts/list", "resources/list"}
+    assert set(hints) == {
+        "server/discover",
+        "tools/list",
+        "prompts/list",
+        "resources/list",
+        "resources/read",
+    }
+    for method in ("server/discover", "tools/list", "prompts/list", "resources/list"):
+        assert hints[method].ttl_ms == _LIST_CACHE_TTL_MS, method
+    # A screen's document is just as public, and rebuilt far more often: an hour of a client
+    # holding the previous one is an hour of a card whose scripts were deleted by the last deploy.
+    assert hints["resources/read"].ttl_ms == mcp_apps.DOCUMENT_CACHE_TTL_MS
+    assert hints["resources/read"].ttl_ms < _LIST_CACHE_TTL_MS
     for method, hint in hints.items():
-        assert hint.ttl_ms == _LIST_CACHE_TTL_MS, method
         assert hint.scope == "public", method
 
 

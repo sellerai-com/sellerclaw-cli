@@ -3,6 +3,7 @@ from __future__ import annotations
 import typer
 
 from sellerclaw_cli._command_group import Cmd, LONG_TIMEOUT_SECONDS, SYNC_STOCK_PARTIAL_HELP, body_field, build_group, flag
+from sellerclaw_cli.commands._listing_shape import LISTING_ENTRY_SHAPE
 
 NAME = "bigcommerce-listings"
 
@@ -15,6 +16,7 @@ SPECS = (
         "GET",
         "/agent/stores/{store_id}/listings",
         summary=(
+            f"{LISTING_ENTRY_SHAPE} "
             "List the store's BigCommerce listings from the SellerClaw mirror. `total` is the "
             "filter-aware match count, not the size of this page — page through the rest with `--offset`."
         ),
@@ -25,7 +27,7 @@ SPECS = (
                 help="Mirror status to filter by; omit for all.",
             ),
             flag("search", help="Match title, SKU, or remote id."),
-            flag("limit", type=int, minimum=1, maximum=500, default=100, help="Max results."),
+            flag("limit", type=int, minimum=1, maximum=100, default=25, help="Max listings per page."),
             flag("offset", type=int, minimum=0, default=0, help="Results to skip (paging)."),
         ),
     ),
@@ -50,6 +52,7 @@ SPECS = (
         "GET",
         "/agent/stores/{store_id}/listings/search",
         summary=(
+            f"{LISTING_ENTRY_SHAPE} "
             "Search one store's BigCommerce listings by title, SKU, or remote id. Default: the "
             "local mirror (carries a SellerClaw id for chat cards). Pass --live to query BigCommerce "
             "directly for current price/stock (no SellerClaw id). To search all stores, use 'listings'."
@@ -65,7 +68,7 @@ SPECS = (
                 type=bool,
                 help="Query BigCommerce live instead of the mirror — current price/stock, but no SellerClaw id.",
             ),
-            flag("limit", type=int, minimum=1, maximum=500, default=100, help="Max results."),
+            flag("limit", type=int, minimum=1, maximum=100, default=25, help="Max listings per page."),
         ),
     ),
     Cmd(
@@ -118,14 +121,14 @@ SPECS = (
         timeout=LONG_TIMEOUT_SECONDS,
         summary=(
             "Publish local DRAFT listings to BigCommerce as live products "
-            '(body: {"listing_ids": ["<uuid>", ...]}). Returns published rows + per-id errors.'
+            '(body: {"listing_ids": ["<uuid>", ...]}). Returns one entry per listing + per-id errors.'
         ),
         body=(
             body_field(
                 "listing_ids",
                 repeatable=True,
                 required=True,
-                help="Listing UUIDs (from 'draft') to publish to the store.",
+                help="The listings' own ids ('listing_id' from list/search; a variation's id is refused) to publish to the store.",
             ),
         ),
     ),
@@ -142,7 +145,7 @@ SPECS = (
                 "listing_ids",
                 repeatable=True,
                 required=True,
-                help="Listing UUIDs to withdraw from the store.",
+                help="The listings' own ids ('listing_id' from list/search; a variation's id is refused) to withdraw from the store.",
             ),
         ),
     ),

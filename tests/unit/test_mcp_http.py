@@ -71,6 +71,9 @@ def _rpc_result(resp: httpx.Response) -> dict[str, Any]:
 
 
 def test_build_http_server_registers_the_same_tools_as_stdio() -> None:
+    """The hosted server and the local one are two constructor calls, and only this keeps them
+    equal — a tool or a screen added to one and not the other is a surface that differs by how it
+    was started."""
     server = build_http_server(issuer_url=ISSUER, resource_url=RESOURCE, api_url=API_URL)
     tools = asyncio.run(server.list_tools())
     assert {t.name for t in tools} == {
@@ -78,6 +81,15 @@ def test_build_http_server_registers_the_same_tools_as_stdio() -> None:
         "sellerclaw_groups",
         "sellerclaw_describe",
         "sellerclaw_run",
+        "sellerclaw_store_summary",
+        "sellerclaw_orders",
+        "sellerclaw_order_mark_shipped",
+        "sellerclaw_approval",
+        "sellerclaw_approval_decide",
+        "sellerclaw_attention",
+        "sellerclaw_listings",
+        "sellerclaw_ads",
+        "sellerclaw_connections",
     }
 
 
@@ -179,6 +191,15 @@ def test_an_authenticated_client_can_list_the_tools_over_http(
         "sellerclaw_groups",
         "sellerclaw_describe",
         "sellerclaw_run",
+        "sellerclaw_store_summary",
+        "sellerclaw_orders",
+        "sellerclaw_order_mark_shipped",
+        "sellerclaw_approval",
+        "sellerclaw_approval_decide",
+        "sellerclaw_attention",
+        "sellerclaw_listings",
+        "sellerclaw_ads",
+        "sellerclaw_connections",
     }
     if expects_cache_fields:
         assert result["ttlMs"] == _LIST_CACHE_TTL_MS

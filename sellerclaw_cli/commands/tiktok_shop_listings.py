@@ -3,6 +3,7 @@ from __future__ import annotations
 import typer
 
 from sellerclaw_cli._command_group import Cmd, LONG_TIMEOUT_SECONDS, SYNC_STOCK_PARTIAL_HELP, body_field, build_group, flag
+from sellerclaw_cli.commands._listing_shape import LISTING_ENTRY_SHAPE
 
 NAME = "tiktok-shop-listings"
 
@@ -17,6 +18,7 @@ SPECS = (
         "GET",
         "/agent/stores/{store_id}/listings",
         summary=(
+            f"{LISTING_ENTRY_SHAPE} "
             "List the store's TikTok Shop listings from the SellerClaw mirror. `total` is the "
             "filter-aware match count, not the size of this page — page through the rest with `--offset`."
         ),
@@ -27,7 +29,7 @@ SPECS = (
                 help="Mirror status to filter by; omit for all.",
             ),
             flag("search", help="Match title, SKU, or remote id."),
-            flag("limit", type=int, minimum=1, maximum=500, default=100, help="Max results."),
+            flag("limit", type=int, minimum=1, maximum=100, default=25, help="Max listings per page."),
             flag("offset", type=int, minimum=0, default=0, help="Results to skip (paging)."),
         ),
     ),
@@ -52,6 +54,7 @@ SPECS = (
         "GET",
         "/agent/stores/{store_id}/listings/search",
         summary=(
+            f"{LISTING_ENTRY_SHAPE} "
             "Search one store's TikTok Shop listings by title, SKU, or remote id. Default: the "
             "local mirror (carries a SellerClaw id for chat cards). Pass --live to query TikTok "
             "directly for current price/stock (no SellerClaw id). To search all stores, use 'listings'."
@@ -67,7 +70,7 @@ SPECS = (
                 type=bool,
                 help="Query TikTok live instead of the mirror — current price/stock, but no SellerClaw id.",
             ),
-            flag("limit", type=int, minimum=1, maximum=500, default=100, help="Max results."),
+            flag("limit", type=int, minimum=1, maximum=100, default=25, help="Max listings per page."),
         ),
     ),
     Cmd(
@@ -121,7 +124,7 @@ SPECS = (
         timeout=LONG_TIMEOUT_SECONDS,
         summary=(
             "Publish local DRAFT listings to TikTok Shop "
-            '(body: {"listing_ids": ["<uuid>", ...]}). Returns published rows + per-id errors. '
+            '(body: {"listing_ids": ["<uuid>", ...]}). Returns one entry per listing + per-id errors. '
             "Publish is ASYNCHRONOUS: the product enters TikTok moderation and only sells once approved."
         ),
         body=(
@@ -129,7 +132,7 @@ SPECS = (
                 "listing_ids",
                 repeatable=True,
                 required=True,
-                help="Listing UUIDs (from 'draft') to publish to the store.",
+                help="The listings' own ids ('listing_id' from list/search; a variation's id is refused) to publish to the store.",
             ),
         ),
     ),
@@ -146,7 +149,7 @@ SPECS = (
                 "listing_ids",
                 repeatable=True,
                 required=True,
-                help="Listing UUIDs to withdraw from the store.",
+                help="The listings' own ids ('listing_id' from list/search; a variation's id is refused) to withdraw from the store.",
             ),
         ),
     ),

@@ -79,8 +79,12 @@ sellerclaw_run(group="sellercart-products", command="seo",
 ```
 
 Products come from the owner's catalog, one listing per variation, priced from the shop's markup over
-cost unless `prices` says otherwise. `remove` is reversible (buyers stop seeing it, the row stays) —
-that is what "take it off the shop" means; `delete` is not, so only on an explicit word.
+cost unless `prices` says otherwise. The list answers **one entry per product** — its `listing_id`
+is what a publish, a `listings bulk-update` and a withdraw take, and `variations[]` inside it names
+each variation by its own id with its sku and stock. `remove` takes that **variation's own id** and
+takes just that size off, reversibly; `seo` takes the **listing's** id (or the catalog product's) —
+those words speak for the whole product. `delete` is not reversible, so only on an explicit word,
+and it takes the listing's id too: the whole product goes.
 
 ## Getting paid — check this before promising a working shop
 
