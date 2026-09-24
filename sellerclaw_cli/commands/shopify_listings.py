@@ -3,6 +3,7 @@ from __future__ import annotations
 import typer
 
 from sellerclaw_cli._command_group import Cmd, LONG_TIMEOUT_SECONDS, SYNC_STOCK_PARTIAL_HELP, body_field, build_group, flag
+from sellerclaw_cli.commands._listing_shape import LISTING_ENTRY_SHAPE
 
 NAME = "shopify-listings"
 
@@ -38,6 +39,7 @@ SPECS = (
         "GET",
         "/agent/stores/{store_id}/listings",
         summary=(
+            f"{LISTING_ENTRY_SHAPE} "
             "List the store's Shopify listings from the SellerClaw mirror. `total` is the filter-aware "
             "match count, not the size of this page — page through the rest with `--offset`."
         ),
@@ -48,7 +50,7 @@ SPECS = (
                 help="Mirror status to filter by; omit for all live listings.",
             ),
             flag("search", help="Match title, SKU, or remote id."),
-            flag("limit", type=int, minimum=1, maximum=500, default=100, help="Max results."),
+            flag("limit", type=int, minimum=1, maximum=100, default=25, help="Max listings per page."),
             flag("offset", type=int, minimum=0, default=0, help="Results to skip (paging)."),
         ),
     ),
@@ -92,6 +94,7 @@ SPECS = (
         "GET",
         "/agent/stores/{store_id}/listings/search",
         summary=(
+            f"{LISTING_ENTRY_SHAPE} "
             "Search one store's listings by title, SKU, or remote id. Default: the local mirror "
             "(carries a SellerClaw id for chat cards). Pass --live to query Shopify directly for "
             "current price/stock (no SellerClaw id). To search across all stores, use 'listings'."
@@ -107,7 +110,7 @@ SPECS = (
                 type=bool,
                 help="Query the live store instead of the mirror — current price/stock, but no SellerClaw id.",
             ),
-            flag("limit", type=int, minimum=1, maximum=500, default=100, help="Max results."),
+            flag("limit", type=int, minimum=1, maximum=100, default=25, help="Max listings per page."),
         ),
     ),
     Cmd(
@@ -159,7 +162,7 @@ SPECS = (
         "catalog stays in step; to take a listing off sale reversibly use 'withdraw' instead.",
         body=(
             body_field(
-                "listing_ids", repeatable=True, help="SellerClaw listing UUIDs to delete."
+                "listing_ids", repeatable=True, help="The listings' own ids ('listing_id' from list/search; a variation's id is refused) to delete."
             ),
             body_field(
                 "product_ids", repeatable=True, help="Shopify product ids to delete."
@@ -176,7 +179,7 @@ SPECS = (
         "existing product/URL (never re-created). Defaults to the Online Store.",
         body=(
             body_field(
-                "listing_ids", repeatable=True, help="SellerClaw listing UUIDs to publish."
+                "listing_ids", repeatable=True, help="The listings' own ids ('listing_id' from list/search; a variation's id is refused) to publish."
             ),
             body_field(
                 "product_ids", repeatable=True, help="Shopify product ids to publish."
@@ -261,7 +264,7 @@ SPECS = (
                 "listing_ids",
                 required=True,
                 repeatable=True,
-                help="Draft listing ids (UUIDs) to publish to Shopify.",
+                help="The listings' own ids ('listing_id' from list/search; a variation's id is refused) to publish to Shopify.",
             ),
         ),
     ),
@@ -280,7 +283,7 @@ SPECS = (
             body_field(
                 "listing_ids",
                 repeatable=True,
-                help="SellerClaw listing UUIDs to withdraw from the storefront.",
+                help="The listings' own ids ('listing_id' from list/search; a variation's id is refused) to withdraw from the storefront.",
             ),
             body_field(
                 "product_ids",

@@ -3,6 +3,7 @@ from __future__ import annotations
 import typer
 
 from sellerclaw_cli._command_group import Cmd, LONG_TIMEOUT_SECONDS, SYNC_STOCK_PARTIAL_HELP, body_field, build_group, flag
+from sellerclaw_cli.commands._listing_shape import LISTING_ENTRY_SHAPE
 
 NAME = "walmart-listings"
 
@@ -16,6 +17,7 @@ SPECS = (
         "GET",
         "/agent/stores/{store_id}/listings",
         summary=(
+            f"{LISTING_ENTRY_SHAPE} "
             "List the store's Walmart listings from the SellerClaw mirror. `total` is the filter-aware "
             "match count, not the size of this page — page through the rest with `--offset`."
         ),
@@ -26,7 +28,7 @@ SPECS = (
                 help="Mirror status to filter by; omit for all.",
             ),
             flag("search", help="Match title or SKU."),
-            flag("limit", type=int, minimum=1, maximum=500, default=100, help="Max results."),
+            flag("limit", type=int, minimum=1, maximum=100, default=25, help="Max listings per page."),
             flag("offset", type=int, minimum=0, default=0, help="Results to skip (paging)."),
         ),
     ),
@@ -51,6 +53,7 @@ SPECS = (
         "GET",
         "/agent/stores/{store_id}/listings/search",
         summary=(
+            f"{LISTING_ENTRY_SHAPE} "
             "Search one store's Walmart listings by title or SKU. Default: the local mirror "
             "(carries a SellerClaw id for chat cards). Pass --live to query Walmart directly for "
             "current price/stock (no SellerClaw id). To search all stores, use 'listings'."
@@ -63,7 +66,7 @@ SPECS = (
                 type=bool,
                 help="Query Walmart live instead of the mirror — current price/stock, but no SellerClaw id.",
             ),
-            flag("limit", type=int, minimum=1, maximum=500, default=100, help="Max results."),
+            flag("limit", type=int, minimum=1, maximum=100, default=25, help="Max listings per page."),
         ),
     ),
     Cmd(
@@ -146,6 +149,16 @@ SPECS = (
                     "is_primary (it opens by default); the first one is used otherwise."
                 ),
             ),
+            body_field(
+                "sell_prices",
+                type=dict,
+                help=(
+                    'Sell price per variation, keyed by catalog SKU, e.g. {"TEE-RED-M": 68.00}. A SKU '
+                    "left out (or given 0) is priced from the store markup over the catalog cost; "
+                    "goods with no cost on file can only be priced this way. A named price is the "
+                    "listing's own and is never recomputed."
+                ),
+            ),
         ),
     ),
     Cmd(
@@ -163,7 +176,7 @@ SPECS = (
                 "listing_ids",
                 repeatable=True,
                 required=True,
-                help="Listing UUIDs (from 'draft') to publish to the store.",
+                help="The listings' own ids ('listing_id' from list/search; a variation's id is refused) to publish to the store.",
             ),
         ),
     ),
@@ -191,7 +204,7 @@ SPECS = (
                 "listing_ids",
                 repeatable=True,
                 required=True,
-                help="Listing UUIDs to withdraw from the store.",
+                help="The listings' own ids ('listing_id' from list/search; a variation's id is refused) to withdraw from the store.",
             ),
             body_field(
                 "skus",

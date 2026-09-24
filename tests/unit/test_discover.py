@@ -249,8 +249,8 @@ def test_describe_surfaces_flag_constraints_for_ebay_list() -> None:
     assert "--limit" in flags
     limit = flags["--limit"]
     assert limit["minimum"] == 1
-    assert limit["maximum"] == 500
-    assert limit["default"] == 100
+    assert limit["maximum"] == 100
+    assert limit["default"] == 25
     # Flag name now matches the query param ("limit"), so no separate mapping is surfaced.
     assert "query_param" not in limit
     assert "aliases" not in limit
@@ -261,7 +261,7 @@ def test_describe_surfaces_status_choices_for_shopify_list() -> None:
     assert result.exit_code == 0, result.output
     flags = {f["flag"]: f for f in _data(result.stdout)["flags"]}
     assert flags["--status"]["choices"] == ["active", "published", "draft", "withdrawn"]
-    assert flags["--limit"]["maximum"] == 500
+    assert flags["--limit"]["maximum"] == 100
 
 
 def test_describe_analytics_report() -> None:

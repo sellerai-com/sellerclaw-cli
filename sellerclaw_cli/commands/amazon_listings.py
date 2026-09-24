@@ -3,6 +3,7 @@ from __future__ import annotations
 import typer
 
 from sellerclaw_cli._command_group import Cmd, LONG_TIMEOUT_SECONDS, SYNC_STOCK_PARTIAL_HELP, body_field, build_group, flag
+from sellerclaw_cli.commands._listing_shape import LISTING_ENTRY_SHAPE
 
 NAME = "amazon-listings"
 
@@ -14,6 +15,7 @@ SPECS = (
         "GET",
         "/agent/stores/{store_id}/listings",
         summary=(
+            f"{LISTING_ENTRY_SHAPE} "
             "List the store's Amazon listings from the SellerClaw mirror. `total` is the filter-aware "
             "match count, not the size of this page — page through the rest with `--offset`."
         ),
@@ -24,7 +26,7 @@ SPECS = (
                 help="Mirror status to filter by; omit for all.",
             ),
             flag("search", help="Match title, SKU, or remote id."),
-            flag("limit", type=int, minimum=1, maximum=500, default=100, help="Max results."),
+            flag("limit", type=int, minimum=1, maximum=100, default=25, help="Max listings per page."),
             flag("offset", type=int, minimum=0, default=0, help="Results to skip (paging)."),
         ),
     ),
@@ -51,6 +53,7 @@ SPECS = (
         "GET",
         "/agent/stores/{store_id}/listings/search",
         summary=(
+            f"{LISTING_ENTRY_SHAPE} "
             "Search one store's Amazon listings by title, SKU, or remote id. Default: the local "
             "mirror (carries a SellerClaw id for chat cards). Pass --live to query Amazon directly "
             "for current price/stock (no SellerClaw id)."
@@ -66,7 +69,7 @@ SPECS = (
                 type=bool,
                 help="Query Amazon live instead of the mirror — current price/stock, but no SellerClaw id.",
             ),
-            flag("limit", type=int, minimum=1, maximum=500, default=100, help="Max results."),
+            flag("limit", type=int, minimum=1, maximum=100, default=25, help="Max listings per page."),
         ),
     ),
     Cmd(
@@ -165,7 +168,7 @@ SPECS = (
                 "listing_ids",
                 repeatable=True,
                 required=True,
-                help="Listing UUIDs (from 'draft') to publish to the store.",
+                help="The listings' own ids ('listing_id' from list/search; a variation's id is refused) to publish to the store.",
             ),
         ),
     ),
@@ -184,25 +187,31 @@ SPECS = (
         "POST",
         "/agent/amazon/stores/{store_id}/listings/withdraw",
         summary=(
-            "Remove our offers from Amazon "
-            '(body: {"listing_ids": ["<uuid>", ...]}). The catalog items stay — they were never ours. '
-            "The rows are kept for history."
+            "Remove our offers from Amazon (body: {\"listing_ids\": [...], \"variation_ids\": [...]}, "
+            "at least one). 'listing_ids' takes every offer of each listing off; 'variation_ids' takes "
+            "single offers off (a variation's own id from list/search). The catalog items stay — they "
+            "were never ours. The rows are kept for history. Returns one entry per listing."
         ),
         body=(
             body_field(
                 "listing_ids",
                 repeatable=True,
-                required=True,
-                help="Listing UUIDs to withdraw from the store.",
+                help="The listings' own ids ('listing_id' from list/search): every offer of each is withdrawn.",
+            ),
+            body_field(
+                "variation_ids",
+                repeatable=True,
+                help="Single offers to withdraw, by the variation's own id ('variation_id' from list/search).",
             ),
         ),
     ),
     Cmd(
         "update",
         "PATCH",
-        "/agent/amazon/stores/{store_id}/listings/{listing_id}",
+        "/agent/amazon/stores/{store_id}/listings/{variation_id}",
         summary=(
-            "Change the price or quantity of one Amazon offer "
+            "Change the price or quantity of one Amazon offer, named by its own id (a 'variation_id' "
+            "from list/search; a single-offer listing's 'listing_id' works too) "
             '(body: {"sell_price"?: 19.99, "quantity"?: 5}). Pushed to Amazon immediately when the '
             "offer is live. The ASIN cannot be changed — withdraw and draft again instead."
         ),

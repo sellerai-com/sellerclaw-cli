@@ -19,7 +19,14 @@ SPECS = (
         "GET",
         "/agent/sellercart/products",
         summary=(
-            "What is on the storefront right now. Shows what a buyer sees, so a shelf staged while "
+            "What is on the storefront right now — ONE ENTRY PER PRODUCT, not per variation: its "
+            "'listing_id' (the id a publish, a bulk-update and a withdraw take), title, price "
+            "('price_min'/'price_max' instead when the variations differ), status, image and url, "
+            "plus 'variations' with only what tells the variations apart — "
+            "each one's own 'variation_id' (the id 'remove' takes), its sku, its stock, the "
+            "changing option axes, and any price / status / picture that differs. A product of one "
+            "variation has no 'variations': its sku, price and stock are on the entry. 'total' "
+            "counts products, matching the entries. Shows what a buyer sees, so a shelf staged while "
             "the shop was still a draft reads as empty here — pass `--status draft` to see what is "
             "staged and not yet published, or `--status all` for the whole shelf."
         ),
@@ -30,7 +37,7 @@ SPECS = (
                 default="published",
                 help="Shelf state to list; 'draft' is staged-not-published, 'all' is everything.",
             ),
-            flag("limit", type=int, minimum=1, maximum=200, default=25, help="Max results."),
+            flag("limit", type=int, minimum=1, maximum=50, default=25, help="Max results."),
             flag("offset", type=int, minimum=0, default=0, help="Skip this many."),
             flag("search", help="Match against title or SKU."),
         ),
@@ -40,8 +47,10 @@ SPECS = (
         "POST",
         "/agent/sellercart/products",
         summary=(
-            "Put catalog products on the storefront, one listing per variation. Price defaults to the "
-            "shop's markup over the catalog cost; pass 'prices' to override. A product with no cost, "
+            "Put catalog products on the storefront, one listing per variation — the answer comes "
+            "back one entry per product, each variation named by its own id inside it. Price "
+            "defaults to the shop's markup over the catalog cost; pass 'prices' to override. A "
+            "product with no cost, "
             "or a shop with no markup set, is refused rather than listed at zero — get a markup on "
             "the shop (the owner approves it) or pass an explicit price first. Copy for the shop "
             "goes in 'products' and lands on the listing; the catalog product keeps its own."
@@ -78,11 +87,15 @@ SPECS = (
     Cmd(
         "remove",
         "DELETE",
-        "/agent/sellercart/products/{listing_id}",
+        "/agent/sellercart/products/{variation_id}",
         summary=(
-            "Take a product off the storefront, reversibly: buyers stop seeing it, the row is kept "
-            "and publishing it again puts it back. The default reading of 'убери это'. To get rid "
-            "of it for good use 'delete'."
+            "Take ONE VARIATION off the storefront, reversibly: buyers stop seeing that size, the "
+            "row is kept and a publish naming its id in 'variation_ids' puts it back. Takes the "
+            "variation's own id — the 'variation_id' in a list entry's 'variations'; the listing's "
+            "id is refused here with the variations to pick from, because removing the whole "
+            "product is a withdraw job (`listings bulk-publish <store_id>` with body kind "
+            "'withdraw'). The default "
+            "reading of 'убери это'. To get rid of it for good use 'delete'."
         ),
     ),
     Cmd(
@@ -93,8 +106,10 @@ SPECS = (
             "Write what a search engine should read about one product: the title of its search "
             "result and the description under it. Without these the shop falls back to the "
             "product's own name and the supplier's copy, shortened. A patch — a field left out "
-            "keeps what it had, a field sent empty is cleared. Pass the product id or any of its "
-            "variation ids; the answer names the id the words were stored under."
+            "keeps what it had, a field sent empty is cleared. Name the product by its catalog "
+            "product id or the listing's own id: these words speak for the whole product, and a "
+            "variation's own id is refused with the listing id to use instead. The answer names the "
+            "id the words were stored under."
         ),
         body=(
             body_field(
@@ -137,8 +152,10 @@ SPECS = (
         "POST",
         "/agent/sellercart/products/delete",
         summary=(
-            "Get rid of products for good (irreversible). One id per product — the whole variation "
-            "group goes. Rows are kept as REMOVED for history, but nothing can be put back: "
+            "Get rid of products for good (irreversible). One id per product, and it takes the "
+            "LISTING'S OWN id — the whole variation "
+            "group goes, and a variation's id is refused with the listing id to use instead. Rows "
+            "are kept as REMOVED for history, but nothing can be put back: "
             "shelving the product again drafts new rows at today's prices, losing any price or copy "
             "hand-written on these. Only on an explicit instruction from the owner; for a "
             "reversible take-down use 'remove'. A draft was never on the shelf — delete it with "
@@ -149,7 +166,10 @@ SPECS = (
                 "listing_ids",
                 type=list,
                 required=True,
-                help="SellerClaw listing UUIDs, one per product, to delete for good.",
+                help=(
+                    "The listings' own UUIDs, one per product, to delete for good. A variation's id "
+                    "is refused with the listing id to use instead (use_instead)."
+                ),
             ),
         ),
     ),

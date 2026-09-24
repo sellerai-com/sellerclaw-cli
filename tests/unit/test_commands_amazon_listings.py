@@ -194,21 +194,26 @@ def test_update_patches_price_and_quantity(
     assert json.loads(route.calls.last.request.content) == body
 
 
+@pytest.mark.parametrize(
+    "body",
+    [
+        pytest.param({"listing_ids": [LISTING_ID]}, id="every-offer-of-a-listing"),
+        pytest.param({"variation_ids": [LISTING_ID]}, id="one-offer-on-its-own"),
+    ],
+)
 @respx.mock
 def test_withdraw_removes_the_offer(
     env_pointing_at_fake_api: None,  # noqa: ARG001
     fake_api_url: str,
+    body: dict[str, list[str]],
 ) -> None:
     route = respx.post(f"{fake_api_url}/agent/amazon/stores/{STORE_ID}/listings/withdraw").mock(
         return_value=httpx.Response(
-            200, json={"results": [{"id": LISTING_ID, "status": "withdrawn"}], "errors": []}
+            200, json={"results": [{"listing_id": LISTING_ID, "status": "withdrawn"}], "errors": []}
         )
     )
 
-    result = runner.invoke(
-        app,
-        ["amazon-listings", "withdraw", STORE_ID, "-b", json.dumps({"listing_ids": [LISTING_ID]})],
-    )
+    result = runner.invoke(app, ["amazon-listings", "withdraw", STORE_ID, "-b", json.dumps(body)])
 
     assert result.exit_code == 0, result.stderr
-    assert json.loads(route.calls.last.request.content) == {"listing_ids": [LISTING_ID]}
+    assert json.loads(route.calls.last.request.content) == body
