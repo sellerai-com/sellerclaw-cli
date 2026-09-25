@@ -490,10 +490,13 @@ New CLI commands appear automatically — there is nothing per-command to mainta
 Alongside those four, a client that supports [MCP Apps](https://modelcontextprotocol.io) gets
 **interactive cards** for the questions a seller asks most — what needs them today
 (`sellerclaw_attention`), how a store is doing (`sellerclaw_store_summary`), the orders or one
-order (`sellerclaw_orders`), listings or one listing (`sellerclaw_listings`), ads across every
+order (`sellerclaw_orders`), listings or one listing (`sellerclaw_listings`), a catalog product
+with its supplier and every store it is listed in (`sellerclaw_products`), ads across every
 platform (`sellerclaw_ads`), the health of every connection (`sellerclaw_connections`), and a
-request waiting on the owner (`sellerclaw_approval`). The cards show; changing anything still goes
-through `sellerclaw_run`. A client without cards gets the same answers as a short text summary plus
+request waiting on the owner (`sellerclaw_approval`). The order, listing and product cards find what
+the owner names in their own words — an order number, a title, a SKU — and open it when only one
+matches. The cards show;
+changing anything still goes through `sellerclaw_run`. A client without cards gets the same answers as a short text summary plus
 the full structured result.
 
 The guides live in the package ([`sellerclaw_cli/guides/`](sellerclaw_cli/guides/)) and are the same

@@ -26,11 +26,11 @@ The screens
 -----------
 Alongside those four, :mod:`sellerclaw_cli.mcp_apps` contributes a small set of tools that answer
 with an *interactive card* instead of JSON — what needs the owner, the store summary, orders,
-listings, ads, connections and the approval request. They are a deliberate exception to the proxy
-design above, because a card is bound to one named tool and cannot be carried by a general-purpose
-one; to keep the list short, one tool covers both a list and one of its rows. Two of them are
-callable only by the card itself, so the owner's answer on an approval can only come from the owner
-pressing the button.
+listings, catalog products, ads, connections and the approval request. They are a deliberate
+exception to the proxy design above, because a card is bound to one named tool and cannot be
+carried by a general-purpose one; to keep the list short, one tool covers both a list and one of
+its rows, found by the words the owner uses for it. One of them is callable only by the card
+itself, so the owner's answer on an approval can only come from the owner pressing the button.
 
 Running
 -------
@@ -55,7 +55,15 @@ from typing import TYPE_CHECKING, Any
 
 from sellerclaw_cli import guides, mcp_apps
 from sellerclaw_cli._client import DEFAULT_TIMEOUT_SECONDS, Client
-from sellerclaw_cli._command_group import REGISTRY, Cmd, Flag, GroupSpec, positionals_of, upload_payload
+from sellerclaw_cli._command_group import (
+    REGISTRY,
+    Cmd,
+    Flag,
+    GroupSpec,
+    fill_path,
+    positionals_of,
+    upload_payload,
+)
 from sellerclaw_cli._errors import CliError, UserInputError
 from sellerclaw_cli._job_wait import is_finished, looks_like_job, queued_note_for_call
 from sellerclaw_cli._output import error_json
@@ -81,11 +89,14 @@ SERVER_INSTRUCTIONS = (
     "Some questions answer better as an interactive card than as text, and have their own tools: "
     "what needs the owner today (`sellerclaw_attention`), how a store is doing "
     "(`sellerclaw_store_summary`), the orders, or one order (`sellerclaw_orders`), listings, or one "
-    "listing (`sellerclaw_listings`), how the ads are doing (`sellerclaw_ads`), whether the "
+    "store's listing (`sellerclaw_listings`), a product with its supplier and every store it is "
+    "listed in (`sellerclaw_products`), how the ads are doing (`sellerclaw_ads`), whether the "
     "connections are healthy (`sellerclaw_connections`), and something waiting on the owner "
     "(`sellerclaw_approval`). Reach for these first when the question is one of those — the owner "
     "gets something they can look at and act on instead of a wall of numbers — and do not also run "
-    "a command for the same data. You get a short summary back; they are reading the card, so do "
+    "a command for the same data. Pass the owner's own words — an order number, a title, a SKU, a "
+    "marketplace id — and do not look up an id first: the card finds the thing, and opens it when "
+    "only one matches. You get a short summary back; they are reading the card, so do "
     "not recite it to them. The cards only show: changing anything is still done with the commands "
     "below, and when the owner presses a card's button to ask you for something, it reaches you as "
     "an ordinary message from them.\n"
@@ -646,9 +657,7 @@ def run_command(
             f"missing positional argument(s) for {group} {command}: {', '.join(missing)} "
             f"(order: {', '.join(needed)}). Call sellerclaw_describe for the schema."
         )
-    path = cmd.path
-    for name in needed:
-        path = path.replace("{" + name + "}", str(positionals[name]))
+    path = fill_path(cmd.path, {name: positionals[name] for name in needed})
 
     params = _map_flags(group, command, cmd, flags)
 

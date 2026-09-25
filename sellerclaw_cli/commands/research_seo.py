@@ -87,7 +87,15 @@ SPECS = (
         "/agent/research/seo/serp-competitors",
         summary="serp competitors research.",
         body=(
-            body_field("domain", required=True, help="Seed domain to find competitors for."),
+            body_field(
+                "keywords",
+                repeatable=True,
+                required=True,
+                help=(
+                    "Keywords whose Google results to read (1-200); the domains ranking for them "
+                    "are the competitors. Not a domain."
+                ),
+            ),
             body_field("location_name", help="Location name (e.g. 'United States')."),
             body_field("location_code", type=int, help="Numeric location code (overrides name)."),
             body_field("language_name", help="Language name (e.g. 'English')."),
@@ -121,7 +129,7 @@ SPECS = (
             body_field("location_code", type=int, help="Numeric location code (overrides name)."),
             body_field("language_name", help="Language name (e.g. 'English (United States)')."),
             body_field("language_code", help="Marketplace language code (e.g. 'en_US')."),
-            body_field("depth", type=int, help="Number of reviews to fetch (1-100). Defaults to 10."),
+            body_field("depth", type=int, help="Number of reviews to fetch (1-50). Defaults to 10."),
         ),
     ),
     Cmd(

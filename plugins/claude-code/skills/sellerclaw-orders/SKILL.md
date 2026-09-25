@@ -41,7 +41,7 @@ Creating the fulfillment tells the *channel* and the buyer. The SellerClaw order
 separately — do it right after, or the order stays in the seller's open work:
 
 ```text
-# ORDER_ID here is the internal SellerClaw order id, not the channel's.
+# ORDER_ID: the SellerClaw order id, or the order number the owner quotes (#1001).
 sellerclaw_run(group="orders", command="set-shipped", positionals={"order_id": ORDER_ID},
   body={"tracking_number": "1Z999AA10123456784", "tracking_carrier": "UPS"})
 ```

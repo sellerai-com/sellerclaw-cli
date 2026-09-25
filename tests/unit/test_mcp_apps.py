@@ -98,6 +98,7 @@ def test_both_ways_of_building_the_server_carry_the_screens(builder: Any) -> Non
         "ui://sellerclaw/store-summary.html",
         "ui://sellerclaw/orders.html",
         "ui://sellerclaw/listings.html",
+        "ui://sellerclaw/products.html",
         "ui://sellerclaw/ads.html",
         "ui://sellerclaw/connections.html",
         "ui://sellerclaw/approval.html",
@@ -122,10 +123,8 @@ def test_the_model_cannot_answer_an_approval_for_the_owner() -> None:
         "sellerclaw_attention": ["model", "app"],
         "sellerclaw_store_summary": ["model", "app"],
         "sellerclaw_orders": ["model", "app"],
-        # The board's own button. The model already has this verb on sellerclaw_run, with the
-        # channel rule spelled out in its description.
-        "sellerclaw_order_mark_shipped": ["app"],
         "sellerclaw_listings": ["model", "app"],
+        "sellerclaw_products": ["model", "app"],
         "sellerclaw_ads": ["model", "app"],
         "sellerclaw_connections": ["model", "app"],
         "sellerclaw_approval": ["model", "app"],
@@ -134,7 +133,7 @@ def test_the_model_cannot_answer_an_approval_for_the_owner() -> None:
 
 
 def test_the_cards_that_only_show_things_are_read_only() -> None:
-    """Only two tools a card calls change anything, and both are the card's alone.
+    """Only one tool a card calls changes anything — the approval card's answer — and it is the card's alone.
 
     Everything the new cards offer beyond reading is a request to Claude or a link to our website,
     so their tools must say they read — a client asking permission per write would otherwise put a
@@ -145,7 +144,7 @@ def test_the_cards_that_only_show_things_are_read_only() -> None:
     writes = {
         name for name in mcp_apps.tool_names() if not by_name[name].annotations.read_only_hint
     }
-    assert writes == {"sellerclaw_order_mark_shipped", "sellerclaw_approval_decide"}
+    assert writes == {"sellerclaw_approval_decide"}
 
 
 def test_every_screen_tool_points_at_a_resource_that_exists() -> None:
@@ -406,7 +405,8 @@ def test_the_order_board_carries_its_own_totals(
 
     result = _call("sellerclaw_orders", {"status": "new"})
 
-    assert set(result.structured_content) == {"orders", "overview"}
+    assert set(result.structured_content) == {"orders", "overview", "filters"}
+    assert result.structured_content["filters"] == {"status": "new"}
     assert dict(orders.calls[0].request.url.params) == {"status": "new"}
 
 
@@ -425,56 +425,6 @@ def test_an_unfiltered_board_does_not_ask_for_the_status_none(
     _call("sellerclaw_orders", {"status": None})
 
     assert dict(orders.calls[0].request.url.params) == {}
-
-
-@respx.mock
-def test_marking_an_order_shipped_hands_back_the_whole_board(
-    env_pointing_at_fake_api: None, fake_api_url: str
-) -> None:
-    """A single changed row would leave the card with nothing to draw around it."""
-    shipped = respx.post(f"{fake_api_url}/agent/orders/{ORDER_ID}/shipped").mock(
-        return_value=httpx.Response(200, json={"id": ORDER_ID, "status": "shipped"})
-    )
-    board = respx.get(f"{fake_api_url}/agent/orders").mock(
-        return_value=httpx.Response(200, json={"items": []})
-    )
-    respx.get(f"{fake_api_url}/agent/orders/overview").mock(
-        return_value=httpx.Response(200, json={"total": 0, "by_status": {}})
-    )
-
-    result = _call("sellerclaw_order_mark_shipped", {"order": ORDER_ID, "status": "new"})
-
-    assert shipped.call_count == 1
-    assert set(result.structured_content) == {"orders", "overview"}
-    # Through the board's own filter. Answering with every status would redraw the card with rows
-    # the chip above them excludes.
-    assert dict(board.calls[0].request.url.params) == {"status": "new"}
-
-
-@respx.mock
-def test_the_channels_refusal_to_ship_reaches_the_card_in_its_own_words(
-    env_pointing_at_fake_api: None, fake_api_url: str
-) -> None:
-    """The refusal names the command that would create the shipment. Rewording it loses the way out."""
-    respx.post(f"{fake_api_url}/agent/orders/{ORDER_ID}/shipped").mock(
-        return_value=httpx.Response(
-            409,
-            json={
-                "detail": {
-                    "code": "channel_has_no_shipment",
-                    "message": (
-                        "Pawpilot Supply holds no shipment for order #1001. Create it there first "
-                        "with `shopify-orders create-fulfillment`, then record it here."
-                    ),
-                }
-            },
-        )
-    )
-
-    with pytest.raises(ToolError) as excinfo:
-        _call("sellerclaw_order_mark_shipped", {"order": ORDER_ID})
-
-    assert "shopify-orders create-fulfillment" in str(excinfo.value)
 
 
 @respx.mock
@@ -634,27 +584,7 @@ def test_an_order_without_pictures_carries_no_empty_map(
 
     result = _call("sellerclaw_orders", {"order": ORDER_ID})
 
-    assert set(result.structured_content) == {"order"}
-
-
-@respx.mock
-def test_marking_shipped_from_one_order_answers_with_that_order(
-    env_pointing_at_fake_api: None, fake_api_url: str
-) -> None:
-    """Pressed on the one-order view, the card must come back as that order — not as a board the
-    person was not looking at."""
-    respx.post(f"{fake_api_url}/agent/orders/{ORDER_ID}/shipped").mock(
-        return_value=httpx.Response(200, json={"id": ORDER_ID, "status": "shipped"})
-    )
-    respx.get(f"{fake_api_url}/agent/orders/{ORDER_ID}").mock(
-        return_value=httpx.Response(200, json={"id": ORDER_ID, "status": "shipped", "line_items": []})
-    )
-    board = respx.get(f"{fake_api_url}/agent/orders")
-
-    result = _call("sellerclaw_order_mark_shipped", {"order": ORDER_ID, "return_to": "order"})
-
-    assert result.structured_content["order"]["status"] == "shipped"
-    assert board.call_count == 0
+    assert set(result.structured_content) == {"order", "filters"}
 
 
 @respx.mock
@@ -694,6 +624,34 @@ def test_the_listing_list_asks_only_for_the_filters_it_was_given(
         "store": STORE_ID,
         "status": "draft",
         "query": "harness",
+    }
+
+
+@pytest.mark.parametrize(
+    "given",
+    [
+        pytest.param(["out_of_stock", "not_selling"], id="list"),
+        pytest.param("out_of_stock, not_selling", id="one-string-from-a-model"),
+    ],
+)
+@respx.mock
+def test_the_listing_list_narrows_to_what_does_not_sell_and_remembers_it_for_back(
+    env_pointing_at_fake_api: None, fake_api_url: str, given: list[str] | str
+) -> None:
+    """"Which listings aren't selling?" — a lifecycle status cannot ask it, a sale state can."""
+    search = respx.get(f"{fake_api_url}/agent/listings/search").mock(
+        return_value=httpx.Response(200, json={"items": [], "total": 0})
+    )
+    respx.get(f"{fake_api_url}/agent/sales-channels").mock(return_value=httpx.Response(200, json=[]))
+
+    result = _call("sellerclaw_listings", {"store": STORE_ID, "sale_state": given})
+
+    params = search.calls[0].request.url.params
+    assert params.get_list("sale_state") == ["out_of_stock", "not_selling"]
+    assert params["store_id"] == STORE_ID
+    assert result.structured_content["filters"] == {
+        "store": STORE_ID,
+        "sale_state": ["out_of_stock", "not_selling"],
     }
 
 
@@ -782,6 +740,310 @@ def test_a_listing_still_opens_when_what_surrounds_it_cannot_be_read(
     assert "problems" not in result.structured_content
     assert "elsewhere" not in result.structured_content
     assert result.structured_content["stores"] == []
+
+
+# --------------------------------------------------------------------------- the owner's words
+
+
+def _no_overview(fake_api_url: str) -> respx.Route:
+    return respx.get(f"{fake_api_url}/agent/orders/overview").mock(
+        return_value=httpx.Response(200, json={"total": 9, "by_status": {"new": 9}})
+    )
+
+
+@pytest.mark.parametrize(
+    ("reference", "raw_path"),
+    [
+        pytest.param("#1001", b"/agent/orders/%231001", id="number-with-hash"),
+        pytest.param("14-15000-75039", b"/agent/orders/14-15000-75039", id="marketplace-id"),
+        pytest.param(f"  {ORDER_ID} ", f"/agent/orders/{ORDER_ID}".encode(), id="our-id-trimmed"),
+    ],
+)
+@respx.mock
+def test_an_order_opens_by_whatever_the_owner_quotes(
+    env_pointing_at_fake_api: None, fake_api_url: str, reference: str, raw_path: bytes
+) -> None:
+    """Nobody names an order by our UUID; ``#1001`` in a raw path would even become a fragment."""
+    one = respx.get(url__startswith=f"{fake_api_url}/agent/orders/").mock(
+        return_value=httpx.Response(200, json={"id": ORDER_ID, "remote_order_name": "#1001"})
+    )
+
+    result = _call("sellerclaw_orders", {"order": reference})
+
+    assert one.calls.last.request.url.raw_path == raw_path
+    assert result.structured_content["order"]["id"] == ORDER_ID
+    assert "sole_match" not in result.structured_content
+
+
+@pytest.mark.parametrize(
+    ("refusal", "found"),
+    [
+        pytest.param(409, [{"id": ORDER_ID}, {"id": "other"}], id="two-stores-share-the-number"),
+        pytest.param(404, [{"id": ORDER_ID}, {"id": "other"}], id="nothing-answers-to-the-number"),
+        # Asked for 1001, the search found #10010 alone: a match to choose, not the order asked for.
+        pytest.param(404, [{"id": ORDER_ID, "remote_order_name": "#10010"}], id="one-near-miss-stays-a-row"),
+    ],
+)
+@respx.mock
+def test_a_number_that_names_no_single_order_becomes_the_board_of_what_it_could_mean(
+    env_pointing_at_fake_api: None, fake_api_url: str, refusal: int, found: list[dict[str, Any]]
+) -> None:
+    """The owner sees the orders it could mean and picks — not a red box and a retry."""
+    respx.get(f"{fake_api_url}/agent/orders/%231001").mock(
+        return_value=httpx.Response(refusal, json={"detail": "#1001 names 2 orders"})
+    )
+    search = respx.get(f"{fake_api_url}/agent/orders").mock(
+        return_value=httpx.Response(200, json={"items": found, "total": len(found)})
+    )
+    _no_overview(fake_api_url)
+
+    result = _call("sellerclaw_orders", {"order": "#1001"})
+
+    assert dict(search.calls[0].request.url.params) == {"q": "#1001"}
+    assert result.structured_content["filters"] == {"query": "#1001"}
+    assert result.structured_content["orders"]["items"] == found
+    assert "sole_match" not in result.structured_content
+    assert result.content[0].text.startswith(f'{len(found)} order')
+
+
+@respx.mock
+def test_a_failure_that_is_not_about_the_number_is_not_hidden_behind_a_search(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    respx.get(f"{fake_api_url}/agent/orders/%231001").mock(
+        return_value=httpx.Response(500, json={"detail": "database is down"})
+    )
+    search = respx.get(f"{fake_api_url}/agent/orders")
+
+    with pytest.raises(ToolError, match="database is down"):
+        _call("sellerclaw_orders", {"order": "#1001"})
+    assert search.call_count == 0
+
+
+@respx.mock
+def test_the_only_order_matching_the_owners_words_opens_by_itself(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    """"Jane's order" with one Jane: that order — marked, so Back goes to the whole board."""
+    row = {"id": ORDER_ID, "customer_name": "Jane Smith", "line_items": []}
+    search = respx.get(f"{fake_api_url}/agent/orders").mock(
+        return_value=httpx.Response(200, json={"items": [row], "total": 1})
+    )
+    overview = _no_overview(fake_api_url)
+    single = respx.get(f"{fake_api_url}/agent/orders/{ORDER_ID}")
+
+    result = _call("sellerclaw_orders", {"query": " jane "})
+
+    assert dict(search.calls[0].request.url.params) == {"q": "jane"}
+    assert result.structured_content == {
+        "order": row,
+        "filters": {"query": "jane"},
+        "sole_match": True,
+    }
+    # The row the search returned is the order; neither it nor the board's totals are read again.
+    assert single.call_count == 0
+    assert overview.call_count == 0
+
+
+@respx.mock
+def test_an_order_opened_from_a_searched_board_remembers_that_board_for_back(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    respx.get(f"{fake_api_url}/agent/orders/{ORDER_ID}").mock(
+        return_value=httpx.Response(200, json={"id": ORDER_ID, "line_items": []})
+    )
+
+    result = _call("sellerclaw_orders", {"order": ORDER_ID, "query": "jane", "status": "new"})
+
+    assert result.structured_content["filters"] == {"status": "new", "query": "jane"}
+    assert "sole_match" not in result.structured_content
+
+
+@respx.mock
+def test_the_only_listing_matching_the_owners_words_opens_in_full(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    search = respx.get(f"{fake_api_url}/agent/listings/search").mock(
+        side_effect=[
+            httpx.Response(200, json={"items": [{"listing_id": LISTING_ID}], "total": 1}),
+            httpx.Response(200, json={"items": [], "total": 0}),
+        ]
+    )
+    respx.get(f"{fake_api_url}/agent/listings/{LISTING_ID}").mock(
+        return_value=httpx.Response(200, json={"id": LISTING_ID, "title": "Dot turtleneck"})
+    )
+    respx.get(f"{fake_api_url}/agent/sales-channels").mock(return_value=httpx.Response(200, json=[]))
+
+    result = _call("sellerclaw_listings", {"query": "turtleneck"})
+
+    assert dict(search.calls[0].request.url.params) == {"q": "turtleneck"}
+    assert result.structured_content["listing"]["title"] == "Dot turtleneck"
+    assert result.structured_content["sole_match"] is True
+    assert result.structured_content["filters"] == {"query": "turtleneck"}
+    assert "listings" not in result.structured_content
+
+
+@respx.mock
+def test_a_list_asked_by_status_alone_stays_a_list_even_with_one_row(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    """"Which are drafts?" is answered by the list; only a name the owner gave opens a listing."""
+    respx.get(f"{fake_api_url}/agent/listings/search").mock(
+        return_value=httpx.Response(200, json={"items": [{"listing_id": LISTING_ID}], "total": 1})
+    )
+    single = respx.get(f"{fake_api_url}/agent/listings/{LISTING_ID}")
+    respx.get(f"{fake_api_url}/agent/sales-channels").mock(return_value=httpx.Response(200, json=[]))
+
+    result = _call("sellerclaw_listings", {"status": "draft"})
+
+    assert result.structured_content["listings"]["total"] == 1
+    assert single.call_count == 0
+
+
+@pytest.mark.parametrize(
+    ("given", "our_id_answers"),
+    [
+        pytest.param("365011223304", None, id="marketplace-item-number"),
+        pytest.param("PAW-BOWL-01", None, id="sku"),
+        pytest.param(OTHER_LISTING, 404, id="a-uuid-that-is-not-ours"),
+    ],
+)
+@respx.mock
+def test_words_passed_as_the_listing_are_searched_for(
+    env_pointing_at_fake_api: None,
+    fake_api_url: str,
+    given: str,
+    our_id_answers: int | None,
+) -> None:
+    single = respx.get(f"{fake_api_url}/agent/listings/{OTHER_LISTING}").mock(
+        return_value=httpx.Response(our_id_answers or 200, json={"detail": "not found"})
+    )
+    search = respx.get(f"{fake_api_url}/agent/listings/search").mock(
+        return_value=httpx.Response(
+            200, json={"items": [{"listing_id": "a"}, {"listing_id": "b"}], "total": 2}
+        )
+    )
+    respx.get(f"{fake_api_url}/agent/sales-channels").mock(return_value=httpx.Response(200, json=[]))
+
+    result = _call("sellerclaw_listings", {"listing": given})
+
+    assert dict(search.calls[0].request.url.params) == {"q": given}
+    assert result.structured_content["filters"] == {"query": given}
+    assert result.structured_content["listings"]["total"] == 2
+    assert single.call_count == (1 if our_id_answers else 0)
+
+
+@respx.mock
+def test_one_product_opens_with_every_store_it_is_listed_in_and_what_was_refused(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    respx.get(f"{fake_api_url}/agent/products/{PRODUCT_ID}").mock(
+        return_value=httpx.Response(200, json={"id": PRODUCT_ID, "name": "LED flashlight"})
+    )
+    listings = respx.get(f"{fake_api_url}/agent/listings/search").mock(
+        return_value=httpx.Response(200, json={"items": [], "total": 0})
+    )
+    problems = respx.get(f"{fake_api_url}/agent/listing-problems").mock(
+        return_value=httpx.Response(200, json={"items": []})
+    )
+    respx.get(f"{fake_api_url}/agent/sales-channels").mock(
+        return_value=httpx.Response(200, json=[{"id": STORE_ID, "platform": "ebay", "display_name": "Paw"}])
+    )
+
+    result = _call("sellerclaw_products", {"product": PRODUCT_ID})
+
+    assert set(result.structured_content) == {"product", "listings", "problems", "stores", "filters"}
+    assert dict(listings.calls[0].request.url.params) == {"product_id": PRODUCT_ID, "limit": "50"}
+    assert dict(problems.calls[0].request.url.params) == {"product_id": PRODUCT_ID}
+    assert result.structured_content["stores"] == [
+        {"id": STORE_ID, "platform": "ebay", "display_name": "Paw"}
+    ]
+
+
+@respx.mock
+def test_a_product_still_opens_when_its_stores_cannot_be_read(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    respx.get(f"{fake_api_url}/agent/products/{PRODUCT_ID}").mock(
+        return_value=httpx.Response(200, json={"id": PRODUCT_ID, "name": "LED flashlight"})
+    )
+    respx.get(f"{fake_api_url}/agent/listings/search").mock(
+        return_value=httpx.Response(404, json={"detail": "not found"})
+    )
+    respx.get(f"{fake_api_url}/agent/listing-problems").mock(
+        return_value=httpx.Response(404, json={"detail": "not found"})
+    )
+    respx.get(f"{fake_api_url}/agent/sales-channels").mock(
+        return_value=httpx.Response(403, json={"detail": "no"})
+    )
+
+    result = _call("sellerclaw_products", {"product": PRODUCT_ID})
+
+    assert result.structured_content["product"]["name"] == "LED flashlight"
+    assert "listings" not in result.structured_content
+    assert "problems" not in result.structured_content
+
+
+@pytest.mark.parametrize(
+    ("arguments", "params", "filters"),
+    [
+        pytest.param({}, {"limit": "25"}, {}, id="the-newest-of-the-catalog"),
+        pytest.param(
+            {"query": "flashlight", "limit": 10},
+            {"q": "flashlight", "limit": "10"},
+            {"query": "flashlight", "limit": 10},
+            id="the-owners-words",
+        ),
+        pytest.param(
+            {"product": "LED-01"}, {"q": "LED-01", "limit": "25"}, {"query": "LED-01"}, id="a-sku-as-the-product"
+        ),
+    ],
+)
+@respx.mock
+def test_the_catalog_is_searched_with_the_owners_words(
+    env_pointing_at_fake_api: None,
+    fake_api_url: str,
+    arguments: dict[str, Any],
+    params: dict[str, str],
+    filters: dict[str, Any],
+) -> None:
+    """Unasked, the catalog route answers with the whole catalog — a card never asks for that."""
+    search = respx.get(f"{fake_api_url}/agent/products").mock(
+        return_value=httpx.Response(200, json={"items": [{"id": "a"}, {"id": "b"}], "total": 2})
+    )
+
+    result = _call("sellerclaw_products", arguments)
+
+    assert dict(search.calls[0].request.url.params) == params
+    assert result.structured_content == {
+        "products": {"items": [{"id": "a"}, {"id": "b"}], "total": 2},
+        "filters": filters,
+    }
+
+
+@respx.mock
+def test_the_only_product_matching_the_owners_words_opens_by_itself(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    respx.get(f"{fake_api_url}/agent/products").mock(
+        return_value=httpx.Response(200, json={"items": [{"id": PRODUCT_ID}], "total": 1})
+    )
+    respx.get(f"{fake_api_url}/agent/products/{PRODUCT_ID}").mock(
+        return_value=httpx.Response(200, json={"id": PRODUCT_ID, "name": "LED flashlight"})
+    )
+    respx.get(f"{fake_api_url}/agent/listings/search").mock(
+        return_value=httpx.Response(200, json={"items": [], "total": 0})
+    )
+    respx.get(f"{fake_api_url}/agent/listing-problems").mock(
+        return_value=httpx.Response(200, json={"items": []})
+    )
+    respx.get(f"{fake_api_url}/agent/sales-channels").mock(return_value=httpx.Response(200, json=[]))
+
+    result = _call("sellerclaw_products", {"query": "flashlight"})
+
+    assert result.structured_content["product"]["id"] == PRODUCT_ID
+    assert result.structured_content["sole_match"] is True
+    assert result.structured_content["filters"] == {"query": "flashlight"}
 
 
 @respx.mock
@@ -938,6 +1200,50 @@ def test_the_queue_is_told_as_a_verdict_and_its_first_rows() -> None:
     assert "Could not check: connections." in summary
 
 
+@pytest.mark.parametrize(
+    ("items", "degraded", "expected", "absent"),
+    [
+        pytest.param(
+            [
+                {"kind": "approval", "title": "Send the restock note", "target_id": "req-1"},
+                {"kind": "approval", "title": "Raise the budget", "target_id": "req-2"},
+                {"kind": "shipment_overdue", "title": "3 orders are late to ship"},
+            ],
+            [],
+            "2 requests waiting on the owner's approval (ids req-1, req-2); each is approved or "
+            "declined on its own card, sellerclaw_approval.",
+            "No request",
+            id="requests-waiting",
+        ),
+        pytest.param(
+            [{"kind": "shipment_overdue", "title": "3 orders are late to ship"}],
+            [],
+            "No request is waiting on the owner's approval.",
+            "sellerclaw_approval",
+            id="none-waiting",
+        ),
+        pytest.param(
+            [{"kind": "shipment_overdue", "title": "3 orders are late to ship"}],
+            ["approvals"],
+            "Could not check: approvals.",
+            "No request",
+            id="approvals-not-checked",
+        ),
+    ],
+)
+def test_the_queue_says_outright_whether_a_request_awaits_approval(
+    items: list[dict[str, Any]], degraded: list[str], expected: str, absent: str
+) -> None:
+    """Asked "is anything waiting for my approval?", a model given only a count guessed — and told
+    the owner the attention card could approve requests, with none there (claude.ai, 25.09.2026)."""
+    summary = mcp_apps._summarize_attention(
+        {"summary": {"status": "needs_you", "attention": items, "degraded_blocks": degraded}}
+    )
+
+    assert expected in summary
+    assert absent not in summary
+
+
 def test_a_quiet_queue_is_not_called_all_clear_when_a_check_did_not_run() -> None:
     summary = mcp_apps._summarize_attention({"summary": {"status": "unknown", "attention": []}})
 
@@ -959,6 +1265,30 @@ def test_a_list_of_listings_is_summed_up_by_what_does_not_sell() -> None:
     )
 
     assert summary.startswith("Showing 3 of 42 listings. Among them, 1 not selling and 1 out of stock.")
+
+
+@pytest.mark.parametrize(
+    ("search", "expected"),
+    [
+        pytest.param(
+            {"items": [{"sale_state": "out_of_stock"}, {"sale_state": "not_selling"}], "total": 12},
+            "Showing 2 of 12 listings that are out of stock or not selling. "
+            "Among them, 1 not selling and 1 out of stock.",
+            id="some",
+        ),
+        pytest.param(
+            {"items": [], "total": 0},
+            "No listings are out of stock or not selling.",
+            id="none-is-an-answer",
+        ),
+    ],
+)
+def test_a_narrowed_list_is_told_with_the_filter_it_answers(search: dict[str, Any], expected: str) -> None:
+    summary = mcp_apps._summarize_listings(
+        {"listings": search, "filters": {"sale_state": ["out_of_stock", "not_selling"]}}
+    )
+
+    assert summary.startswith(expected)
 
 
 def test_one_listing_is_named_with_its_store_and_what_is_wrong_with_it() -> None:
@@ -1008,6 +1338,191 @@ def test_one_order_is_named_by_its_marketplace_number() -> None:
     )
 
 
+def test_one_order_names_its_sellerclaw_id_so_a_follow_up_needs_no_search() -> None:
+    summary = mcp_apps._summarize_order({"order": {"id": ORDER_ID, "remote_order_name": "#1001"}})
+
+    assert f"SellerClaw order id {ORDER_ID}." in summary
+
+
+@pytest.mark.parametrize(
+    ("orders", "expected"),
+    [
+        pytest.param(
+            {"items": [{}, {}], "total": 2},
+            '2 orders matching "jane"; the owner can open the one they meant.',
+            id="some",
+        ),
+        pytest.param(
+            {"items": [], "total": 0},
+            'No order matches "jane". The board holds the orders SellerClaw has seen',
+            id="none-says-why",
+        ),
+    ],
+)
+def test_a_searched_board_is_told_by_the_words_it_answers(
+    orders: dict[str, Any], expected: str
+) -> None:
+    summary = mcp_apps._summarize_orders({"orders": orders, "filters": {"query": "jane"}})
+
+    assert summary.startswith(expected)
+    assert "waiting to ship" not in summary
+
+
+def test_listings_of_one_product_point_at_the_product_card() -> None:
+    summary = mcp_apps._summarize_listings(
+        {
+            "listings": {
+                "items": [
+                    {"product_id": PRODUCT_ID, "sale_state": "selling"},
+                    {"product_id": PRODUCT_ID, "sale_state": "out_of_stock"},
+                ],
+                "total": 2,
+            },
+            "filters": {"query": "turtleneck"},
+        }
+    )
+
+    assert summary.startswith('2 listings matching "turtleneck". Among them, 1 out of stock.')
+    assert f'sellerclaw_products(product="{PRODUCT_ID}")' in summary
+
+
+def test_listings_of_different_products_do_not_point_at_one() -> None:
+    summary = mcp_apps._summarize_listings(
+        {"listings": {"items": [{"product_id": PRODUCT_ID}, {"product_id": None}], "total": 2}}
+    )
+
+    assert "sellerclaw_products" not in summary
+
+
+def test_no_listing_matching_the_owners_words_points_at_the_catalog() -> None:
+    summary = mcp_apps._summarize_listings(
+        {"listings": {"items": [], "total": 0}, "filters": {"query": "flashlight"}}
+    )
+
+    assert summary.startswith('No listing matches "flashlight". A product in the catalog')
+
+
+def test_one_product_is_told_by_where_it_sells_who_supplies_it_and_what_it_costs() -> None:
+    summary = mcp_apps._summarize_products(
+        {
+            "product": {
+                "id": PRODUCT_ID,
+                "name": "LED flashlight",
+                "supplier_name": "CJ Dropshipping",
+                # Every variation agrees on the currency and the freight, so the API states them once.
+                "variation_common": {"purchase_currency": "USD"},
+                # One variation has no freight quoted, so the range is the bare item price —
+                # the figure the card shows, not a mix of delivered and bare.
+                "variations": [
+                    {"purchase_price": "5.00", "landed_cost": "6.30", "available_quantity": 40},
+                    {"purchase_price": "6.30", "landed_cost": "7.10", "available_quantity": 2},
+                    {"purchase_price": "5.00", "landed_cost": None, "available_quantity": 0},
+                ],
+            },
+            "listings": {
+                "items": [
+                    {"sales_channel_id": "a", "sale_state": "selling"},
+                    {"sales_channel_id": "b", "sale_state": "not_selling"},
+                    {"sales_channel_id": "b", "sale_state": "selling"},
+                ]
+            },
+            "problems": {"items": [{"id": "p1"}]},
+        }
+    )
+
+    assert summary.startswith(
+        f'"LED flashlight" (SellerClaw product id {PRODUCT_ID}). '
+        "3 listings in 2 stores: 2 selling, 1 not selling. "
+        "Supplier CJ Dropshipping, cost 5.00–6.30 USD, 42 in stock. "
+        "1 marketplace problem on its listings."
+    )
+
+
+def test_a_delivered_cost_is_said_to_include_the_shipping() -> None:
+    summary = mcp_apps._summarize_products(
+        {
+            "product": {
+                "id": PRODUCT_ID,
+                "name": "Bowl",
+                "variation_common": {
+                    "purchase_price": "6.80",
+                    "shipping_cost": "3.40",
+                    "landed_cost": "10.20",
+                    "purchase_currency": "USD",
+                },
+                "variations": [{"available_quantity": 3}, {"available_quantity": 4}],
+            }
+        }
+    )
+
+    assert "Cost 10.20 USD with shipping, 7 in stock." in summary
+
+
+@pytest.mark.parametrize(
+    ("product", "listings", "absent"),
+    [
+        pytest.param(
+            {
+                "variations": [
+                    {"purchase_price": "5.00", "purchase_currency": "USD", "available_quantity": 1},
+                    {"purchase_price": "40.00", "purchase_currency": "CNY", "available_quantity": 1},
+                ]
+            },
+            None,
+            "cost",
+            id="costs-in-two-currencies-have-no-range",
+        ),
+        pytest.param(
+            {"variations": [{"available_quantity": 3}]}, None, "listing", id="stores-not-read"
+        ),
+        pytest.param({"variations": []}, None, "in stock", id="no-variations-no-stock"),
+    ],
+)
+def test_what_a_product_does_not_know_is_left_out_of_its_summary(
+    product: dict[str, Any], listings: dict[str, Any] | None, absent: str
+) -> None:
+    summary = mcp_apps._summarize_products(
+        {"product": {"id": PRODUCT_ID, "name": "Bowl", **product}, **({"listings": listings} if listings else {})}
+    )
+
+    assert absent not in summary.split("If this client")[0].lower()
+
+
+def test_a_product_listed_nowhere_says_so() -> None:
+    summary = mcp_apps._summarize_products(
+        {"product": {"id": PRODUCT_ID, "name": "Bowl", "variations": []}, "listings": {"items": []}}
+    )
+
+    assert "It is not listed in any store." in summary
+
+
+@pytest.mark.parametrize(
+    ("products", "filters", "expected"),
+    [
+        pytest.param(
+            {"items": [{}, {}], "total": 30},
+            {"query": "bowl"},
+            'Showing 2 of 30 catalog products matching "bowl"; the owner can open one.',
+            id="some",
+        ),
+        pytest.param(
+            {"items": [], "total": 0},
+            {"query": "flashlight"},
+            'Nothing in the catalog matches "flashlight". A listing imported from a store is not '
+            'always in the catalog; sellerclaw_listings(query="flashlight") searches the listings.',
+            id="none-points-at-the-listings",
+        ),
+        pytest.param({"items": [], "total": 0}, {}, "The catalog is empty.", id="empty-catalog"),
+    ],
+)
+def test_a_catalog_list_is_told_by_the_words_it_answers(
+    products: dict[str, Any], filters: dict[str, Any], expected: str
+) -> None:
+    summary = mcp_apps._summarize_products({"products": products, "filters": filters})
+
+    assert summary.startswith(expected)
+
+
 def test_ad_totals_are_told_per_currency_and_never_added_together() -> None:
     summary = mcp_apps._summarize_ads(
         {
@@ -1026,8 +1541,9 @@ def test_ad_totals_are_told_per_currency_and_never_added_together() -> None:
     )
 
     assert summary.startswith(
-        "Ads, last 7 days. Spent 310.00 USD, 1302.00 USD in sales from ads. Spent 84.00 EUR. "
-        "1 campaign running. Needs reconnecting: Pawpilot — Google Ads."
+        "Ads, last 7 days. Totals cover every campaign that ran in the window, ended ones included. "
+        "Spent 310.00 USD, 1302.00 USD in sales from ads. Spent 84.00 EUR. "
+        "1 campaign running now. Needs reconnecting: Pawpilot — Google Ads."
     )
 
 
@@ -1094,6 +1610,10 @@ def test_connections_are_told_by_what_needs_the_owner(integrations: list[Any], o
             mcp_apps._summarize_attention({"summary": {"status": "all_clear"}}), id="attention"
         ),
         pytest.param(mcp_apps._summarize_listings({"listings": {"items": []}}), id="listings"),
+        pytest.param(mcp_apps._summarize_products({"products": {"items": []}}), id="products"),
+        pytest.param(
+            mcp_apps._summarize_products({"product": {"id": "p", "name": "Bowl"}}), id="product"
+        ),
         pytest.param(
             mcp_apps._summarize_ads({"overview": {"accounts": []}}), id="ads"
         ),
