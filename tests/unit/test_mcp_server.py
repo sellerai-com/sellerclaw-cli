@@ -3,10 +3,12 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+from typing import Any
 
 import httpx
 import pytest
 import respx
+from mcp.server.mcpserver.exceptions import ToolError
 
 from sellerclaw_cli import __version__, mcp_apps
 from sellerclaw_cli._client import DEFAULT_TIMEOUT_SECONDS
@@ -345,6 +347,92 @@ def test_run_command_unknown_flag_raises(
 def test_run_command_rejects_body_on_command_without_one() -> None:
     with pytest.raises(UserInputError, match="does not take a body"):
         run_command("listings", "get", positionals={"listing_id": LISTING_ID}, body={"x": 1})
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    "body",
+    [
+        pytest.param({"product_ids": [ORDER_ID]}, id="the-caller-states-only-its-products"),
+        pytest.param(
+            {"product_ids": [ORDER_ID], "kind": "publish"},
+            id="a-caller-cannot-turn-the-verb-into-another-job",
+        ),
+    ],
+)
+def test_a_verb_of_a_general_endpoint_sends_the_constant_that_picks_its_branch(
+    body: dict[str, Any],
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """``attributes map`` is the bulk-job endpoint with ``kind=map_attributes``, and ``describe``
+    never lists ``kind`` — so a caller over MCP does not send it. Left out, the API answered 422
+    "kind: Field required" to every call, on every marketplace (seen live on staging)."""
+    route = respx.post(_url(fake_api_url, "attributes", "map", store_id=STORE_ID)).mock(
+        return_value=httpx.Response(202, json={"id": JOB_ID, "status": "queued"})
+    )
+
+    run_command("attributes", "map", positionals={"store_id": STORE_ID}, body=body)
+
+    assert json.loads(route.calls.last.request.content) == {
+        "product_ids": [ORDER_ID],
+        "kind": "map_attributes",
+    }
+
+
+_VARIATION_REFUSAL = {
+    "detail": {
+        "code": "variation_id_given",
+        "message": "That is a variation's id.",
+        "use_instead": ORDER_ID,
+    }
+}
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    ("arguments", "code", "message", "details"),
+    [
+        pytest.param(
+            {"group": "listings", "command": "get", "positionals": {"listing_id": LISTING_ID}},
+            "api_error",
+            "That is a variation's id.",
+            _VARIATION_REFUSAL,
+            id="an-api-refusal-keeps-the-id-to-use-instead",
+        ),
+        pytest.param(
+            {"group": "does-not-exist", "command": "list"},
+            "user_error",
+            "unknown group 'does-not-exist'. Call sellerclaw_groups.",
+            None,
+            id="a-call-the-caller-got-wrong",
+        ),
+    ],
+)
+def test_a_refused_call_reaches_the_caller_in_its_own_words(
+    arguments: dict[str, Any],
+    code: str,
+    message: str,
+    details: dict[str, Any] | None,
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """The SDK replaces any exception but its own ``ToolError`` with "Error executing tool
+    sellerclaw_run". Seen live on staging: every refusal — a missing field, the categories to pick
+    from — reached Claude as that one line, with nothing in it to correct. The tool hands back the
+    CLI's own error JSON instead, details and all."""
+    respx.get(f"{fake_api_url}/agent/listings/{LISTING_ID}").mock(
+        return_value=httpx.Response(422, json=_VARIATION_REFUSAL)
+    )
+
+    with pytest.raises(ToolError) as excinfo:
+        asyncio.run(build_server().call_tool("sellerclaw_run", arguments))
+
+    text = str(excinfo.value)
+    error = json.loads(text[text.index("{") :])["error"]
+    assert error["code"] == code
+    assert error["message"].startswith(message)
+    assert error.get("details") == details
 
 
 # --------------------------------------------------------------------------- background jobs

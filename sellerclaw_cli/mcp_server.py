@@ -48,14 +48,17 @@ launch. Authentication is inherited from the usual CLI config — ``SELLERCLAW_T
 
 from __future__ import annotations
 
+import functools
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from sellerclaw_cli import guides, mcp_apps
 from sellerclaw_cli._client import DEFAULT_TIMEOUT_SECONDS, Client
 from sellerclaw_cli._command_group import REGISTRY, Cmd, Flag, GroupSpec, positionals_of, upload_payload
-from sellerclaw_cli._errors import UserInputError
+from sellerclaw_cli._errors import CliError, UserInputError
 from sellerclaw_cli._job_wait import is_finished, looks_like_job, queued_note_for_call
+from sellerclaw_cli._output import error_json
 from sellerclaw_cli.commands._discover import _body_example
 
 if TYPE_CHECKING:
@@ -651,6 +654,11 @@ def run_command(
 
     if body is not None and not cmd.takes_body:
         raise UserInputError(f"{group} {command} does not take a body; drop the `body` argument.")
+    if cmd.body_const:
+        # The keys that pick the endpoint's branch (``attributes map`` is a bulk job of one kind).
+        # ``describe`` never lists them, so a caller cannot be expected to send them — the CLI adds
+        # them the same way.
+        body = {**(body or {}), **dict(cmd.body_const)}
 
     files = None
     if cmd.upload_file:
@@ -804,6 +812,27 @@ def _apps_extension() -> Any:
     return mcp_apps.build_extension(_client_for_tool)
 
 
+def _refusals_reach_the_caller(tool: Callable[..., Any]) -> Callable[..., Any]:
+    """Hand a failed call back as the CLI's own error JSON instead of a generic failure.
+
+    The SDK repeats the message of a ``ToolError`` to the client and replaces every other exception
+    with "Error executing tool <name>". Every refusal worth reading — a field the API wants, the id
+    to use instead, the categories to pick from, an unknown group — is a ``CliError``, so without
+    this a caller sees only that the call failed and has nothing to correct. The functions keep
+    raising ``CliError`` for anyone calling them directly; only the registered tool translates.
+    """
+    from mcp.server.mcpserver.exceptions import ToolError
+
+    @functools.wraps(tool)
+    def _tool(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return tool(*args, **kwargs)
+        except CliError as exc:
+            raise ToolError(error_json(exc)) from exc
+
+    return _tool
+
+
 def _register_tools(server: Any) -> None:
     """Register the four discovery/proxy tools on an ``MCPServer``.
 
@@ -830,28 +859,28 @@ def _register_tools(server: Any) -> None:
         )
 
     server.add_tool(
-        show_guide,
+        _refusals_reach_the_caller(show_guide),
         name="sellerclaw_guide",
         title="Read a SellerClaw guide",
         description=_GUIDE_TOOL_DESC,
         annotations=_reads_only("Read a SellerClaw guide"),
     )
     server.add_tool(
-        list_groups,
+        _refusals_reach_the_caller(list_groups),
         name="sellerclaw_groups",
         title="List SellerClaw commands",
         description=_GROUPS_TOOL_DESC,
         annotations=_reads_only("List SellerClaw commands"),
     )
     server.add_tool(
-        describe_command,
+        _refusals_reach_the_caller(describe_command),
         name="sellerclaw_describe",
         title="Describe a SellerClaw command",
         description=_DESCRIBE_TOOL_DESC,
         annotations=_reads_only("Describe a SellerClaw command"),
     )
     server.add_tool(
-        run_command,
+        _refusals_reach_the_caller(run_command),
         name="sellerclaw_run",
         title="Run a SellerClaw command",
         description=_RUN_TOOL_DESC,

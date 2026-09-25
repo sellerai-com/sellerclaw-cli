@@ -54,7 +54,16 @@ def print_error(
 ) -> int:
     """Serialize a CliError as compact JSON to stderr. Returns the error's exit code."""
     err_out = stderr if stderr is not None else sys.stderr
+    err_out.write(error_json(error) + "\n")
+    return error.exit_code
 
+
+def error_json(error: CliError) -> str:
+    """The structured error contract as one line of JSON: ``{"error": {code, message, …}}``.
+
+    The CLI writes it to stderr and the MCP server hands it back from a failed tool call, so a caller
+    reads a refusal — and its ``details``, such as the id to use instead — the same way at either door.
+    """
     payload: dict[str, Any] = {"code": error.code, "message": error.message}
     if error.status is not None:
         payload["status"] = error.status
@@ -64,10 +73,7 @@ def print_error(
         payload["hint"] = AUTH_HINT
     elif isinstance(error, PermissionDeniedError):
         payload["hint"] = PERMISSION_HINT
-
-    envelope = {"error": payload}
-    err_out.write(json.dumps(envelope, separators=(",", ":"), ensure_ascii=False) + "\n")
-    return error.exit_code
+    return json.dumps({"error": payload}, separators=(",", ":"), ensure_ascii=False)
 
 
 def _format_table(data: Any) -> str:

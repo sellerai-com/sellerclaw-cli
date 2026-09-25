@@ -32,8 +32,9 @@ SPECS = (
             "costs about a minute of model time, so this is a background job — poll it with "
             "'listings bulk-job', or --wait for the finished answer. Each product comes back with "
             "'filled_attributes' and a fresh 'needs_attributes' (what is still yours to set with "
-            "'listings bulk-update'). Max 10 products, and eBay only: elsewhere the specifics are "
-            "settled when the draft is created."
+            "'listings bulk-update'). Max 10 products, on eBay, Etsy, TikTok Shop and Walmart. On "
+            "eBay the result replaces the listing's item specifics, so run it before your own edits; "
+            "elsewhere it is merged into what the listing already holds."
         ),
         body=(
             body_field(
