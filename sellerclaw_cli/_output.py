@@ -58,11 +58,13 @@ def print_error(
     return error.exit_code
 
 
-def error_json(error: CliError) -> str:
+def error_json(error: CliError, *, sign_in_hint: bool = True) -> str:
     """The structured error contract as one line of JSON: ``{"error": {code, message, …}}``.
 
     The CLI writes it to stderr and the MCP server hands it back from a failed tool call, so a caller
     reads a refusal — and its ``details``, such as the id to use instead — the same way at either door.
+    ``sign_in_hint=False`` leaves out "run `sellerclaw auth login`" where no such command exists: a
+    hosted connector signs in through its own OAuth, not through this CLI.
     """
     payload: dict[str, Any] = {"code": error.code, "message": error.message}
     if error.status is not None:
@@ -70,7 +72,8 @@ def error_json(error: CliError) -> str:
     if error.details is not None:
         payload["details"] = error.details
     if isinstance(error, AuthError):
-        payload["hint"] = AUTH_HINT
+        if sign_in_hint:
+            payload["hint"] = AUTH_HINT
     elif isinstance(error, PermissionDeniedError):
         payload["hint"] = PERMISSION_HINT
     return json.dumps({"error": payload}, separators=(",", ":"), ensure_ascii=False)
