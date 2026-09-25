@@ -828,7 +828,9 @@ def _refusals_reach_the_caller(tool: Callable[..., Any]) -> Callable[..., Any]:
         try:
             return tool(*args, **kwargs)
         except CliError as exc:
-            raise ToolError(error_json(exc)) from exc
+            # A request with its own OAuth bearer came through the hosted connector, where the fix
+            # for a refused sign-in is reconnecting it — not a CLI command the caller does not have.
+            raise ToolError(error_json(exc, sign_in_hint=_request_token() is None)) from exc
 
     return _tool
 

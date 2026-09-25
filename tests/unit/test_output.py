@@ -16,7 +16,7 @@ from sellerclaw_cli._errors import (
     ServerError,
     UserInputError,
 )
-from sellerclaw_cli._output import OutputFormat, print_error, print_ok
+from sellerclaw_cli._output import OutputFormat, error_json, print_error, print_ok
 
 pytestmark = pytest.mark.unit
 
@@ -163,6 +163,12 @@ class TestPrintError:
         hint: Any = parsed["error"].get("hint")
         assert isinstance(hint, str) and hint, "auth_error must include a non-empty 'hint' field"
         assert "auth login" in hint.lower()
+
+    def test_a_hosted_connector_is_not_sent_to_a_cli_it_does_not_have(self) -> None:
+        # A connector signs in through its own OAuth; `sellerclaw auth login` is not its fix.
+        parsed = json.loads(error_json(AuthError("token revoked", status=401), sign_in_hint=False))
+
+        assert parsed == {"error": {"code": "auth_error", "message": "token revoked", "status": 401}}
 
     def test_permission_error_does_not_tell_the_caller_to_log_in(self) -> None:
         # A 403 means the token is fine and the action is not this caller's. Sending them to
