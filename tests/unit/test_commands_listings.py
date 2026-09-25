@@ -57,6 +57,26 @@ def test_adopt_marketplace_version_requires_listing_id(
 
 
 @respx.mock
+def test_search_asks_what_does_not_sell_and_refuses_a_made_up_state(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.get(f"{fake_api_url}/agent/listings/search").mock(
+        return_value=httpx.Response(200, json={"items": [], "total": 0})
+    )
+
+    asked = runner.invoke(
+        app, ["listings", "search", "--sale-state", "out_of_stock", "--sale-state", "not_selling"]
+    )
+    refused = runner.invoke(app, ["listings", "search", "--sale-state", "unsold"])
+
+    assert asked.exit_code == 0, asked.stderr
+    assert route.calls.last.request.url.params.get_list("sale_state") == ["out_of_stock", "not_selling"]
+    assert refused.exit_code != 0
+    assert route.call_count == 1
+
+
+@respx.mock
 def test_search_filters_by_the_variation_group(
     env_pointing_at_fake_api: None,  # noqa: ARG001
     fake_api_url: str,

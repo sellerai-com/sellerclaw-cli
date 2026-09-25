@@ -130,6 +130,17 @@ SPECS = (
                 ),
                 choices=("owner", "agent", "sync", "marketplace", "unknown"),
             ),
+            flag(
+                "sale_state",
+                repeatable=True,
+                help=(
+                    "Whether a shopper can buy it; repeat to combine. --sale-state out_of_stock "
+                    "--sale-state not_selling = 'what is not selling': live listings with nothing "
+                    "to sell, or that the channel hides, is reviewing, refused or lost. A live "
+                    "listing nobody can buy is still status 'active', so --status cannot ask this."
+                ),
+                choices=("selling", "out_of_stock", "not_selling", "not_published"),
+            ),
             flag("limit", type=int, minimum=1, maximum=200, default=25, help="Max results per page."),
             flag("offset", type=int, minimum=0, default=0, help="Results to skip (paging)."),
         ),
