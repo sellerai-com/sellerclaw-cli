@@ -312,12 +312,14 @@ SPECS = (
             "Apply per-listing changes to many listings at once — published ones too, not only "
             "drafts — and get each one's fresh readiness back in the same call. Body: 'items' is a "
             "list of {listing_id, patch:{title?, description?, sell_prices?, quantities?, images?, "
-            "variation_images?}} — the listing_id is the listing's own id, and a variation's id is "
-            "refused up front with the listing id to use instead (the whole batch, before anything "
-            "is written); sell_prices / quantities are keyed by SKU. Nothing reaches a "
-            "marketplace here: each edit is written locally and recorded as owed, and the next "
-            "publish delivers it. eBay takes title/description/images only; Amazon takes "
-            "price/stock only (its copy and photos belong to the ASIN card). The seller's own "
+            "variation_images?, attributes?}} — the listing_id is the listing's own id, and a "
+            "variation's id is refused up front with the listing id to use instead (the whole "
+            "batch, before anything is written); sell_prices / quantities are keyed by SKU. Nothing "
+            "reaches a marketplace here: each edit is written locally and recorded as owed, and the "
+            "next publish delivers it. A field a channel's publish cannot carry is refused with the "
+            "reason — item specifics ('attributes') go to eBay, Etsy, TikTok Shop, Walmart and "
+            "SellerCart; Amazon takes price/stock only (its copy and photos belong to the ASIN "
+            "card). The seller's own "
             "SellerCart shop is the exception to the debt: that row *is* the shop, so the edit is "
             "on the page as soon as this returns and there is no publish to wait for — never tell "
             "the owner a shop change is queued. One failing item does not sink the rest."
@@ -333,9 +335,13 @@ SPECS = (
                     "publish order — the first is the cover, and the list replaces what was "
                     "there), variation_images (variation listing id -> photo URL, null clears one), "
                     "package_weight_grams (what one packed unit weighs, in grams — eBay prices "
-                    "calculated postage from it and refuses a listing without it) and "
+                    "calculated postage from it and refuses a listing without it), "
                     "package_length_mm / package_width_mm / package_height_mm (the box; all three "
-                    "or none)."
+                    "or none) and attributes (item specifics, name -> list of values, each name "
+                    "spelled as `attributes schema` gives it; the map replaces the listing's whole "
+                    "set, so send the ones to keep too — `listings get` shows them. On Etsy and "
+                    "TikTok Shop a name or value the category does not list is refused with the ones "
+                    "it takes)."
                 ),
                 example=[
                     {"listing_id": "<uuid>", "patch": {"title": "New title"}},
@@ -344,6 +350,7 @@ SPECS = (
                         "patch": {"images": ["https://.../front.jpg", "https://.../back.jpg"]},
                     },
                     {"listing_id": "<uuid>", "patch": {"package_weight_grams": 28}},
+                    {"listing_id": "<uuid>", "patch": {"attributes": {"Material": ["Cotton"]}}},
                 ],
             ),
         ),
