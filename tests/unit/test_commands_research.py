@@ -168,3 +168,24 @@ def test_ebay_search_rejects_an_unsupported_sort(
 
     assert result.exit_code != 0
     assert route.call_count == 0
+
+
+@respx.mock
+def test_serp_competitors_sends_keywords_and_refuses_a_domain_locally(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """The API finds the domains ranking for a set of keywords; it has no "competitors of a domain"
+    mode. The command kept asking for ``domain`` after the API moved on, so every call failed."""
+    route = respx.post(f"{fake_api_url}/agent/research/seo/serp-competitors").mock(
+        return_value=httpx.Response(200, json={"competitors": []})
+    )
+    body = {"keywords": ["cat water fountain", "wireless cat fountain"], "limit": 10}
+
+    sent = runner.invoke(app, ["research-seo", "serp-competitors", "-b", json.dumps(body)])
+    refused = runner.invoke(app, ["research-seo", "serp-competitors", "-b", json.dumps({"domain": "rival.com"})])
+
+    assert sent.exit_code == 0, sent.stderr
+    assert json.loads(route.calls.last.request.content) == body
+    assert refused.exit_code != 0
+    assert route.call_count == 1

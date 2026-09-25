@@ -13,7 +13,7 @@ sellerclaw_run(group="research-trends", command="related-queries", flags={"keywo
 
 # SEO / keyword research (body-driven)
 sellerclaw_run(group="research-seo", command="keyword-ideas",    body={"keyword": "wireless mouse"})
-sellerclaw_run(group="research-seo", command="serp-competitors", body={"keyword": "wireless mouse"})
+sellerclaw_run(group="research-seo", command="serp-competitors", body={"keywords": ["wireless mouse", "bluetooth mouse"]})
 
 # What the marketplace itself already lists (query, gtin, or a competitor's storefront)
 sellerclaw_run(group="research-catalog", command="ebay-search",
@@ -40,7 +40,9 @@ sellerclaw_run(group="web", command="scrape", flags={"url": "https://rival.examp
 
 ## A listing on a marketplace is data, not a page
 
-`listing-get` returns a rival's price, stock, seller, condition, rating and specifications as fields.
+`listing-get` returns a rival's price, stock, seller, condition, rating and specifications as fields,
+plus the seller's own selling points (`features`) and `description` where the storefront publishes
+them — most publish no specifications, so capacity, materials and what is in the box are read there.
 Scraping the same page returns markdown a price still has to be guessed out of — and Amazon, Etsy and
 eBay answer plain fetches with a bot wall often enough that the guess is frequently of nothing. Reach
 for `web scrape` only for storefronts this does not cover.
