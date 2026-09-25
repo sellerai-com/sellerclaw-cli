@@ -2,12 +2,13 @@
 
 MCP Apps (``io.modelcontextprotocol/ui``) lets a tool say "draw my answer with *this* document".
 The host loads the document into a sandboxed iframe, hands it the tool's result, and lets it call
-back for more. SellerClaw ships seven: what needs the owner, the store summary, the order board
-(which also opens one order), listings, ads, connections, and the approval card.
+back for more. SellerClaw ships eight: what needs the owner, the store summary, the order board
+(which also opens one order), listings, a catalog product with its supplier and every store it is
+listed in, ads, connections, and the approval card.
 
-The cards read; they do not write. The only two tools a card may call to change anything are the
-order board's "mark shipped" and the approval card's answer, both callable by the card alone. Every
-other button on a card either opens a page of ours or hands Claude a request in the owner's words —
+The cards read; they do not write. The only tool a card may call to change anything is the approval
+card's answer, callable by the card alone. Every other button on a card either opens a page of ours
+or hands Claude a request in the owner's words —
 the same rule the web app follows, where listings, ads and orders are changed through the
 assistant and never by a button on the page.
 
@@ -40,7 +41,10 @@ import threading
 import time
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
-from typing import Any, Literal
+from decimal import Decimal
+from typing import Any
+from urllib.parse import quote
+from uuid import UUID
 
 from sellerclaw_cli._client import DEFAULT_TIMEOUT_SECONDS, Client
 from sellerclaw_cli._errors import CliError
@@ -51,7 +55,16 @@ APPS_BASE_ENV = "SELLERCLAW_MCP_APPS_BASE"
 DEFAULT_APPS_BASE = "https://app.sellerclaw.ai"
 
 #: ``<screen>`` is both the document's name on that origin and the ``ui://`` resource's.
-SCREENS = ("attention", "store-summary", "orders", "listings", "ads", "connections", "approval")
+SCREENS = (
+    "attention",
+    "store-summary",
+    "orders",
+    "listings",
+    "products",
+    "ads",
+    "connections",
+    "approval",
+)
 
 #: How long a fetched document is reused. Not forever: the hosted app keeps a machine warm, so a
 #: process outlives several UI deploys, and a permanently cached document would go on naming chunk
@@ -102,6 +115,10 @@ _ORDER_PICTURES_CAP = 6
 
 #: Enough of the same product's listings to cover every store an owner plausibly has.
 _ELSEWHERE_LIMIT = 50
+
+#: A catalog list opens on this many products. Unasked, the catalog route answers with the whole
+#: catalog, which is thousands of rows for some sellers and never what a card can show.
+_PRODUCTS_LIMIT = 25
 
 
 def apps_base() -> str:
@@ -218,6 +235,44 @@ def _forget_documents() -> None:
 _READ_TIMEOUT_SECONDS = 60.0
 
 ClientFactory = Callable[[float], Client]
+
+
+def _sale_states(value: list[str] | str | None) -> list[str] | None:
+    """The sale states a list was asked for, as a list — a model sends one as a bare string."""
+    if value is None:
+        return None
+    parts = value.split(",") if isinstance(value, str) else value
+    states = [part.strip() for part in parts if part and part.strip()]
+    return states or None
+
+
+def _is_uuid(value: str) -> bool:
+    try:
+        UUID(value)
+    except ValueError:
+        return False
+    return True
+
+
+def _segment(value: str) -> str:
+    """One path segment, whatever the owner typed: ``#1001`` in a raw path starts its fragment."""
+    return quote(value, safe="")
+
+
+def _words(value: str | None) -> str | None:
+    """The owner's words, trimmed — ``None`` for nothing at all, so a blank is never a search."""
+    text = (value or "").strip()
+    return text or None
+
+
+def _only_match(found: Any) -> dict[str, Any] | None:
+    """The one row a search found, when it found exactly one — the thing the owner named."""
+    if not isinstance(found, dict):
+        return None
+    items = found.get("items") or []
+    if len(items) == 1 and found.get("total") in (None, 1) and isinstance(items[0], dict):
+        return items[0]
+    return None
 
 
 def _query(**params: Any) -> dict[str, Any]:
@@ -343,7 +398,24 @@ def _summarize_store_summary(payload: dict[str, Any]) -> str:
 
 def _summarize_orders(payload: dict[str, Any]) -> str:
     overview = payload.get("overview") or {}
-    shown = len((payload.get("orders") or {}).get("items") or [])
+    found = payload.get("orders") or {}
+    shown = len(found.get("items") or [])
+    query = (payload.get("filters") or {}).get("query")
+    if query:
+        if not shown:
+            # Said with the reason, because "no such order" is usually "not one we ever saw".
+            return (
+                f'No order matches "{query}". The board holds the orders SellerClaw has seen: an '
+                f"order joins while the marketplace still lists it unfulfilled, so one shipped "
+                f"before the store was connected was never imported. {_SHOWN_TO_THE_OWNER}"
+            )
+        total = found.get("total")
+        head = (
+            f"Showing {shown} of {total} orders"
+            if isinstance(total, int) and total > shown
+            else _plural(shown, "order")
+        )
+        return f'{head} matching "{query}"; the owner can open the one they meant. {_SHOWN_TO_THE_OWNER}'
     total = overview.get("total")
     lines = [f"Showing {shown} orders." if total is None else f"Showing {shown} of {total} orders."]
     by_status = overview.get("by_status") or {}
@@ -396,10 +468,30 @@ def _summarize_attention(payload: dict[str, Any]) -> str:
         first = "; ".join(f'"{item.get("title")}"' for item in items[:3] if item.get("title"))
         lines.append(f"{queue}. First: {first}." if first else f"{queue}.")
     blocks = summary.get("degraded_blocks") or []
+    lines.extend(_approvals_line(items, blocks))
     if blocks:
         lines.append(f"Could not check: {', '.join(str(block) for block in blocks)}.")
     lines.append(_SHOWN_TO_THE_OWNER)
     return " ".join(lines)
+
+
+def _approvals_line(items: list[dict[str, Any]], degraded_blocks: list[Any]) -> list[str]:
+    """Whether a request waits on the owner's decision — said outright, either way.
+
+    "Is anything waiting for my approval?" is answered from this card, and a queue of fourteen rows
+    summed up by count left the model guessing: it told the owner the card could approve them. It
+    cannot — a request is decided on its own card — and here there was none to decide.
+    """
+    if "approvals" in {str(block) for block in degraded_blocks}:
+        return []  # Unchecked is not "none"; the degraded line below says so.
+    requests = [item for item in items if item.get("kind") == "approval"]
+    if not requests:
+        return ["No request is waiting on the owner's approval."]
+    ids = [str(item["target_id"]) for item in requests if item.get("target_id")]
+    line = f"{_plural(len(requests), 'request')} waiting on the owner's approval"
+    if ids:
+        line += f" (ids {', '.join(ids)}); each is approved or declined on its own card, sellerclaw_approval"
+    return [line + "."]
 
 
 def _store_name(stores: Any, sales_channel_id: Any) -> str | None:
@@ -431,15 +523,33 @@ def _summarize_listings(payload: dict[str, Any]) -> str:
         ]
         if others:
             lines.append(f"Also listed in {_plural(len(others), 'other store')}.")
+        if listing_key or listing.get("id"):
+            lines.append(f"SellerClaw listing id {listing_key or listing.get('id')}.")
     else:
         search = payload.get("listings") or {}
         items = search.get("items") or []
         total = search.get("total")
-        lines = [
-            f"Showing {len(items)} of {total} listings."
+        filters = payload.get("filters") or {}
+        query = filters.get("query")
+        states = filters.get("sale_state") or []
+        # Said with the filter it answers, so "which aren't selling?" gets "none are" when that is
+        # the truth, not "0 listings" read as an empty store.
+        narrowed = " or ".join(str(state).replace("_", " ") for state in states)
+        if narrowed and not items:
+            return f"No listings are {narrowed}. {_SHOWN_TO_THE_OWNER}"
+        if query and not items:
+            return (
+                f'No listing matches "{query}". A product in the catalog that was never listed is '
+                f"found with sellerclaw_products. {_SHOWN_TO_THE_OWNER}"
+            )
+        head = (
+            f"Showing {len(items)} of {total} listings"
             if isinstance(total, int) and total > len(items)
-            else f"{_plural(len(items), 'listing')}."
-        ]
+            else _plural(len(items), "listing")
+        )
+        if query:
+            head += f' matching "{query}"'
+        lines = [head + (f" that are {narrowed}." if narrowed else ".")]
         not_selling = sum(1 for row in items if row.get("sale_state") == "not_selling")
         out_of_stock = sum(1 for row in items if row.get("sale_state") == "out_of_stock")
         parts = [
@@ -452,6 +562,14 @@ def _summarize_listings(payload: dict[str, Any]) -> str:
         ]
         if parts:
             lines.append(f"Among them, {' and '.join(parts)}.")
+        products = {row.get("product_id") for row in items}
+        if len(items) > 1 and len(products) == 1 and None not in products:
+            # One product in several stores: the product card shows all of them at once, with
+            # the supplier — offered, not opened, since the owner asked about a listing.
+            lines.append(
+                f"All of them are one catalog product; sellerclaw_products(product="
+                f'"{products.pop()}") shows it with its supplier and every store on one card.'
+            )
     lines.append(_SHOWN_TO_THE_OWNER)
     return " ".join(lines)
 
@@ -472,6 +590,122 @@ def _summarize_order(payload: dict[str, Any]) -> str:
         lines.append(f"Tracking {tracking}" + (f" ({carrier})." if carrier else "."))
     if order.get("has_unresolved_items"):
         lines.append("Some items are not matched to a supplier yet.")
+    if order.get("id"):
+        # So a follow-up ("add the tracking to it") acts on this order without searching again.
+        lines.append(f"SellerClaw order id {order['id']}.")
+    lines.append(_SHOWN_TO_THE_OWNER)
+    return " ".join(lines)
+
+
+_SALE_STATE_WORDS = (
+    ("selling", "selling"),
+    ("out_of_stock", "out of stock"),
+    ("not_selling", "not selling"),
+    ("not_published", "not published"),
+)
+
+
+def _variation_value(product: dict[str, Any], variation: dict[str, Any], key: str) -> Any:
+    """A variation's figure, from the variation or — when every variation agrees on it — from the
+    product's ``variation_common``, where the API states it once."""
+    if key in variation:
+        return variation[key]
+    return (product.get("variation_common") or {}).get(key)
+
+
+def _cost_range(product: dict[str, Any]) -> str | None:
+    """What one unit costs from the supplier — the card's own figure, so the two never disagree.
+
+    In the supplier's currency, and nothing when the variations are quoted in more than one.
+    Delivered cost only when every priced variation has it (a range mixing delivered and bare
+    prices compares nothing), and said "with shipping" only when there is shipping in it.
+    """
+    priced = [
+        variation
+        for variation in product.get("variations") or []
+        if _variation_value(product, variation, "purchase_price") is not None
+    ]
+    currencies = {
+        currency
+        for variation in priced
+        if (currency := _variation_value(product, variation, "purchase_currency"))
+    }
+    if not priced or len(currencies) > 1:
+        return None
+    delivered = all(
+        _variation_value(product, variation, "landed_cost") is not None for variation in priced
+    )
+    key = "landed_cost" if delivered else "purchase_price"
+    costs = [Decimal(str(_variation_value(product, variation, key))) for variation in priced]
+    freight = any(
+        Decimal(str(_variation_value(product, variation, "shipping_cost") or 0)) > 0
+        for variation in priced
+    )
+    currency = next(iter(currencies), None)
+    low, high = _money(str(min(costs)), currency), _money(str(max(costs)), currency)
+    said = low if low == high else f"{min(costs)}–{high}"
+    return f"{said} with shipping" if delivered and freight else said
+
+
+def _summarize_products(payload: dict[str, Any]) -> str:
+    product = payload.get("product")
+    if product:
+        lines = [f'"{product.get("name") or "The product"}" (SellerClaw product id {product.get("id")}).']
+        listings = payload.get("listings")
+        if isinstance(listings, dict):
+            items = listings.get("items") or []
+            if not items:
+                lines.append("It is not listed in any store.")
+            else:
+                stores = {row.get("sales_channel_id") for row in items}
+                states = [row.get("sale_state") for row in items]
+                parts = [
+                    f"{states.count(state)} {words}"
+                    for state, words in _SALE_STATE_WORDS
+                    if states.count(state)
+                ]
+                lines.append(
+                    f"{_plural(len(items), 'listing')} in {_plural(len(stores), 'store')}"
+                    + (f": {', '.join(parts)}." if parts else ".")
+                )
+        supplier = product.get("supplier_name")
+        cost = _cost_range(product)
+        variations = product.get("variations") or []
+        stock = sum(int(variation.get("available_quantity") or 0) for variation in variations)
+        facts = [
+            fact
+            for fact in (
+                f"supplier {supplier}" if supplier else None,
+                f"cost {cost}" if cost else None,
+                f"{stock} in stock" if variations else None,
+            )
+            if fact
+        ]
+        if facts:
+            said = ", ".join(facts)
+            lines.append(f"{said[0].upper()}{said[1:]}.")
+        problems = (payload.get("problems") or {}).get("items") or []
+        if problems:
+            lines.append(f"{_plural(len(problems), 'marketplace problem')} on its listings.")
+    else:
+        found = payload.get("products") or {}
+        items = found.get("items") or []
+        total = found.get("total")
+        query = (payload.get("filters") or {}).get("query")
+        if not items:
+            if query:
+                return (
+                    f'Nothing in the catalog matches "{query}". A listing imported from a store is '
+                    f'not always in the catalog; sellerclaw_listings(query="{query}") searches the '
+                    f"listings. {_SHOWN_TO_THE_OWNER}"
+                )
+            return f"The catalog is empty. {_SHOWN_TO_THE_OWNER}"
+        head = (
+            f"Showing {len(items)} of {total} catalog products"
+            if isinstance(total, int) and total > len(items)
+            else _plural(len(items), "catalog product")
+        )
+        lines = [head + (f' matching "{query}"' if query else "") + "; the owner can open one."]
     lines.append(_SHOWN_TO_THE_OWNER)
     return " ".join(lines)
 
@@ -483,6 +717,10 @@ def _summarize_ads(payload: dict[str, Any]) -> str:
         return f"No ad accounts are connected. {_SHOWN_TO_THE_OWNER}"
     days = overview.get("window_days")
     lines = [f"Ads, last {days} days." if days else "Ads."]
+    # Said outright, because the card lists only running and paused campaigns: a model reading
+    # "spent $43" beside "2 running" credits the two with a spend that ended campaigns made.
+    if overview.get("totals"):
+        lines.append("Totals cover every campaign that ran in the window, ended ones included.")
     # One sentence per currency: the totals are kept apart on purpose, and adding them here would
     # put a number in the model's mouth that the card itself refuses to show.
     for total in overview.get("totals") or []:
@@ -502,7 +740,7 @@ def _summarize_ads(payload: dict[str, Any]) -> str:
         if campaign.get("status") == "enabled"
     )
     if running:
-        lines.append(f"{_plural(running, 'campaign')} running.")
+        lines.append(f"{_plural(running, 'campaign')} running now.")
     expired = [
         (row.get("account") or {}).get("display_name")
         for row in accounts
@@ -594,19 +832,15 @@ last_7d, last_30d, last_90d, this_month, last_month, this_year.\
 
 _ORDERS_DESC = """\
 The order board as an interactive card: who is waiting, for how long, and for how much, oldest wait
-first. The owner can filter by status, open an order, and mark one shipped on the card itself.
+first. The owner can filter by status and open an order.
 
-Prefer this over running an orders command for the same question. Pass `status` to open on one
-status; omit it for the whole board. Pass `order` (the SellerClaw order id) to open that one order
-instead — its items, where it ships, the supplier's order and the tracking.\
-"""
-
-_ORDER_MARK_SHIPPED_DESC = """\
-Close one order as shipped and hand back the view that asked. Records a shipment that already exists
-on the sales channel — it does not create one there.
-
-`return_to` is `board` (default) or `order`. For the board, pass the `status` it is currently
-filtered to, so the answer comes back through the same filter the person is looking at.\
+Prefer this over running an orders command for the same question, and pass the owner's own words —
+do not look an order up first. `order` opens one order in full (its items, where it ships, the
+supplier's order and the tracking): the number they quote (#1001), the marketplace's order id
+(14-15000-75039) or the SellerClaw id. A number two stores share shows both to choose from.
+`query` narrows the board to orders matching the buyer's name or email, a SKU or item title, or
+part of a number — and opens the order itself when only one matches. `status` opens on one
+status; omit everything for the whole board.\
 """
 
 _ATTENTION_DESC = """\
@@ -622,15 +856,36 @@ can hand any other row to you from the card, and it arrives as an ordinary messa
 
 _LISTINGS_DESC = """\
 Listings as an interactive card: which ones sell, which are out of stock or refused, and one of them
-in full.
+in full — photos, price, stock, whether a shopper can buy it and why not, what the marketplace
+refused, and the same product in the owner's other stores.
 
-Without `listing`, a list — narrow it by `store` (a store id), `status` (draft, active, published,
-withdrawn, removed), `query` (words of the title or a SKU), or `product` (a catalog product id, for
-that product in every store). With `listing` (a listing id, or the variation-group id a list row
-carries), that listing in full: photos, price, stock, whether a shopper can buy it and why not, what
-the marketplace refused, and the same product in the owner's other stores.
+Pass the owner's own words; do not look a listing up first. `query` finds listings by part of the
+title, a SKU or the marketplace's item number, and opens the listing itself when only one matches.
+Narrow a list by `store` (a store id) or `status` (draft, active, published, withdrawn, removed).
+`sale_state` narrows it by whether a shopper can buy the listing — selling, out_of_stock,
+not_selling (hidden, under review, refused or gone from the marketplace), not_published; pass
+several. "Which listings aren't selling?" is `["out_of_stock", "not_selling"]`: a live listing
+nobody can buy still has the status `active`, so `status` cannot answer it. `listing` opens one
+listing by the id a list row carries.
 
-The card changes nothing. To change a listing, use the listings commands.\
+For a product rather than one store's listing of it — what it is, who supplies it, where it is
+listed — use `sellerclaw_products`. The card changes nothing; to change a listing, use the
+listings commands.\
+"""
+
+_PRODUCTS_DESC = """\
+A catalog product as an interactive card: what it costs from the supplier and how much they hold,
+every store it is listed in with its price and whether it sells there, the supplier and its page,
+and what the marketplaces refused — one card instead of a card per listing.
+
+Prefer this for "tell me about X", "where is X listed", "who supplies X" or "how is X doing across
+my stores". Pass the owner's own words as `query` — part of the name, or a SKU — and do not look
+the product up first: one match opens the product, several show a list to choose from. `product`
+opens one by the id a list row carries. With nothing passed, the newest products in the catalog.
+
+A listing imported from a store is not always in the catalog; when nothing matches, search the
+listings (`sellerclaw_listings`). The card changes nothing; to change a product, use the catalog
+commands.\
 """
 
 _ADS_DESC = """\
@@ -756,16 +1011,16 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
                 payload["store_name"] = name
         return payload
 
-    def _read_orders(client: Client, status: str | None, limit: int | None) -> dict[str, Any]:
-        return {
-            "orders": client.request(
-                "GET", "/agent/orders", params=_query(status=status, limit=limit), read_only=True
-            ),
-            "overview": client.request("GET", "/agent/orders/overview", read_only=True),
-        }
-
-    def _read_order(client: Client, order_id: str) -> dict[str, Any]:
-        order = client.request("GET", f"/agent/orders/{order_id}", read_only=True)
+    def _read_order(
+        client: Client, order_id: str, known: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        # ``known`` is the row a search already returned — the same shape the single read answers
+        # with, so reading it again would only cost a round trip.
+        order = (
+            known
+            if known is not None
+            else client.request("GET", f"/agent/orders/{_segment(order_id)}", read_only=True)
+        )
         payload: dict[str, Any] = {"order": order}
         # An order line carries the listing it was bought from, not a picture; the listing has one.
         # Best-effort per item: a listing since removed costs that row its thumbnail, not the card.
@@ -787,39 +1042,79 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
             payload["item_images"] = pictures
         return payload
 
-    def _read_listings(
+    def _read_orders(
         client: Client,
         *,
-        listing: str | None,
-        product: str | None,
-        store: str | None,
         status: str | None,
         query: str | None,
         limit: int | None,
+        open_only_match: bool = True,
     ) -> dict[str, Any]:
-        # Echoed back so the card's "Back" returns to the very list the owner opened a listing from.
-        filters = _query(store=store, status=status, query=query, product=product, limit=limit)
-        payload: dict[str, Any] = {"stores": _store_identities(client), "filters": filters}
-        if listing is None:
-            payload["listings"] = client.request(
-                "GET",
-                "/agent/listings/search",
-                params=_query(q=query, product_id=product, store_id=store, status=status, limit=limit),
-                read_only=True,
-            )
-            return payload
+        """The board — or, when the owner's words name exactly one order, that order."""
+        filters = _query(status=status, query=query, limit=limit)
+        orders = client.request(
+            "GET", "/agent/orders", params=_query(status=status, q=query, limit=limit), read_only=True
+        )
+        only = _only_match(orders) if query and open_only_match else None
+        if only is not None:
+            # Asked for "Jane's order" and there is one: the order, not a board of one row. Marked,
+            # so the card's "Back" goes to the whole board instead of searching its way back here.
+            order = _read_order(client, str(only.get("id")), known=only)
+            return {**order, "filters": filters, "sole_match": True}
+        return {
+            "orders": orders,
+            "overview": client.request("GET", "/agent/orders/overview", read_only=True),
+            # Echoed so the card shows the status it was opened on and "Back" returns to this board.
+            "filters": filters,
+        }
 
-        detail = client.request("GET", f"/agent/listings/{listing}", read_only=True) or {}
+    def _read_named_order(
+        client: Client, reference: str, *, status: str | None, query: str | None, limit: int | None
+    ) -> dict[str, Any]:
+        """The order the owner named — our id, its number or the marketplace's id.
+
+        A number nothing answers to, or one two stores share, becomes a search for those words:
+        the owner sees the orders it could mean and picks, instead of a refusal. That search stays a
+        board even with one row: it matches parts of numbers, buyers and SKUs, so asked for 1001 it
+        may find #10010 — shown as a match to choose, never opened as the order that was asked for.
+        """
+        try:
+            payload = _read_order(client, reference)
+        except CliError as exc:
+            if exc.status not in (404, 409):
+                raise
+            return _read_orders(
+                client, status=status, query=reference, limit=limit, open_only_match=False
+            )
+        # The board the order was opened from, carried along for "Back".
+        payload["filters"] = _query(status=status, query=query, limit=limit)
+        return payload
+
+    def _listing_detail(client: Client, reference: str) -> dict[str, Any] | None:
+        """One listing by our id, or ``None`` when the words are not one of our ids."""
+        if not _is_uuid(reference):
+            return None
+        try:
+            detail = client.request("GET", f"/agent/listings/{reference}", read_only=True)
+        except CliError as exc:
+            if exc.status == 404:
+                # Wix and others name their items with UUIDs too; the search below tries it as theirs.
+                return None
+            raise
+        return detail if isinstance(detail, dict) else None
+
+    def _listing_sections(client: Client, detail: dict[str, Any]) -> dict[str, Any]:
+        sections: dict[str, Any] = {}
         # The same route answers a single row or a whole variation group; the two shapes are
         # drawn differently, so the card is told which one it holds rather than left to guess. A
         # group carries ``variations`` (``variants`` on a server older than this client).
         if "variations" in detail or "variants" in detail:
-            payload["group"] = detail
+            sections["group"] = detail
         else:
-            payload["listing"] = detail
+            sections["listing"] = detail
             if detail.get("product_id"):
                 try:
-                    payload["problems"] = client.request(
+                    sections["problems"] = client.request(
                         "GET",
                         "/agent/listing-problems",
                         params=_query(
@@ -833,7 +1128,7 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
                     pass
         if detail.get("product_id"):
             try:
-                payload["elsewhere"] = client.request(
+                sections["elsewhere"] = client.request(
                     "GET",
                     "/agent/listings/search",
                     params={"product_id": detail["product_id"], "limit": _ELSEWHERE_LIMIT},
@@ -842,7 +1137,118 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
             except CliError:
                 # Like the refusals above: the other stores are a section of the card, not the card.
                 pass
+        return sections
+
+    def _read_listings(
+        client: Client,
+        *,
+        listing: str | None,
+        product: str | None,
+        store: str | None,
+        status: str | None,
+        query: str | None,
+        sale_state: list[str] | None,
+        limit: int | None,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {"stores": _store_identities(client)}
+        if listing is not None:
+            detail = _listing_detail(client, listing)
+            if detail is not None:
+                # Echoed so the card's "Back" returns to the very list the listing was opened from.
+                payload["filters"] = _query(
+                    store=store,
+                    status=status,
+                    query=query,
+                    product=product,
+                    sale_state=sale_state,
+                    limit=limit,
+                )
+                return {**payload, **_listing_sections(client, detail)}
+            # Not one of our ids: the marketplace's item number, a SKU, a title — a search.
+            query = listing
+        payload["filters"] = _query(
+            store=store, status=status, query=query, product=product, sale_state=sale_state, limit=limit
+        )
+        found = client.request(
+            "GET",
+            "/agent/listings/search",
+            params=_query(
+                q=query,
+                product_id=product,
+                store_id=store,
+                status=status,
+                sale_state=sale_state,
+                limit=limit,
+            ),
+            read_only=True,
+        )
+        only = _only_match(found) if query else None
+        detail = (
+            _listing_detail(client, str(only.get("listing_id") or "")) if only is not None else None
+        )
+        if detail is not None:
+            # The owner named one listing and there is one: open it, and mark it so "Back" lists
+            # every listing instead of searching its way straight back here.
+            return {**payload, **_listing_sections(client, detail), "sole_match": True}
+        payload["listings"] = found
         return payload
+
+    def _product_sections(client: Client, product: dict[str, Any]) -> dict[str, Any]:
+        sections: dict[str, Any] = {"product": product, "stores": _store_identities(client)}
+        product_id = product.get("id")
+        # Where it is listed and what the marketplaces refused are sections of the card, not the
+        # card: a product still reads without them, it just says nothing about its stores.
+        try:
+            sections["listings"] = client.request(
+                "GET",
+                "/agent/listings/search",
+                params={"product_id": product_id, "limit": _ELSEWHERE_LIMIT},
+                read_only=True,
+            )
+        except CliError:
+            pass
+        try:
+            sections["problems"] = client.request(
+                "GET", "/agent/listing-problems", params={"product_id": product_id}, read_only=True
+            )
+        except CliError:
+            pass
+        return sections
+
+    def _read_products(
+        client: Client, *, product: str | None, query: str | None, limit: int | None
+    ) -> dict[str, Any]:
+        if product is not None:
+            found: Any = None
+            if _is_uuid(product):
+                try:
+                    found = client.request(
+                        "GET", f"/agent/products/{product}", read_only=True
+                    )
+                except CliError as exc:
+                    if exc.status != 404:
+                        raise
+            if isinstance(found, dict):
+                return {
+                    **_product_sections(client, found),
+                    # The list the product was opened from, carried along for "Back".
+                    "filters": _query(query=query, limit=limit),
+                }
+            # Not one of our ids: a name, a SKU, a supplier's item — a search.
+            query = product
+        filters = _query(query=query, limit=limit)
+        products = client.request(
+            "GET",
+            "/agent/products",
+            params=_query(q=query, limit=limit or _PRODUCTS_LIMIT),
+            read_only=True,
+        )
+        only = _only_match(products) if query else None
+        if only is not None:
+            one = client.request("GET", f"/agent/products/{only.get('id')}", read_only=True)
+            if isinstance(one, dict):
+                return {**_product_sections(client, one), "filters": filters, "sole_match": True}
+        return {"products": products, "filters": filters}
 
     def _read_attention(client: Client) -> dict[str, Any]:
         return {"summary": client.request("GET", "/agent/dashboard/summary", read_only=True)}
@@ -912,42 +1318,21 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
         annotations=_reads_only("Show the order board"),
     )
     def sellerclaw_orders(
-        status: str | None = None, limit: int | None = None, order: str | None = None
-    ) -> Any:
-        with _refusals_in_their_own_words(), client_for_tool(DEFAULT_TIMEOUT_SECONDS) as client:
-            if order is not None:
-                payload = _read_order(client, order)
-                return _result(payload, _summarize_order(payload))
-            payload = _read_orders(client, status, limit)
-        return _result(payload, _summarize_orders(payload))
-
-    @apps.tool(
-        resource_uri=resource_uri("orders"),
-        # The board's own button, not a second way for a model to close an order: that verb already
-        # exists on ``sellerclaw_run`` with its full schema and the channel rule spelled out.
-        visibility=["app"],
-        name="sellerclaw_order_mark_shipped",
-        title="Mark an order shipped",
-        description=_ORDER_MARK_SHIPPED_DESC,
-        annotations=_acts("Mark an order shipped"),
-    )
-    def sellerclaw_order_mark_shipped(
-        order: str,
         status: str | None = None,
         limit: int | None = None,
-        return_to: Literal["board", "order"] = "board",
+        order: str | None = None,
+        query: str | None = None,
     ) -> Any:
         with _refusals_in_their_own_words(), client_for_tool(DEFAULT_TIMEOUT_SECONDS) as client:
-            # A refusal here is the channel saying it holds no shipment, and its wording names the
-            # command that would create one. Let it travel: the board shows it verbatim.
-            client.request("POST", f"/agent/orders/{order}/shipped")
-            if return_to == "order":
-                # Pressed on the one-order view: answer with that order, now shipped.
-                payload = _read_order(client, order)
-                return _result(payload, _summarize_order(payload))
-            # Re-read through the board's *own* filter. Answering with everything would leave the
-            # card showing every status under a chip that still says "awaiting shipment".
-            payload = _read_orders(client, status, limit)
+            reference = _words(order)
+            if reference is not None:
+                payload = _read_named_order(
+                    client, reference, status=status, query=_words(query), limit=limit
+                )
+            else:
+                payload = _read_orders(client, status=status, query=_words(query), limit=limit)
+        if "order" in payload:
+            return _result(payload, _summarize_order(payload))
         return _result(payload, _summarize_orders(payload))
 
     @apps.tool(
@@ -1014,19 +1399,38 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
         store: str | None = None,
         status: str | None = None,
         query: str | None = None,
+        sale_state: list[str] | str | None = None,
         limit: int | None = None,
     ) -> Any:
         with _refusals_in_their_own_words(), client_for_tool(DEFAULT_TIMEOUT_SECONDS) as client:
             payload = _read_listings(
                 client,
-                listing=listing,
+                listing=_words(listing),
                 product=product,
                 store=store,
                 status=status,
-                query=query,
+                query=_words(query),
+                sale_state=_sale_states(sale_state),
                 limit=limit,
             )
         return _result(payload, _summarize_listings(payload))
+
+    @apps.tool(
+        resource_uri=resource_uri("products"),
+        visibility=["model", "app"],
+        name="sellerclaw_products",
+        title="Show a catalog product",
+        description=_PRODUCTS_DESC,
+        annotations=_reads_only("Show a catalog product"),
+    )
+    def sellerclaw_products(
+        product: str | None = None, query: str | None = None, limit: int | None = None
+    ) -> Any:
+        with _refusals_in_their_own_words(), client_for_tool(DEFAULT_TIMEOUT_SECONDS) as client:
+            payload = _read_products(
+                client, product=_words(product), query=_words(query), limit=limit
+            )
+        return _result(payload, _summarize_products(payload))
 
     @apps.tool(
         resource_uri=resource_uri("ads"),
@@ -1064,8 +1468,8 @@ def tool_names() -> Sequence[str]:
         "sellerclaw_attention",
         "sellerclaw_store_summary",
         "sellerclaw_orders",
-        "sellerclaw_order_mark_shipped",
         "sellerclaw_listings",
+        "sellerclaw_products",
         "sellerclaw_ads",
         "sellerclaw_connections",
         "sellerclaw_approval",

@@ -285,6 +285,20 @@ def test_run_command_substitutes_positional_and_returns_response(
 
 
 @respx.mock
+def test_run_command_sends_an_order_number_as_one_path_segment(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """An owner's ``#1001`` must reach the order, not become the URL's fragment."""
+    route = respx.get(f"{fake_api_url}/agent/orders/%231001").mock(
+        return_value=httpx.Response(200, json={"id": "order"})
+    )
+    run_command("orders", "get", positionals={"order_id": "#1001"})
+    assert route.call_count == 1
+    assert route.calls.last.request.url.raw_path == b"/agent/orders/%231001"
+
+
+@respx.mock
 def test_run_command_maps_flags_to_query_params_and_drops_unset(
     env_pointing_at_fake_api: None,  # noqa: ARG001
     fake_api_url: str,
@@ -570,11 +584,11 @@ def test_build_server_registers_the_proxy_tools_and_the_screens() -> None:
         "sellerclaw_run",
         "sellerclaw_store_summary",
         "sellerclaw_orders",
-        "sellerclaw_order_mark_shipped",
         "sellerclaw_approval",
         "sellerclaw_approval_decide",
         "sellerclaw_attention",
         "sellerclaw_listings",
+        "sellerclaw_products",
         "sellerclaw_ads",
         "sellerclaw_connections",
     }
@@ -596,11 +610,11 @@ def test_every_tool_carries_a_human_title() -> None:
         "sellerclaw_run": "Run a SellerClaw command",
         "sellerclaw_store_summary": "Show the store summary",
         "sellerclaw_orders": "Show the order board",
-        "sellerclaw_order_mark_shipped": "Mark an order shipped",
         "sellerclaw_approval": "Show a request waiting on the owner",
         "sellerclaw_approval_decide": "Record the owner's answer",
         "sellerclaw_attention": "Show what needs the owner",
         "sellerclaw_listings": "Show listings",
+        "sellerclaw_products": "Show a catalog product",
         "sellerclaw_ads": "Show the ads",
         "sellerclaw_connections": "Show the connections",
     }
