@@ -87,3 +87,28 @@ def test_set_shipped_works_with_no_body_flag_at_all(
     result = runner.invoke(app, ["orders", "set-shipped", ORDER_ID])
     assert result.exit_code == 0, result.stderr
     assert route.calls.last.request.content == b""
+
+
+@pytest.mark.parametrize(
+    ("reference", "path"),
+    [
+        pytest.param("#1001", "/agent/orders/%231001", id="hash-would-start-the-fragment"),
+        pytest.param("14-15000-75039", "/agent/orders/14-15000-75039", id="marketplace-id"),
+        pytest.param(ORDER_ID, f"/agent/orders/{ORDER_ID}", id="our-id-unchanged"),
+    ],
+)
+@respx.mock
+def test_get_sends_the_order_number_as_one_path_segment(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+    reference: str,
+    path: str,
+) -> None:
+    """``#1001`` put in the URL as it is starts the fragment: the request reached the order list."""
+    route = respx.get(url__startswith=f"{fake_api_url}/agent/orders/").mock(
+        return_value=httpx.Response(200, json={"id": ORDER_ID})
+    )
+    result = runner.invoke(app, ["orders", "get", reference])
+    assert result.exit_code == 0, result.stderr
+    assert route.call_count == 1
+    assert route.calls.last.request.url.raw_path.decode() == path

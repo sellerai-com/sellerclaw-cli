@@ -66,7 +66,15 @@ SPECS = (
             ),
         ),
     ),
-    Cmd("get", "GET", "/agent/orders/{order_id}", summary="Get one order by id."),
+    Cmd(
+        "get",
+        "GET",
+        "/agent/orders/{order_id}",
+        summary=(
+            "Get one order by its id, its whole order number (#1001, the # optional) or the "
+            "marketplace's order id. A number two stores share answers 409 naming both."
+        ),
+    ),
     Cmd(
         "search",
         "GET",

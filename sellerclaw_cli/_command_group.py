@@ -18,10 +18,11 @@ import difflib
 import inspect
 import mimetypes
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import typer
 
@@ -237,12 +238,14 @@ def _validate_flag(f: Flag, value: object) -> None:
     """Reject out-of-range / out-of-choice values locally (clear error, no server round-trip)."""
     if value is None or value == [] or value is False:
         return
-    if f.choices and isinstance(value, str) and value not in f.choices:
-        emit_error(
-            UserInputError(
-                f"{f.primary_option}: must be one of {', '.join(f.choices)} (got {value!r})"
+    # A repeatable flag arrives as a list; each value is held to the same choices as a single one.
+    for item in value if isinstance(value, list) else [value]:
+        if f.choices and isinstance(item, str) and item not in f.choices:
+            emit_error(
+                UserInputError(
+                    f"{f.primary_option}: must be one of {', '.join(f.choices)} (got {item!r})"
+                )
             )
-        )
     if isinstance(value, int) and not isinstance(value, bool):
         if f.minimum is not None and value < f.minimum:
             emit_error(UserInputError(f"{f.primary_option}: must be >= {f.minimum} (got {value})"))
@@ -346,6 +349,19 @@ REGISTRY: list[GroupSpec] = []
 def positionals_of(path: str) -> list[str]:
     """Path placeholders in order — each becomes a positional ``typer.Argument``."""
     return _PATH_PARAM_RE.findall(path)
+
+
+def fill_path(path: str, values: Mapping[str, Any]) -> str:
+    """``path`` with each ``{placeholder}`` replaced by its value, encoded as one path segment.
+
+    What people call things does not stay inside a URL's rules: an order number is ``#1001``, and
+    put in the path as it is, ``#`` starts the fragment — the request reaches ``/agent/orders/``
+    and asks for something else entirely. Encoded, every value is one segment whatever it holds,
+    and the server reads it back decoded.
+    """
+    for name, value in values.items():
+        path = path.replace("{" + name + "}", quote(str(value), safe=""))
+    return path
 
 
 def command_help(cmd: Cmd) -> str:
@@ -634,9 +650,10 @@ def _expand_id_prefix(cmd: Cmd, positionals: dict[str, Any], prefix: str) -> str
     list_path = cmd.resolve_list_path
     if not list_path:
         return None
-    for name, value in positionals.items():
-        if name != cmd.active_positional:
-            list_path = list_path.replace("{" + name + "}", str(value))
+    list_path = fill_path(
+        list_path,
+        {name: value for name, value in positionals.items() if name != cmd.active_positional},
+    )
     try:
         with Client.from_env() as client:
             data = client.request("GET", list_path)
@@ -717,9 +734,7 @@ def _make_callback(group: str, cmd: Cmd):
                 cmd, values, values.get(cmd.active_positional)
             )
             values[cmd.active_positional] = resolved_active
-        path = cmd.path
-        for name in positionals:
-            path = path.replace("{" + name + "}", str(values[name]))
+        path = fill_path(cmd.path, {name: values[name] for name in positionals})
         body: Any = None
         if cmd.takes_body:
             raw_body = kwargs.pop("body")
@@ -754,8 +769,7 @@ def _make_callback(group: str, cmd: Cmd):
                 params[f.query_key] = value
         poll_path = cmd.job_poll_path
         if poll_path is not None:
-            for name in positionals:
-                poll_path = poll_path.replace("{" + name + "}", str(values[name]))
+            poll_path = fill_path(poll_path, {name: values[name] for name in positionals})
         run_operation(
             ctx,
             cmd.method,
