@@ -189,3 +189,68 @@ def test_serp_competitors_sends_keywords_and_refuses_a_domain_locally(
     assert json.loads(route.calls.last.request.content) == body
     assert refused.exit_code != 0
     assert route.call_count == 1
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    ("command", "path", "body"),
+    [
+        pytest.param(
+            "listing-search",
+            "search",
+            {"marketplace": "shopify", "query": "insulated water bottle", "country": "GB", "cursor": "abc"},
+            id="search-every-shopify-store",
+        ),
+        pytest.param(
+            "listing-search",
+            "search",
+            {"marketplace": "shopify", "store": "www.rival-store.com", "limit": 50},
+            id="browse-one-store-without-a-query",
+        ),
+        pytest.param(
+            "listing-get",
+            "get",
+            {"marketplace": "shopify", "listing_id": "gid://shopify/Product/1", "store": "www.rival-store.com"},
+            id="get-inside-a-store",
+        ),
+        pytest.param(
+            "listing-prices",
+            "prices",
+            {"marketplace": "shopify", "listing_ids": [f"gid://shopify/p/{n}" for n in range(50)], "currency": "CAD"},
+            id="fifty-prices",
+        ),
+    ],
+)
+def test_listing_commands_send_shopify_requests_as_given(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+    command: str,
+    path: str,
+    body: dict[str, object],
+) -> None:
+    route = respx.post(f"{fake_api_url}/agent/research/catalog/listings/{path}").mock(
+        return_value=httpx.Response(200, json={})
+    )
+
+    result = runner.invoke(app, ["research-catalog", command, "-b", json.dumps(body)])
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == body
+
+
+@respx.mock
+def test_listing_search_refuses_a_storefront_it_cannot_search(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.post(f"{fake_api_url}/agent/research/catalog/listings/search").mock(
+        return_value=httpx.Response(200, json={})
+    )
+
+    result = runner.invoke(
+        app,
+        ["research-catalog", "listing-search", "-b", json.dumps({"marketplace": "etsy", "query": "mug"})],
+    )
+
+    assert result.exit_code != 0
+    assert route.call_count == 0

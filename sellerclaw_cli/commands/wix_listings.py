@@ -45,6 +45,14 @@ SPECS = (
                 choices=("active", "published", "draft", "withdrawn"),
                 help="Mirror status to filter by; omit for all.",
             ),
+            flag(
+                "marketplace_statuses",
+                type=bool,
+                help=(
+                    "Also count the products by Wix's own status (visible/hidden) — hidden ones included, which the "
+                    "mirror does not hold. Asks Wix; every other number is the same without it."
+                ),
+            ),
         ),
     ),
     Cmd(

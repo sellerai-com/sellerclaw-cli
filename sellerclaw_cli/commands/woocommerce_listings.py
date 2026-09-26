@@ -45,6 +45,15 @@ SPECS = (
                 choices=("active", "published", "draft", "withdrawn"),
                 help="Mirror status to filter by; omit for all.",
             ),
+            flag(
+                "marketplace_statuses",
+                type=bool,
+                help=(
+                    "Also count the products by WooCommerce's own status (publish/draft/pending/private) — "
+                    "unpublished ones included, which the mirror does not hold. Asks WooCommerce; every other number "
+                    "is the same without it."
+                ),
+            ),
         ),
     ),
     Cmd(
