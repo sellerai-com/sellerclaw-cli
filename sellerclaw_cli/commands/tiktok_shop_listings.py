@@ -47,6 +47,14 @@ SPECS = (
                 choices=("active", "published", "draft", "withdrawn"),
                 help="Mirror status to filter by; omit for all.",
             ),
+            flag(
+                "marketplace_statuses",
+                type=bool,
+                help=(
+                    "Also count the products by TikTok Shop's own status — those not on sale included, which the "
+                    "mirror does not hold. Asks TikTok Shop; every other number is the same without it."
+                ),
+            ),
         ),
     ),
     Cmd(

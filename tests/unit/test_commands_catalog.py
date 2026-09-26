@@ -89,6 +89,78 @@ def test_a_channel_listing_page_without_an_offset_sends_none(
 
 
 @respx.mock
+def test_the_product_catalogue_is_read_page_by_page(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """`products` answered with the whole store at once — on a store of a hundred thousand listings,
+    more than the server could hold. It pages now, and the next page has to be reachable."""
+    route = respx.get(f"{fake_api_url}/agent/stores/{STORE_ID}/listings/products").mock(
+        return_value=httpx.Response(
+            200, json={"items": [], "total": 1200, "variant_rows": 3000, "next_offset": 1000}
+        )
+    )
+
+    result = runner.invoke(
+        app, ["shopify-listings", "products", STORE_ID, "--limit", "500", "--offset", "500"]
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert dict(route.calls[0].request.url.params) == {"limit": "500", "offset": "500"}
+
+
+@pytest.mark.parametrize(
+    "limit", [pytest.param("0", id="empty-page"), pytest.param("501", id="over-the-cap")]
+)
+def test_a_product_page_the_server_would_refuse_is_refused_before_the_request(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    limit: str,
+) -> None:
+    result = runner.invoke(app, ["shopify-listings", "products", STORE_ID, "--limit", limit])
+
+    assert result.exit_code != 0
+
+
+#: Channel groups whose marketplace can count its own products by status — drafts, hidden, archived.
+MARKETPLACE_STATUS_GROUPS = (
+    "shopify-listings",
+    "walmart-listings",
+    "wix-listings",
+    "woocommerce-listings",
+    "bigcommerce-listings",
+    "tiktok-shop-listings",
+)
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    ("group", "extra", "params"),
+    [
+        *(
+            pytest.param(name, ["--marketplace-statuses"], {"marketplace_statuses": "true"}, id=f"{name}-asked")
+            for name in MARKETPLACE_STATUS_GROUPS
+        ),
+        pytest.param("shopify-listings", [], {}, id="not-asked"),
+    ],
+)
+def test_the_store_summary_counts_the_marketplace_statuses_only_when_asked(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+    group: str,
+    extra: list[str],
+    params: dict[str, str],
+) -> None:
+    route = respx.get(f"{fake_api_url}/agent/stores/{STORE_ID}/listings/summary").mock(
+        return_value=httpx.Response(200, json={"total_rows": 0, "marketplace_statuses": None})
+    )
+
+    result = runner.invoke(app, [group, "summary", STORE_ID, *extra])
+
+    assert result.exit_code == 0, result.stderr
+    assert dict(route.calls[0].request.url.params) == params
+
+
+@respx.mock
 def test_catalog_search_pages_like_catalog_list_does(
     env_pointing_at_fake_api: None,  # noqa: ARG001
     fake_api_url: str,

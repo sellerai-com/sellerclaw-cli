@@ -29,6 +29,12 @@ sellerclaw_run(group="research-catalog", command="listing-search",
 sellerclaw_run(group="research-catalog", command="listing-prices",
   body={"marketplace": "amazon", "listing_ids": ["B09B8V1LZ3", "B07QK2SPP7"]})
 
+# Every Shopify store at once — which stores sell it, at what price — or one store's whole catalogue
+sellerclaw_run(group="research-catalog", command="listing-search",
+  body={"marketplace": "shopify", "query": "insulated water bottle", "country": "US", "limit": 20})
+sellerclaw_run(group="research-catalog", command="listing-search",
+  body={"marketplace": "shopify", "store": "www.rival-store.com", "limit": 50})
+
 # A competitor's social presence: the account, then what it publishes
 sellerclaw_run(group="research-social", command="instagram-profile", body={"handle": "rivalbrand"})
 sellerclaw_run(group="research-social", command="tiktok-profile-videos",
@@ -48,12 +54,13 @@ eBay answer plain fetches with a bot wall often enough that the guess is frequen
 for `web scrape` only for storefronts this does not cover.
 
 Storefronts covered: `amazon`, `ebay`, `etsy`, `bestbuy`, `newegg`, `target`, `ikea`, `nike`,
-`allbirds` — all US. Give `url` and the storefront is recognised from it; give `marketplace` +
-`listing_id` when you have the id instead.
+`allbirds` — all US — and `shopify`, every store on Shopify in any country. Give `url` and the
+storefront is recognised from it; give `marketplace` + `listing_id` when you have the id instead. A
+store on Shopify runs under its own domain, so send its links with `"marketplace": "shopify"`.
 
 What is worth knowing before you call:
 
-- **Keyword search** exists for `amazon`, `bestbuy`, `newegg`, `nike` and `allbirds`. For eBay use
+- **Keyword search** exists for `amazon`, `bestbuy`, `newegg`, `nike`, `allbirds` and `shopify`. For eBay use
   `ebay-search` — the official API, free, and it also covers GTINs and whole storefronts. Etsy
   publishes no reachable keyword search at all.
 - **Best Buy and Nike need their own id.** Best Buy's newer URLs dropped the numeric SKU and Nike is
@@ -68,6 +75,22 @@ What is worth knowing before you call:
   works in place of an id everywhere.
 - **A field that is absent was not published** — Target often publishes no price, IKEA no stock. An
   absent key is never zero, and never worth reporting as one.
+
+Shopify has two modes and its own options:
+
+- **Without `store`** it is Shopify's catalogue of every store. Each row names the store in `seller`;
+  the host of its `url` is that store's domain. Each product shows **one offer** — one store's price
+  — and a later read or price check of the same id may answer with another store's offer: check
+  `seller` on every row.
+- **With `store`** (a domain, or any link on it) it is that store's own catalogue; leave `query` out
+  to browse all of it. Ids there are `gid://shopify/Product/…` from its own search, and a URL is not
+  accepted; across all stores ids are `gid://shopify/p/…`, and a product URL works when the catalogue
+  knows the page. To follow one store's price, search and price-check inside that store.
+- `country` and `currency` price for another market; only `shopify` takes them. `next_cursor` goes
+  back as `cursor` for the next page; `total` is Shopify's estimate of matches.
+- A read shows one variant and lists every choice under `<Option> options`. `listing-prices` takes
+  up to 50 ids or links in one call (10 inside a store). A store that "did not answer as a Shopify
+  store" is not on Shopify or keeps its catalogue closed — use `web scrape`.
 
 ## Watching a rival's price over time
 
@@ -96,7 +119,7 @@ decision, not the decision: changing what the owner earns is theirs to approve.
   `tiktok-audience-demographics` for where that audience sits.
 - `research-catalog` — `ebay-search` over the marketplace's own catalog (pass `sellers` to scan a
   competitor's storefront instead of the whole marketplace), plus `listing-get`, `listing-search` and
-  `listing-prices` for reading listings on nine US storefronts as data.
+  `listing-prices` for reading listings on nine US storefronts and every Shopify store as data.
 - `web` — `scrape` one page and read it back as text, for pages `research-catalog` does not cover.
 - `competitors` — a standing watch list per store, with price snapshots and the undercutting report.
 - `store-audit` — the other direction: `onpage` and `pagespeed` on the owner's own shop, and

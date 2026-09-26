@@ -63,13 +63,29 @@ SPECS = (
             "carries the remote_product_id that `update` and `delete` take, already deduplicated, "
             "plus the product's title, category, variant count, stock and price range. Use this "
             "for anything product-level — reviewing categories, finding uncategorized products, "
-            "picking what to delete — instead of `list` plus grouping the variant rows yourself."
+            "picking what to delete — instead of `list` plus grouping the variant rows yourself. "
+            "Paged: `total` counts the whole store's products; `next_offset` is where the next "
+            "page starts (null on the last) — pass it as `--offset` until it is null."
         ),
         flags=(
             flag(
                 "status",
                 choices=("active", "published", "draft", "withdrawn"),
                 help="Mirror status to filter the underlying rows by; omit for all live listings.",
+            ),
+            flag(
+                "limit",
+                type=int,
+                minimum=1,
+                maximum=500,
+                help="Max products per page (default and max 500). A page can hold fewer.",
+            ),
+            flag(
+                "offset",
+                type=int,
+                minimum=0,
+                default=0,
+                help="Products to skip — the previous page's `next_offset`.",
             ),
         ),
     ),
@@ -86,6 +102,15 @@ SPECS = (
                 "status",
                 choices=("active", "published", "draft", "withdrawn"),
                 help="Mirror status to filter by; omit for all live listings.",
+            ),
+            flag(
+                "marketplace_statuses",
+                type=bool,
+                help=(
+                    "Also count the products by Shopify's own status (active/draft/archived) — drafts and archived "
+                    "included, which the mirror does not hold. Asks Shopify; every other number is the same without "
+                    "it."
+                ),
             ),
         ),
     ),

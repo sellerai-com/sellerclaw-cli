@@ -18,7 +18,15 @@ _ALL_STOREFRONTS = (
     "ikea",
     "nike",
     "allbirds",
+    "shopify",
 )
+
+_STORE_HELP = (
+    "shopify only: one store's domain (or any link on it) — that store's own catalogue instead of "
+    "every Shopify store."
+)
+_COUNTRY_HELP = "shopify only: the buyer's two-letter country (US, GB, CA ...). Everything else here is US."
+_CURRENCY_HELP = "shopify only: the currency to price in (USD, GBP ...)."
 
 SPECS = (
     Cmd(
@@ -68,7 +76,9 @@ SPECS = (
                 "listing_id",
                 help=(
                     "The storefront's own id: Amazon ASIN, eBay item number, Etsy listing id, "
-                    "Best Buy SKU, Newegg item number, Nike style-colour. A product URL also works."
+                    "Best Buy SKU, Newegg item number, Nike style-colour, Shopify gid://shopify/p/... "
+                    "(gid://shopify/Product/... with store). A product URL also works, except inside "
+                    "one Shopify store."
                 ),
             ),
             body_field(
@@ -79,7 +89,9 @@ SPECS = (
                     "Allbirds this is a second call and costs twice as much."
                 ),
             ),
-            body_field("currency", help="Preferred display currency where supported (Etsy)."),
+            body_field("currency", help="Preferred display currency where supported (Etsy, Shopify)."),
+            body_field("store", help=_STORE_HELP),
+            body_field("country", help=_COUNTRY_HELP),
         ),
     ),
     Cmd(
@@ -91,23 +103,36 @@ SPECS = (
             body_field(
                 "marketplace",
                 required=True,
-                choices=("amazon", "bestbuy", "newegg", "nike", "allbirds"),
-                help="Storefront to search. eBay has its own richer command: ebay-search.",
+                choices=("amazon", "bestbuy", "newegg", "nike", "allbirds", "shopify"),
+                help=(
+                    "Storefront to search. shopify searches every Shopify store and names the store "
+                    "selling each row. eBay has its own richer command: ebay-search."
+                ),
             ),
-            body_field("query", required=True, help="What to search for."),
+            body_field(
+                "query",
+                help="What to search for. Required, except when browsing one Shopify store (store).",
+            ),
             body_field("limit", type=int, help="Max rows (1-50). Defaults to 10."),
             body_field(
                 "page",
                 type=int,
                 help="Result page, on storefronts that page (amazon, bestbuy, newegg).",
             ),
+            body_field(
+                "cursor",
+                help="shopify only: the previous page's next_cursor, sent with the same search.",
+            ),
+            body_field("store", help=_STORE_HELP),
+            body_field("country", help=_COUNTRY_HELP),
+            body_field("currency", help=_CURRENCY_HELP),
         ),
     ),
     Cmd(
         "listing-prices",
         "POST",
         "/agent/research/catalog/listings/prices",
-        summary="Re-check what up to 5 known listings cost right now, on one storefront.",
+        summary="Re-check what up to 5 known listings (50 on Shopify) cost right now, on one storefront.",
         body=(
             body_field(
                 "marketplace",
@@ -121,11 +146,14 @@ SPECS = (
                 required=True,
                 example=["B09B8V1LZ3", "B07QK2SPP7"],
                 help=(
-                    "Up to 5 storefront ids, or product URLs. Amazon checks all of them in one "
-                    "call; other storefronts are read one at a time and charged per listing. "
-                    "target, ikea and allbirds take the product URL."
+                    "Up to 5 storefront ids, or product URLs — 50 on shopify (10 inside one store). "
+                    "Amazon and Shopify check them all in one call; other storefronts are read one "
+                    "at a time and charged per listing. target, ikea and allbirds take the product URL."
                 ),
             ),
+            body_field("store", help=_STORE_HELP),
+            body_field("country", help=_COUNTRY_HELP),
+            body_field("currency", help=_CURRENCY_HELP),
         ),
     ),
 )
