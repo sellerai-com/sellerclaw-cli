@@ -102,6 +102,8 @@ def test_both_ways_of_building_the_server_carry_the_screens(builder: Any) -> Non
         "ui://sellerclaw/ads.html",
         "ui://sellerclaw/connections.html",
         "ui://sellerclaw/approval.html",
+        "ui://sellerclaw/media.html",
+        "ui://sellerclaw/media-studio.html",
     }
     assert {tool.name for tool in asyncio.run(server.list_tools())} >= set(mcp_apps.tool_names())
 
@@ -129,11 +131,15 @@ def test_the_model_cannot_answer_an_approval_for_the_owner() -> None:
         "sellerclaw_connections": ["model", "app"],
         "sellerclaw_approval": ["model", "app"],
         "sellerclaw_approval_decide": ["app"],
+        "sellerclaw_media": ["model", "app"],
+        "sellerclaw_media_studio": ["model", "app"],
+        "sellerclaw_media_set_default": ["app"],
     }
 
 
 def test_the_cards_that_only_show_things_are_read_only() -> None:
-    """Only one tool a card calls changes anything — the approval card's answer — and it is the card's alone.
+    """Two tools a card calls change anything — the approval card's answer and the studio's "Make
+    default" — and each is its card's alone.
 
     Everything the new cards offer beyond reading is a request to Claude or a link to our website,
     so their tools must say they read — a client asking permission per write would otherwise put a
@@ -144,7 +150,7 @@ def test_the_cards_that_only_show_things_are_read_only() -> None:
     writes = {
         name for name in mcp_apps.tool_names() if not by_name[name].annotations.read_only_hint
     }
-    assert writes == {"sellerclaw_approval_decide"}
+    assert writes == {"sellerclaw_approval_decide", "sellerclaw_media_set_default"}
 
 
 def test_every_screen_tool_points_at_a_resource_that_exists() -> None:
@@ -175,6 +181,8 @@ def test_the_resource_declares_our_origin_and_asks_for_no_network() -> None:
     csp = meta["ui"]["csp"]
     assert csp["connectDomains"] == []
     assert csp["resourceDomains"][0] == APPS_BASE
+    # Generated pictures and clips are served by the API; without it the media card draws nothing.
+    assert mcp_apps.DEFAULT_MEDIA_BASE in csp["resourceDomains"]
     assert "https://i.ebayimg.com" in csp["resourceDomains"]
     # A draft built from a CJ product still shows CJ's photos until it is published.
     assert "https://*.cjdropshipping.com" in csp["resourceDomains"]
@@ -1618,6 +1626,9 @@ def test_connections_are_told_by_what_needs_the_owner(integrations: list[Any], o
             mcp_apps._summarize_ads({"overview": {"accounts": []}}), id="ads"
         ),
         pytest.param(mcp_apps._summarize_connections({"integrations": []}), id="connections"),
+        pytest.param(mcp_apps._summarize_media({"jobs": [], "asked": ["j"]}), id="media-jobs"),
+        pytest.param(mcp_apps._summarize_media({"library": {"files": []}}), id="media-library"),
+        pytest.param(mcp_apps._summarize_media_studio({"models": {"tasks": []}}), id="media-studio"),
     ],
 )
 def test_a_client_without_cards_is_not_told_the_owner_is_looking_at_one(summary: str) -> None:
@@ -1628,3 +1639,213 @@ def test_a_client_without_cards_is_not_told_the_owner_is_looking_at_one(summary:
     """
     assert "If this client shows SellerClaw cards" in summary
     assert "structured result" in summary
+
+
+# --------------------------------------------------------------------------- media
+
+JOB_A = "55555555-5555-4555-8555-555555555555"
+JOB_B = "66666666-6666-4666-8666-666666666666"
+
+
+def _file(name: str, created_at: str) -> dict[str, Any]:
+    return {
+        "id": f"id-{name}",
+        "file_id": f"f-{name}",
+        "filename": name,
+        "content_type": "image/png",
+        "size_bytes": 10,
+        "download_url": f"https://api.test/agent/files/f-{name}/{name}",
+        "created_at": created_at,
+    }
+
+
+@respx.mock
+def test_the_media_card_reads_the_jobs_it_was_handed_in_one_call(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    jobs = respx.get(f"{fake_api_url}/agent/media/jobs").mock(
+        return_value=httpx.Response(200, json={"jobs": [{"id": JOB_A, "kind": "video", "status": "running"}]})
+    )
+
+    result = _call("sellerclaw_media", {"job": [JOB_A, JOB_B, JOB_A]})
+
+    # Asked once each: a repeat would be answered once and then counted as not the account's.
+    assert jobs.calls[0].request.url.params.get_list("id") == [JOB_A, JOB_B]
+    assert result.structured_content == {
+        "jobs": [{"id": JOB_A, "kind": "video", "status": "running"}],
+        "asked": [JOB_A, JOB_B],
+    }
+
+
+@respx.mock
+def test_the_library_is_images_and_videos_merged_newest_first(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    """The file library also holds documents; the card reads the two kinds it draws, and only them."""
+    def _page(request: httpx.Request) -> httpx.Response:
+        if request.url.params["category"] == "image":
+            return httpx.Response(200, json={"files": [_file("mug.png", "2026-09-27T10:00:00Z")], "total": 7})
+        return httpx.Response(200, json={"files": [_file("mug.mp4", "2026-09-28T10:00:00Z")], "total": 2})
+
+    files = respx.get(f"{fake_api_url}/agent/files/").mock(side_effect=_page)
+
+    result = _call("sellerclaw_media", {"query": "  mug "})
+
+    asked = [dict(call.request.url.params) for call in files.calls]
+    assert asked == [
+        {"category": "image", "q": "mug", "limit": "24"},
+        {"category": "video", "q": "mug", "limit": "24"},
+    ]
+    library = result.structured_content["library"]
+    assert [item["filename"] for item in library["files"]] == ["mug.mp4", "mug.png"]
+    assert [item["category"] for item in library["files"]] == ["video", "image"]
+    assert library["totals"] == {"image": 7, "video": 2}
+    assert result.structured_content["filters"] == {"query": "mug"}
+
+
+@respx.mock
+def test_a_library_asked_for_one_kind_reads_only_that_kind(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    files = respx.get(f"{fake_api_url}/agent/files/").mock(
+        return_value=httpx.Response(200, json={"files": [], "total": 0})
+    )
+
+    result = _call("sellerclaw_media", {"category": "video"})
+
+    assert [dict(call.request.url.params) for call in files.calls] == [{"category": "video", "limit": "24"}]
+    assert result.structured_content["library"]["totals"] == {"video": 0}
+
+
+@pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        pytest.param({"category": "document"}, "category is image or video", id="unknown-category"),
+        pytest.param({"job": [f"job-{n}" for n in range(11)]}, "at most 10 jobs", id="too-many-jobs"),
+    ],
+)
+def test_the_media_card_refuses_what_it_cannot_show(
+    env_pointing_at_fake_api: None, arguments: dict[str, Any], message: str
+) -> None:
+    with pytest.raises(ToolError, match=message):
+        _call("sellerclaw_media", arguments)
+
+
+@respx.mock
+def test_the_studio_opens_on_the_draft_with_the_models_and_the_latest_pictures(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    default = {"id": "gpt-image-2", "name": "GPT Image 2", "is_default": True}
+    models = {"tasks": [{"task": "image_edit", "models": [default]}]}
+    respx.get(f"{fake_api_url}/agent/media/models").mock(return_value=httpx.Response(200, json=models))
+    files = respx.get(f"{fake_api_url}/agent/files/").mock(
+        return_value=httpx.Response(200, json={"files": [_file("mug.png", "2026-09-27T10:00:00Z")], "total": 1})
+    )
+
+    result = _call(
+        "sellerclaw_media_studio",
+        {"task": "image_edit", "prompt": " white background ", "reference": "https://api.test/mug.png"},
+    )
+
+    assert dict(files.calls[0].request.url.params) == {"category": "image", "limit": "12"}
+    assert result.structured_content == {
+        "models": models,
+        "draft": {"task": "image_edit", "prompt": "white background", "reference": "https://api.test/mug.png"},
+        "recent_images": [_file("mug.png", "2026-09-27T10:00:00Z")],
+    }
+    assert "open on an edit of an image" in result.content[0].text
+    assert "image_edit: GPT Image 2" in result.content[0].text
+
+
+@respx.mock
+def test_the_studio_still_opens_when_the_library_cannot_be_read(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    respx.get(f"{fake_api_url}/agent/media/models").mock(return_value=httpx.Response(200, json={"tasks": []}))
+    respx.get(f"{fake_api_url}/agent/files/").mock(return_value=httpx.Response(500, json={"detail": "boom"}))
+
+    result = _call("sellerclaw_media_studio", {})
+
+    assert result.structured_content == {"models": {"tasks": []}, "draft": {}}
+
+
+def test_the_studio_refuses_a_task_it_does_not_make(env_pointing_at_fake_api: None) -> None:
+    with pytest.raises(ToolError, match="task is one of image, image_edit, video, video_from_image"):
+        _call("sellerclaw_media_studio", {"task": "audio"})
+
+
+@respx.mock
+def test_make_default_is_the_owners_press_sent_as_it_was_made(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    default = {"id": "veo-3.1-lite", "name": "Veo 3.1 Lite", "is_default": True}
+    models = {"tasks": [{"task": "video", "models": [default]}]}
+    route = respx.put(f"{fake_api_url}/agent/media/models/video/default").mock(
+        return_value=httpx.Response(200, json=models)
+    )
+
+    result = _call("sellerclaw_media_set_default", {"task": "video", "model": "veo-3.1-lite"})
+
+    assert route.calls[0].request.content == b'{"model":"veo-3.1-lite"}'
+    assert result.structured_content == {"models": models, "draft": {"task": "video", "model": "veo-3.1-lite"}}
+
+
+@respx.mock
+def test_our_own_agent_being_refused_reaches_the_card_in_the_clouds_words(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    respx.put(f"{fake_api_url}/agent/media/models/image/default").mock(
+        return_value=httpx.Response(
+            403,
+            json={
+                "detail": {
+                    "code": "owner_present_only",
+                    "message": "The default media model is the owner's choice.",
+                }
+            },
+        )
+    )
+
+    with pytest.raises(ToolError, match="owner's choice"):
+        _call("sellerclaw_media_set_default", {"task": "image", "model": "recraft-v3"})
+
+
+def test_finished_media_is_told_with_its_links_and_what_is_left_with_how_to_wait() -> None:
+    summary = mcp_apps._summarize_media(
+        {
+            "jobs": [
+                {"id": "a", "kind": "image", "status": "succeeded", "result_url": "https://api.test/a.png"},
+                {"id": "b", "kind": "video", "status": "failed", "error": "Provider refused the prompt"},
+                {"id": "c", "kind": "video", "status": "running"},
+            ],
+            "asked": ["a", "b", "c"],
+        }
+    )
+
+    assert "Ready: image https://api.test/a.png." in summary
+    assert "The video failed: Provider refused the prompt." in summary
+    assert "1 job still generating" in summary
+    assert "end your turn" in summary
+    assert "wait_seconds 25" in summary
+
+
+def test_jobs_that_are_not_the_accounts_are_counted_not_invented() -> None:
+    summary = mcp_apps._summarize_media(
+        {"jobs": [{"id": "a", "kind": "image", "status": "queued"}], "asked": ["a", "b"]}
+    )
+
+    assert "1 job asked for is not this account's." in summary
+    assert "Ready" not in summary
+
+
+def test_the_library_is_told_by_its_counts_and_newest_links() -> None:
+    files = [_file(f"p{n}.png", f"2026-09-2{n}T10:00:00Z") for n in range(7)]
+
+    summary = mcp_apps._summarize_media(
+        {"library": {"files": files, "totals": {"image": 7, "video": 0}}, "filters": {"query": "p"}}
+    )
+
+    assert summary.startswith("The library matching “p”: 7 images, newest first.")
+    assert "p4.png https://api.test/agent/files/f-p4.png/p4.png" in summary
+    assert "p5.png" not in summary
+    assert "0 video" not in summary

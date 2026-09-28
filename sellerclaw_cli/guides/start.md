@@ -102,10 +102,11 @@ supplier file) · `suppliers` (source products, dropship orders) · `storefront`
 SellerCart shop: pages, products, domain, payouts, going live) · `email` (read the mailbox, send
 through the approval gate, social DMs) · `ads` (Google, Meta, eBay Promoted, Klaviyo campaigns) ·
 `research` (keywords, trends, competitors, social, a single page) · `analytics` (how the business is
-doing: sales, profit, stock, geography).
+doing: sales, profit, stock, geography) · `media` (make and edit images and videos, pick the model and
+its settings).
 
-Areas with no guide of their own, reachable the usual way with `sellerclaw_groups`: `media` (generate
-and edit listing and ad imagery), `files` / `spreadsheet` / `pdf` / `sheets` (produce and store
+Areas with no guide of their own, reachable the usual way with `sellerclaw_groups`: `files` /
+`spreadsheet` / `pdf` / `sheets` (produce and store
 documents, read and write the owner's Google Sheets), `reviews` and `ebay-feedback` (what buyers
 wrote back), `store-audit` (SEO, and how AI assistants answer about the shop), `amazon-fba` (Amazon's
 own warehouse), `kb` (what the owner has told SellerClaw before).

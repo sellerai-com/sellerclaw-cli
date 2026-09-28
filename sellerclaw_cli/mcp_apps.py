@@ -2,12 +2,14 @@
 
 MCP Apps (``io.modelcontextprotocol/ui``) lets a tool say "draw my answer with *this* document".
 The host loads the document into a sandboxed iframe, hands it the tool's result, and lets it call
-back for more. SellerClaw ships eight: what needs the owner, the store summary, the order board
+back for more. SellerClaw ships ten: what needs the owner, the store summary, the order board
 (which also opens one order), listings, a catalog product with its supplier and every store it is
-listed in, ads, connections, and the approval card.
+listed in, ads, connections, the approval card, generated media (with the file library), and the
+media studio.
 
-The cards read; they do not write. The only tool a card may call to change anything is the approval
-card's answer, callable by the card alone. Every other button on a card either opens a page of ours
+The cards read; they do not write. Two tools a card may call change anything, each callable by its
+card alone: the approval card's answer, and the studio's "Make default" — an owner's setting, set by
+the owner's own press. Every other button on a card either opens a page of ours
 or hands Claude a request in the owner's words —
 the same rule the web app follows, where listings, ads and orders are changed through the
 assistant and never by a button on the page.
@@ -64,7 +66,15 @@ SCREENS = (
     "ads",
     "connections",
     "approval",
+    "media",
+    "media-studio",
 )
+
+#: Where generated images and videos are served from: the API's own origin, which hands out the
+#: file links. A card draws them with ``<img>`` and ``<video>``, so this origin has to be in the
+#: CSP — otherwise the result card is a frame of broken pictures.
+MEDIA_BASE_ENV = "SELLERCLAW_MCP_MEDIA_BASE"
+DEFAULT_MEDIA_BASE = "https://api.sellerclaw.ai"
 
 #: How long a fetched document is reused. Not forever: the hosted app keeps a machine warm, so a
 #: process outlives several UI deploys, and a permanently cached document would go on naming chunk
@@ -120,10 +130,26 @@ _ELSEWHERE_LIMIT = 50
 #: catalog, which is thousands of rows for some sellers and never what a card can show.
 _PRODUCTS_LIMIT = 25
 
+#: What the studio makes, in the Agent API's words.
+_MEDIA_TASKS = ("image", "image_edit", "video", "video_from_image")
+#: The library opens on this many of each kind: a screenful of tiles, newest first.
+_LIBRARY_LIMIT = 24
+#: The studio's picker of a picture to edit or animate: the latest images, not the whole library.
+_STUDIO_PICTURES = 12
+#: The Agent API reads at most this many jobs in one call.
+_JOBS_PER_READ = 10
+#: How many finished files the model is handed a link to; the rest are on the card.
+_LINKS_TOLD = 5
+
 
 def apps_base() -> str:
     """The origin the screens are served from, without a trailing slash."""
     return (os.environ.get(APPS_BASE_ENV, "").strip() or DEFAULT_APPS_BASE).rstrip("/")
+
+
+def media_base() -> str:
+    """The origin generated files are served from, without a trailing slash."""
+    return (os.environ.get(MEDIA_BASE_ENV, "").strip() or DEFAULT_MEDIA_BASE).rstrip("/")
 
 
 def resource_uri(screen: str) -> str:
@@ -787,6 +813,89 @@ def _summarize_connections(payload: dict[str, Any]) -> str:
     return " ".join(lines)
 
 
+_TASK_WORDS = {
+    "image": "an image",
+    "image_edit": "an edit of an image",
+    "video": "a video",
+    "video_from_image": "a video from a photo",
+}
+
+
+def _summarize_media_jobs(payload: dict[str, Any]) -> str:
+    jobs = [job for job in payload.get("jobs") or [] if isinstance(job, dict)]
+    lines: list[str] = []
+    ready = [job for job in jobs if job.get("status") == "succeeded" and job.get("result_url")]
+    failed = [job for job in jobs if job.get("status") == "failed"]
+    working = [job for job in jobs if job.get("status") in ("queued", "running")]
+    if ready:
+        links = "; ".join(f"{job.get('kind')} {job['result_url']}" for job in ready)
+        lines.append(f"Ready: {links}.")
+    for job in failed:
+        reason = job.get("error") or "no reason given"
+        lines.append(f"The {job.get('kind')} failed: {reason}.")
+    if working:
+        # The card polls on its own. Checking again from here only spends the owner's turn.
+        lines.append(
+            f"{_plural(len(working), 'job')} still generating (an image takes under a minute, a "
+            "video one to three). On a SellerClaw card each one fills in as it finishes, so end "
+            "your turn instead of checking again; a client without cards reads it with "
+            "`media job-status` passing wait_seconds 25."
+        )
+    missing = len(payload.get("asked") or []) - len(jobs)
+    if missing > 0:
+        lines.append(f"{_plural(missing, 'job')} asked for {'is' if missing == 1 else 'are'} not this account's.")
+    if not jobs:
+        lines = ["None of these media jobs belongs to this account."]
+    lines.append(_SHOWN_TO_THE_OWNER)
+    return " ".join(lines)
+
+
+def _summarize_media_library(payload: dict[str, Any]) -> str:
+    library = payload.get("library") or {}
+    files = [item for item in library.get("files") or [] if isinstance(item, dict)]
+    totals = library.get("totals") or {}
+    query = (payload.get("filters") or {}).get("query")
+    matching = f" matching “{query}”" if query else ""
+    counts = [
+        _plural(int(totals[kind]), kind) for kind in ("image", "video") if totals.get(kind)
+    ]
+    if not files:
+        lines = [f"No images or videos in the library{matching}."]
+    else:
+        lines = [f"The library{matching}: {' and '.join(counts)}, newest first."]
+        newest = "; ".join(
+            f"{item.get('filename')} {item.get('download_url')}" for item in files[:_LINKS_TOLD]
+        )
+        lines.append(f"Newest: {newest}.")
+    lines.append(_SHOWN_TO_THE_OWNER)
+    return " ".join(lines)
+
+
+def _summarize_media(payload: dict[str, Any]) -> str:
+    if "jobs" in payload:
+        return _summarize_media_jobs(payload)
+    return _summarize_media_library(payload)
+
+
+def _summarize_media_studio(payload: dict[str, Any]) -> str:
+    draft = payload.get("draft") or {}
+    task = draft.get("task") or "image"
+    defaults: list[str] = []
+    for group in (payload.get("models") or {}).get("tasks") or []:
+        first = next((m for m in group.get("models") or [] if m.get("is_default")), None)
+        if first is not None:
+            defaults.append(f"{group.get('task')}: {first.get('name')}")
+    lines = [f"The media studio is open on {_TASK_WORDS.get(task, task)}."]
+    if defaults:
+        lines.append(f"Default models — {'; '.join(defaults)}.")
+    lines.append(
+        "The owner picks the model and its settings, describes what they want and presses Generate; "
+        "that reaches you as a message from them naming all of it. Generate nothing until it does."
+    )
+    lines.append(_SHOWN_TO_THE_OWNER)
+    return " ".join(lines)
+
+
 def _result(payload: dict[str, Any], summary: str) -> Any:
     from mcp.types import CallToolResult, TextContent
 
@@ -918,6 +1027,34 @@ _APPROVAL_DECIDE_DESC = """\
 Record the owner's press on the approval card and hand the card back.\
 """
 
+_MEDIA_DESC = """\
+Generated images and videos as an interactive card — the ones just asked for, each filling itself
+in as it finishes (a picture, or a player for a video) — or the owner's library of them.
+
+After starting a generation in the background, pass its job ids as `job` and end your turn: the
+card shows each result as soon as it is ready and hands you its link with the owner's next
+message, so do not check the jobs again yourself. A finished image or edit can be shown the same
+way by its job id. With no `job`, the library: `category` is image or video (omit it for both) and
+`query` narrows by file name. The card changes nothing; for another version, generate again.\
+"""
+
+_MEDIA_STUDIO_DESC = """\
+The media studio as an interactive card: the owner chooses what to make (an image, an edit of an
+image, a video, a video from a photo), the model — each with its price in credits — and that
+model's settings, describes what they want and presses Generate. The press reaches you as an
+ordinary message from them naming the model and settings; run it with the media commands.
+
+Open it when the owner wants to choose the model or the settings themselves, or asks for the
+studio; otherwise generate straight away with the default model. Carry over what the conversation
+already says: `task` (image, image_edit, video, video_from_image), `prompt`, `model`, and
+`reference`, the URL of the image to edit or animate. The owner can also make a model their
+default for a task there.\
+"""
+
+_MEDIA_SET_DEFAULT_DESC = """\
+Record the owner's press of "Make default" on the studio card and hand back the models.\
+"""
+
 
 def build_extension(client_for_tool: ClientFactory) -> Any:
     """The MCP Apps extension: the screens in :data:`SCREENS` and the tools bound to them.
@@ -931,6 +1068,7 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
     instead of on someone's card.
     """
     from mcp.server.apps import Apps, ResourceCsp
+    from mcp.server.mcpserver.exceptions import ToolError
     from mcp.server.mcpserver.resources import FunctionResource
     from mcp.types import ToolAnnotations
 
@@ -940,7 +1078,7 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
         # and everything they do goes back through it as a tool call. Stated as an empty list
         # rather than left unset so the intent is on the record.
         connect_domains=[],
-        resource_domains=[apps_base(), *_IMAGE_CDN_DOMAINS],
+        resource_domains=[apps_base(), media_base(), *_IMAGE_CDN_DOMAINS],
     )
     for screen in SCREENS:
         apps.add_resource(
@@ -1458,6 +1596,130 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
             payload = _read_connections(client)
         return _result(payload, _summarize_connections(payload))
 
+    def _library_page(
+        client: Client, category: str, query: str | None, limit: int
+    ) -> dict[str, Any]:
+        return client.request(
+            "GET",
+            "/agent/files/",
+            params=_query(category=category, q=query, limit=limit),
+            read_only=True,
+        )
+
+    def _read_media_library(
+        client: Client, category: str | None, query: str | None
+    ) -> dict[str, Any]:
+        """The owner's images and videos, newest first — both kinds unless one was asked for.
+
+        The file library also holds documents and spreadsheets; this card is about pictures, so each
+        kind is read on its own and the two are merged by date.
+        """
+        kinds = (category,) if category else ("image", "video")
+        files: list[dict[str, Any]] = []
+        totals: dict[str, int] = {}
+        for kind in kinds:
+            page = _library_page(client, kind, query, _LIBRARY_LIMIT)
+            totals[kind] = int(page.get("total") or 0)
+            files.extend({**item, "category": kind} for item in page.get("files") or [])
+        files.sort(key=lambda item: str(item.get("created_at") or ""), reverse=True)
+        return {
+            "library": {"files": files[:_LIBRARY_LIMIT], "totals": totals},
+            "filters": _query(category=category, query=query),
+        }
+
+    def _media_jobs(job: str | list[str]) -> list[str]:
+        ids = [job] if isinstance(job, str) else list(job)
+        # Once each: the server answers each job once, and a repeat would otherwise be counted as
+        # a job that is not the account's.
+        ids = list(dict.fromkeys(part.strip() for value in ids for part in value.split(",") if part.strip()))
+        if len(ids) > _JOBS_PER_READ:
+            raise ToolError(f"Show at most {_JOBS_PER_READ} jobs at once; got {len(ids)}.")
+        return ids
+
+    def _media_task(task: str | None) -> str | None:
+        if task is None or task in _MEDIA_TASKS:
+            return task
+        raise ToolError(f"task is one of {', '.join(_MEDIA_TASKS)}; got {task!r}.")
+
+    def _read_media_studio(client: Client, draft: dict[str, Any]) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "models": client.request("GET", "/agent/media/models", read_only=True),
+            "draft": draft,
+        }
+        # Pictures to edit or animate. Best-effort: without them the owner can still paste a link.
+        try:
+            recent = _library_page(client, "image", None, _STUDIO_PICTURES)
+        except CliError:
+            recent = None
+        if recent and recent.get("files"):
+            payload["recent_images"] = recent["files"]
+        return payload
+
+    @apps.tool(
+        resource_uri=resource_uri("media"),
+        visibility=["model", "app"],
+        name="sellerclaw_media",
+        title="Show generated images and videos",
+        description=_MEDIA_DESC,
+        annotations=_reads_only("Show generated images and videos"),
+    )
+    def sellerclaw_media(
+        job: str | list[str] | None = None,
+        category: str | None = None,
+        query: str | None = None,
+    ) -> Any:
+        ids = _media_jobs(job) if job else []
+        if category not in (None, "image", "video"):
+            raise ToolError(f"category is image or video; got {category!r}.")
+        with _refusals_in_their_own_words(), client_for_tool(DEFAULT_TIMEOUT_SECONDS) as client:
+            if ids:
+                found = client.request("GET", "/agent/media/jobs", params={"id": ids}, read_only=True)
+                payload = {"jobs": (found or {}).get("jobs") or [], "asked": ids}
+            else:
+                payload = _read_media_library(client, category, _words(query))
+        return _result(payload, _summarize_media(payload))
+
+    @apps.tool(
+        resource_uri=resource_uri("media-studio"),
+        visibility=["model", "app"],
+        name="sellerclaw_media_studio",
+        title="Open the media studio",
+        description=_MEDIA_STUDIO_DESC,
+        annotations=_reads_only("Open the media studio"),
+    )
+    def sellerclaw_media_studio(
+        task: str | None = None,
+        prompt: str | None = None,
+        model: str | None = None,
+        reference: str | None = None,
+    ) -> Any:
+        draft = _query(
+            task=_media_task(task), prompt=_words(prompt), model=_words(model), reference=_words(reference)
+        )
+        with _refusals_in_their_own_words(), client_for_tool(DEFAULT_TIMEOUT_SECONDS) as client:
+            payload = _read_media_studio(client, draft)
+        return _result(payload, _summarize_media_studio(payload))
+
+    @apps.tool(
+        resource_uri=resource_uri("media-studio"),
+        # The owner's setting, set by the owner's press — never by a model choosing for them. The
+        # cloud refuses it to our own unattended agent as well.
+        visibility=["app"],
+        name="sellerclaw_media_set_default",
+        title="Make a model the default",
+        description=_MEDIA_SET_DEFAULT_DESC,
+        annotations=_acts("Make a model the default"),
+    )
+    def sellerclaw_media_set_default(task: str, model: str) -> Any:
+        chosen = _media_task(task)
+        # Reordering the owner's models reconciles their routing before it answers.
+        with _refusals_in_their_own_words(), client_for_tool(_READ_TIMEOUT_SECONDS) as client:
+            models = client.request(
+                "PUT", f"/agent/media/models/{chosen}/default", json={"model": model}
+            )
+        payload = {"models": models, "draft": {"task": chosen, "model": model}}
+        return _result(payload, _summarize_media_studio(payload))
+
     return apps
 
 
@@ -1474,4 +1736,7 @@ def tool_names() -> Sequence[str]:
         "sellerclaw_connections",
         "sellerclaw_approval",
         "sellerclaw_approval_decide",
+        "sellerclaw_media",
+        "sellerclaw_media_studio",
+        "sellerclaw_media_set_default",
     )

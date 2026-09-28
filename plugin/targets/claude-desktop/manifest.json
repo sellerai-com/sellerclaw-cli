@@ -60,7 +60,7 @@
   "tools": [
     {
       "name": "sellerclaw_guide",
-      "description": "Read a task guide with ready-to-run examples: listings, orders, ads, research, analytics."
+      "description": "Read a task guide with ready-to-run examples: listings, orders, ads, research, analytics, media."
     },
     {
       "name": "sellerclaw_groups",
@@ -105,6 +105,14 @@
     {
       "name": "sellerclaw_connections",
       "description": "Show your connections as an interactive card, broken ones first with the page that fixes them."
+    },
+    {
+      "name": "sellerclaw_media",
+      "description": "Show generated images and videos as an interactive card that fills itself in, or your library of them."
+    },
+    {
+      "name": "sellerclaw_media_studio",
+      "description": "Open the media studio: pick the model and its settings, describe the image or video, and generate."
     },
     {
       "name": "sellerclaw_login",

@@ -480,7 +480,7 @@ Beyond running as a subprocess, the CLI can expose itself over the [Model Contex
 
 Rather than emit ~250 tools (one per command), the server mirrors the CLI's own discovery model with **four thin tools** the client composes at runtime:
 
-- `sellerclaw_guide(topic)` — a short task guide with ready-to-run calls (`listings`, `orders`, `ads`, `research`, `analytics`, plus `start` for the shared conventions);
+- `sellerclaw_guide(topic)` — a short task guide with ready-to-run calls (`listings`, `orders`, `ads`, `research`, `analytics`, `media`, plus `start` for the shared conventions);
 - `sellerclaw_groups` — list command groups and their commands;
 - `sellerclaw_describe(group, command)` — full schema: positionals, flags, body fields, plus a ready `call_example`;
 - `sellerclaw_run(group, command, positionals, flags, body)` — invoke a command.
@@ -492,8 +492,10 @@ Alongside those four, a client that supports [MCP Apps](https://modelcontextprot
 (`sellerclaw_attention`), how a store is doing (`sellerclaw_store_summary`), the orders or one
 order (`sellerclaw_orders`), listings or one listing (`sellerclaw_listings`), a catalog product
 with its supplier and every store it is listed in (`sellerclaw_products`), ads across every
-platform (`sellerclaw_ads`), the health of every connection (`sellerclaw_connections`), and a
-request waiting on the owner (`sellerclaw_approval`). The order, listing and product cards find what
+platform (`sellerclaw_ads`), the health of every connection (`sellerclaw_connections`), a
+request waiting on the owner (`sellerclaw_approval`), generated images and videos or the library of
+them (`sellerclaw_media`), and the media studio for picking a model and its settings
+(`sellerclaw_media_studio`). The order, listing and product cards find what
 the owner names in their own words — an order number, a title, a SKU — and open it when only one
 matches. The cards show;
 changing anything still goes through `sellerclaw_run`. A client without cards gets the same answers as a short text summary plus

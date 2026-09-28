@@ -58,5 +58,11 @@
     "skill": "sellerclaw-analytics",
     "description": "Use when the user asks how the business or a store is doing — sales, revenue, profit, margin, best sellers, what isn't selling, trends by week or month, where buyers are, what's out of stock or needs reordering, how much cash is tied up in inventory, or what needs attention today.",
     "file": "analytics.md"
+  },
+  {
+    "topic": "media",
+    "skill": "sellerclaw-media",
+    "description": "Use when the user wants an image or a video made or changed through SellerClaw — a product photo, a new background, a banner or ad creative, a short clip from text or from a photo — or wants to pick the model and its settings, see what was generated, or browse their images and videos.",
+    "file": "media.md"
   }
 ]
