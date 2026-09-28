@@ -492,8 +492,8 @@ Alongside those four, a client that supports [MCP Apps](https://modelcontextprot
 (`sellerclaw_attention`), how a store is doing (`sellerclaw_store_summary`), the orders or one
 order (`sellerclaw_orders`), listings or one listing (`sellerclaw_listings`), a catalog product
 with its supplier and every store it is listed in (`sellerclaw_products`), ads across every
-platform (`sellerclaw_ads`), the health of every connection (`sellerclaw_connections`), a
-request waiting on the owner (`sellerclaw_approval`), generated images and videos or the library of
+platform (`sellerclaw_ads`), the health of every connection (`sellerclaw_connections`), the plan
+and the credits left (`sellerclaw_billing`), a request waiting on the owner (`sellerclaw_approval`), generated images and videos or the library of
 them (`sellerclaw_media`), and the media studio for picking a model and its settings
 (`sellerclaw_media_studio`). The order, listing and product cards find what
 the owner names in their own words — an order number, a title, a SKU — and open it when only one

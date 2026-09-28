@@ -2,14 +2,15 @@
 
 MCP Apps (``io.modelcontextprotocol/ui``) lets a tool say "draw my answer with *this* document".
 The host loads the document into a sandboxed iframe, hands it the tool's result, and lets it call
-back for more. SellerClaw ships ten: what needs the owner, the store summary, the order board
+back for more. SellerClaw ships eleven: what needs the owner, the store summary, the order board
 (which also opens one order), listings, a catalog product with its supplier and every store it is
-listed in, ads, connections, the approval card, generated media (with the file library), and the
-media studio.
+listed in, ads, connections, the plan and credits, the approval card, generated media (with the file
+library), and the media studio.
 
-The cards read; they do not write. Two tools a card may call change anything, each callable by its
-card alone: the approval card's answer, and the studio's "Make default" — an owner's setting, set by
-the owner's own press. Every other button on a card either opens a page of ours
+The cards read; they do not write. Three tools a card may call change anything, each callable by its
+card alone: the approval card's answer, the studio's "Make default" — an owner's setting, set by
+the owner's own press — and the studio's "Upload", which puts a photo from the owner's device into
+their files. Every other button on a card either opens a page of ours
 or hands Claude a request in the owner's words —
 the same rule the web app follows, where listings, ads and orders are changed through the
 assistant and never by a button on the page.
@@ -38,12 +39,15 @@ renders an empty card and reports nothing anywhere.
 
 from __future__ import annotations
 
+import base64
+import binascii
+import mimetypes
 import os
 import threading
 import time
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any
 from urllib.parse import quote
 from uuid import UUID
@@ -65,6 +69,7 @@ SCREENS = (
     "products",
     "ads",
     "connections",
+    "billing",
     "approval",
     "media",
     "media-studio",
@@ -136,6 +141,13 @@ _MEDIA_TASKS = ("image", "image_edit", "video", "video_from_image")
 _LIBRARY_LIMIT = 24
 #: The studio's picker of a picture to edit or animate: the latest images, not the whole library.
 _STUDIO_PICTURES = 12
+#: Photos Claude can carry into the studio: as many as one generation takes (an image from six).
+_STUDIO_REFERENCES = 6
+#: The largest photo the studio's "Upload" takes. The card shrinks a photo to about 2000 pixels
+#: before sending, which lands far below this; the cap bounds what a tool call has to carry.
+_UPLOAD_MAX_BYTES = 15 * 1024 * 1024
+#: Upload scans the file for viruses before it answers.
+_UPLOAD_TIMEOUT_SECONDS = 60.0
 #: The Agent API reads at most this many jobs in one call.
 _JOBS_PER_READ = 10
 #: How many finished files the model is handed a link to; the rest are on the card.
@@ -813,9 +825,133 @@ def _summarize_connections(payload: dict[str, Any]) -> str:
     return " ".join(lines)
 
 
+def _decimal(value: Any) -> Decimal | None:
+    if value is None:
+        return None
+    try:
+        parsed = Decimal(str(value))
+    except InvalidOperation:
+        return None
+    return parsed if parsed.is_finite() else None
+
+
+def _credits(value: Any) -> str | None:
+    """A credit figure as the card shows it: whole and grouped, "12,360"."""
+    amount = _decimal(value)
+    return None if amount is None else f"{round(amount):,}"
+
+
+def _day(value: Any) -> str | None:
+    """The date part of an ISO timestamp — the model needs the day, not the second."""
+    return value[:10] if isinstance(value, str) and len(value) >= 10 else None
+
+
+def _plan_name(tier_name: Any, tier_id: Any) -> str:
+    """"Pro" from the catalogue's "Pro — 20,000 credits / month", as the billing page shortens it."""
+    name = str(tier_name or "").split(" — ", 1)[0].strip()
+    return name or str(tier_id or "").capitalize()
+
+
+def _is_free_tier(tier_id: Any) -> bool:
+    return str(tier_id or "").lower() in ("free", "trial")
+
+
+#: What happens at zero credits, by the owner's billing preference.
+_WHEN_OUT = {
+    "soft_block": "When credits run out, work that spends them waits for more.",
+    "auto_upgrade": "When credits run out, the plan moves up to the next one.",
+}
+
+
+def _summarize_billing(payload: dict[str, Any]) -> str:
+    billing = payload.get("billing") or {}
+    balance = billing.get("balance") or {}
+    stage = balance.get("subscription_state")
+    period = balance.get("active_period")
+    offer = balance.get("intro_offer") or {}
+    lines: list[str] = []
+
+    # A free period with no allowance is an account without a plan, not an empty plan: the web
+    # billing page draws it that way, and "0 of 0 credits used" would tell the model a plan exists.
+    if period is None or (
+        _is_free_tier(period.get("tier_id")) and (_decimal(period.get("credit_limit")) or 0) <= 0
+    ):
+        lines.append(
+            "The subscription has ended: no plan and no credits."
+            if stage == "cancelled"
+            else "No plan yet, so no credits."
+        )
+        if offer.get("price_usd") is not None:
+            lines.append(f"The first month costs ${offer['price_usd']}.")
+    else:
+        if _is_free_tier(period.get("tier_id")):
+            plan = "a free trial"
+        else:
+            plan = f"the {_plan_name(period.get('tier_name'), period.get('tier_id'))} plan"
+            if period.get("tier_price_usd") is not None:
+                plan += f" (${period['tier_price_usd']}/month)"
+        state = {
+            "frozen": "paused because the last payment failed; paying brings it back",
+            "pending_cancellation": "set to end"
+            + (f" on {_day(balance.get('subscription_ends_at'))}" if _day(balance.get("subscription_ends_at")) else "")
+            + " without renewing",
+            "trial_expired": "over",
+            "cancelled": "cancelled",
+        }.get(str(stage))
+        lines.append(f"On {plan}, {state}." if state else f"On {plan}.")
+
+        left, limit, used = (_credits(period.get(key)) for key in ("balance", "credit_limit", "credits_used"))
+        if left is not None and limit is not None:
+            credit_line = f"{left} credits left of {limit}" + (f" ({used} used)" if used is not None else "")
+            trial_end = _day(period.get("trial_ends_at"))
+            if trial_end:
+                credit_line += f"; the trial ends {trial_end}"
+            elif stage not in ("frozen", "pending_cancellation") and _day(period.get("period_end")):
+                credit_line += f"; they reset {_day(period.get('period_end'))}"
+            lines.append(credit_line + ".")
+        if period.get("is_exhausted"):
+            lines.append("Credits are used up.")
+
+        change = balance.get("scheduled_change")
+        if change:
+            when = _day(change.get("effective_at")) or _day(period.get("period_end"))
+            lines.append(
+                f"Renews on the {_plan_name(change.get('tier_name'), change.get('tier_id'))} plan"
+                + (f" from {when}." if when else " next period.")
+            )
+
+        spent = [
+            f"{item.get('label')} {_credits(item.get('credits'))}"
+            for item in (billing.get("usage") or {}).get("categories") or []
+            if _credits(item.get("credits")) not in (None, "0")
+        ]
+        if spent:
+            lines.append(f"Spent this period: {', '.join(spent[:3])}.")
+
+        if stage == "active" and not _is_free_tier(period.get("tier_id")):
+            preferences = billing.get("preferences") or {}
+            strategy = preferences.get("exhaustion_strategy")
+            pack = billing.get("auto_top_up_pack")
+            if strategy == "auto_top_up" and pack:
+                lines.append(
+                    f"When credits run out, {_credits(pack.get('credits'))} more are bought for "
+                    f"${pack.get('price_usd')}, up to {preferences.get('auto_top_up_max_per_period')} times a period."
+                )
+            elif strategy in _WHEN_OUT:
+                lines.append(_WHEN_OUT[strategy])
+
+    # Payment is the one thing this surface cannot do, and the model must not promise it.
+    lines.append(
+        "Buying credits, changing the plan or settling a payment happens on the SellerClaw website; "
+        "the card links there."
+    )
+    lines.append(_SHOWN_TO_THE_OWNER)
+    return " ".join(lines)
+
+
 _TASK_WORDS = {
     "image": "an image",
-    "image_edit": "an edit of an image",
+    "image_edit": "an image from photos",
     "video": "a video",
     "video_from_image": "a video from a photo",
 }
@@ -889,8 +1025,9 @@ def _summarize_media_studio(payload: dict[str, Any]) -> str:
     if defaults:
         lines.append(f"Default models — {'; '.join(defaults)}.")
     lines.append(
-        "The owner picks the model and its settings, describes what they want and presses Generate; "
-        "that reaches you as a message from them naming all of it. Generate nothing until it does."
+        "The owner describes what they want, may pick or upload photos to work from, chooses the "
+        "shape, size and a price-and-quality tier, and presses Generate; that reaches you as a "
+        "message from them naming the model, the settings and the photos. Generate nothing until it does."
     )
     lines.append(_SHOWN_TO_THE_OWNER)
     return " ".join(lines)
@@ -1015,6 +1152,16 @@ Reconnecting a marketplace always happens on that page, signed in as the owner; 
 them, and a connection the platform itself switched off will not come back by reconnecting.\
 """
 
+_BILLING_DESC = """\
+The owner's SellerClaw plan and credits as an interactive card: the plan and its state, the credits
+left and when they reset, what this period's credits went on, and what happens when they run out.
+
+Use it for "how many credits do I have", "what plan am I on", "what is using my credits" — and to
+check the balance before starting something that costs a lot of credits, such as a video. Buying
+credits, changing the plan or settling a failed payment happens on the SellerClaw website; the card
+links to the right page, and you cannot do any of it for the owner.\
+"""
+
 _APPROVAL_DESC = """\
 Show one thing waiting on the owner as an interactive card: what will happen, the details behind it,
 and the buttons to approve or decline.
@@ -1039,20 +1186,25 @@ way by its job id. With no `job`, the library: `category` is image or video (omi
 """
 
 _MEDIA_STUDIO_DESC = """\
-The media studio as an interactive card: the owner chooses what to make (an image, an edit of an
-image, a video, a video from a photo), the model — each with its price in credits — and that
-model's settings, describes what they want and presses Generate. The press reaches you as an
-ordinary message from them naming the model and settings; run it with the media commands.
+The media studio as an interactive card: the owner describes an image or a video, may pick photos
+from their files or upload new ones to work from (up to 6 for an image, 1 to start a video),
+chooses the shape, the size and a price-and-quality tier — each with its price in credits — and
+presses Generate. The press reaches you as an ordinary message from them naming the model, the
+settings and the photos; run it with the media commands. The full view lists every model, their
+rarer settings, and lets the owner make a model their default.
 
-Open it when the owner wants to choose the model or the settings themselves, or asks for the
-studio; otherwise generate straight away with the default model. Carry over what the conversation
-already says: `task` (image, image_edit, video, video_from_image), `prompt`, `model`, and
-`reference`, the URL of the image to edit or animate. The owner can also make a model their
-default for a task there.\
+Open it when the owner wants to choose the quality, the price or the settings themselves, or asks
+for the studio; otherwise generate straight away with the default model. Carry over what the
+conversation already says: `task` (image, image_edit, video, video_from_image), `prompt`, `model`,
+and `reference`, the URL of a photo to work from — or a list of them.\
 """
 
 _MEDIA_SET_DEFAULT_DESC = """\
 Record the owner's press of "Make default" on the studio card and hand back the models.\
+"""
+
+_MEDIA_UPLOAD_DESC = """\
+Store the photo the owner chose on the studio card in their files and hand back its link.\
 """
 
 
@@ -1406,6 +1558,9 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
     def _read_connections(client: Client) -> dict[str, Any]:
         return {"integrations": client.request("GET", "/agent/integrations", read_only=True)}
 
+    def _read_billing(client: Client) -> dict[str, Any]:
+        return {"billing": client.request("GET", "/agent/billing/overview", read_only=True)}
+
     def _read_approval(
         client: Client, request_id: str, known: dict[str, Any] | None = None
     ) -> dict[str, Any]:
@@ -1596,6 +1751,19 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
             payload = _read_connections(client)
         return _result(payload, _summarize_connections(payload))
 
+    @apps.tool(
+        resource_uri=resource_uri("billing"),
+        visibility=["model", "app"],
+        name="sellerclaw_billing",
+        title="Show the plan and credits",
+        description=_BILLING_DESC,
+        annotations=_reads_only("Show the plan and credits"),
+    )
+    def sellerclaw_billing() -> Any:
+        with _refusals_in_their_own_words(), client_for_tool(DEFAULT_TIMEOUT_SECONDS) as client:
+            payload = _read_billing(client)
+        return _result(payload, _summarize_billing(payload))
+
     def _library_page(
         client: Client, category: str, query: str | None, limit: int
     ) -> dict[str, Any]:
@@ -1641,10 +1809,41 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
             return task
         raise ToolError(f"task is one of {', '.join(_MEDIA_TASKS)}; got {task!r}.")
 
+    def _studio_references(reference: str | list[str] | None) -> list[str] | None:
+        given = [reference] if isinstance(reference, str) else list(reference or [])
+        # Each once, in the order the conversation named them: the order is what a prompt means
+        # by "the first photo".
+        urls = list(dict.fromkeys(url for url in (_words(value) for value in given) if url))
+        if len(urls) > _STUDIO_REFERENCES:
+            raise ToolError(f"The studio takes at most {_STUDIO_REFERENCES} photos; got {len(urls)}.")
+        return urls or None
+
+    def _uploaded_photo(filename: str, content_base64: str) -> tuple[str, bytes]:
+        name = (_words(filename) or "photo").replace("/", "_").replace("\\", "_")
+        encoded = content_base64.strip()
+        # A data URL is what a browser's reader hands back; take the payload after its comma.
+        if encoded.startswith("data:") and "," in encoded:
+            encoded = encoded.split(",", 1)[1]
+        try:
+            content = base64.b64decode(encoded, validate=True)
+        except (binascii.Error, ValueError):
+            raise ToolError("The photo did not arrive whole; choose it again.") from None
+        if not content:
+            raise ToolError("The photo is empty; choose another one.")
+        if len(content) > _UPLOAD_MAX_BYTES:
+            raise ToolError(
+                f"The photo is {len(content) // (1024 * 1024)} MB; the studio takes up to "
+                f"{_UPLOAD_MAX_BYTES // (1024 * 1024)} MB."
+            )
+        return name, content
+
     def _read_media_studio(client: Client, draft: dict[str, Any]) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "models": client.request("GET", "/agent/media/models", read_only=True),
             "draft": draft,
+            # This server has the studio's upload tool. A card newer than the server it is served
+            # with offers "Upload" only when this says so, instead of a button that fails.
+            "can_upload": True,
         }
         # Pictures to edit or animate. Best-effort: without them the owner can still paste a link.
         try:
@@ -1691,10 +1890,13 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
         task: str | None = None,
         prompt: str | None = None,
         model: str | None = None,
-        reference: str | None = None,
+        reference: str | list[str] | None = None,
     ) -> Any:
         draft = _query(
-            task=_media_task(task), prompt=_words(prompt), model=_words(model), reference=_words(reference)
+            task=_media_task(task),
+            prompt=_words(prompt),
+            model=_words(model),
+            references=_studio_references(reference),
         )
         with _refusals_in_their_own_words(), client_for_tool(DEFAULT_TIMEOUT_SECONDS) as client:
             payload = _read_media_studio(client, draft)
@@ -1720,6 +1922,40 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
         payload = {"models": models, "draft": {"task": chosen, "model": model}}
         return _result(payload, _summarize_media_studio(payload))
 
+    @apps.tool(
+        resource_uri=resource_uri("media-studio"),
+        # The studio's own "Upload" press: a photo on the owner's device, which neither Claude nor
+        # the card's frame can reach our API with any other way.
+        visibility=["app"],
+        name="sellerclaw_media_upload_image",
+        title="Upload a photo",
+        description=_MEDIA_UPLOAD_DESC,
+        annotations=ToolAnnotations(
+            title="Upload a photo",
+            read_only_hint=False,
+            destructive_hint=False,
+            # Pressed twice, the photo is stored twice.
+            idempotent_hint=False,
+            open_world_hint=True,
+        ),
+    )
+    def sellerclaw_media_upload_image(filename: str, content_base64: str) -> Any:
+        name, content = _uploaded_photo(filename, content_base64)
+        content_type, _ = mimetypes.guess_type(name)
+        # The files API checks the type by its bytes, the account's space and pace, and scans it.
+        with _refusals_in_their_own_words(), client_for_tool(_UPLOAD_TIMEOUT_SECONDS) as client:
+            stored = client.request(
+                "POST",
+                "/agent/files/upload-for-user",
+                files={"file": (name, content, content_type or "application/octet-stream")},
+            )
+        payload = {"file": stored}
+        return _result(
+            payload,
+            f"The owner uploaded {stored.get('filename') or name} to their files: {stored.get('download_url')}. "
+            "It is picked on the studio card; wait for Generate.",
+        )
+
     return apps
 
 
@@ -1734,9 +1970,11 @@ def tool_names() -> Sequence[str]:
         "sellerclaw_products",
         "sellerclaw_ads",
         "sellerclaw_connections",
+        "sellerclaw_billing",
         "sellerclaw_approval",
         "sellerclaw_approval_decide",
         "sellerclaw_media",
         "sellerclaw_media_studio",
         "sellerclaw_media_set_default",
+        "sellerclaw_media_upload_image",
     )

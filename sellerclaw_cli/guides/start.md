@@ -94,6 +94,10 @@ mailbox, Stripe — they are OAuth flows), **paying by card** (subscription, cre
 **changing how much they are asked** (Settings → the approval cards, including turning approvals back
 on for you). Say plainly which of these is needed and why; never stage work that cannot run.
 
+Seeing the plan is not one of them: the plan, the credits left, when they reset and what they went on
+are `sellerclaw_billing` (a card) or `sellerclaw account billing`. Check them before something that
+costs a lot of credits, such as a video.
+
 ## The other guides
 
 `listings` (publish and maintain marketplace listings, and get a refused one through) · `orders`

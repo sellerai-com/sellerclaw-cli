@@ -11,12 +11,15 @@ below is `sellerclaw_run` or a card tool; run the examples directly.
 ## Pick the path
 
 - The owner asks for a picture or a clip → generate it straight away with the default model.
-- The owner wants to choose the model or its settings, or asks for the studio → open the card tool
-  `sellerclaw_media_studio`, carrying over what they already said (`task`, `prompt`, `model`,
-  `reference`). Their Generate press comes back as a message from them naming the model and the
-  settings; run exactly that.
-- The picture has to show the owner's own product → start from a real photo of it (`edit-image`, or
-  `generate-video` with `reference_image_url`). A generation from text alone draws a different product.
+- The owner wants to choose the quality, the price or the settings, or asks for the studio → open the
+  card tool `sellerclaw_media_studio`, carrying over what they already said (`task`, `prompt`,
+  `model`, `reference` — one photo link or a list). There they can also pick photos from their files
+  or upload new ones. Their Generate press comes back as a message from them naming the model, the
+  settings and the photos; run exactly that.
+- The picture has to show the owner's own product → start from real photos of it (`edit-image` takes
+  up to 6: the product from one, the scene from another; `generate-video` takes one as
+  `reference_image_url`). A generation from text alone draws a different product. A photo the owner
+  attached to this chat does not reach SellerClaw — ask for a link, or open the studio to upload it.
 
 ## Generate
 
@@ -24,7 +27,10 @@ below is `sellerclaw_run` or a card tool; run the examples directly.
 sellerclaw_run(group="media", command="generate-image",
   body={"prompt": "Ceramic mug on a walnut desk, soft morning light", "aspect_ratio": "4:5"})
 sellerclaw_run(group="media", command="edit-image",
-  body={"prompt": "The same mug on a white marble table", "reference_url": PHOTO_URL})
+  body={"prompt": "The same mug on a white marble table", "reference_urls": [PHOTO_URL]})
+sellerclaw_run(group="media", command="edit-image",
+  body={"prompt": "The mug from the first photo on the shelf from the second",
+        "reference_urls": [MUG_URL, SHELF_URL]})
 sellerclaw_run(group="media", command="generate-images",
   body={"images": [{"prompt": "Front view on white"}, {"prompt": "Side view on white"}]})
 sellerclaw_run(group="media", command="generate-video",

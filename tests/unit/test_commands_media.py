@@ -145,6 +145,15 @@ def _media_command(name: str) -> Cmd:
             id="edit",
         ),
         pytest.param(
+            "edit-image",
+            "/agent/media/images/edit",
+            {
+                "prompt": "the bottle from the first photo on the counter from the second",
+                "reference_urls": ["https://files.example/bottle.png", "https://files.example/counter.png"],
+            },
+            id="image-from-several-photos",
+        ),
+        pytest.param(
             "generate-video",
             "/agent/media/video-jobs",
             {"prompt": "waves", "model": "veo-3.1-lite", "params": {"aspect_ratio": "9:16", "duration_seconds": "4"}},

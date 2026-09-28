@@ -64,12 +64,22 @@ SPECS = (
         "POST",
         "/agent/media/images/edit",
         summary=(
-            "Edit ONE image from a reference URL; returns the new image URL and job id in this call. "
-            'Body: {"prompt": "...", "reference_url": "https://...", "size"?, "model"?, "params"?}.'
+            "Make ONE image from the owner's photos — change one, or combine up to 6; returns the new "
+            "image URL and job id in this call. "
+            'Body: {"prompt": "...", "reference_urls": ["https://...", ...], "size"?, "model"?, "params"?}.'
         ),
         body=(
-            body_field("prompt", required=True, help="What to change in the reference image."),
-            body_field("reference_url", required=True, help="URL of the image to edit."),
+            body_field(
+                "prompt",
+                required=True,
+                help="What to make from the photos; it may name them by order (\"the bottle from the first\").",
+            ),
+            body_field(
+                "reference_urls",
+                repeatable=True,
+                help="Links to 1-6 photos to work from, in order. Required unless reference_url is given.",
+            ),
+            body_field("reference_url", help="One photo to work from — the single form of reference_urls."),
             body_field("size", help="Pixel size of the output for the default model only, e.g. 1024x1024; not with model."),
             body_field("model", help=_MODEL_HELP),
             body_field("params", type=dict, help=_PARAMS_HELP),

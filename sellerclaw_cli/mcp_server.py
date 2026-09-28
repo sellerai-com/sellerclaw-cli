@@ -26,7 +26,7 @@ The screens
 -----------
 Alongside those four, :mod:`sellerclaw_cli.mcp_apps` contributes a small set of tools that answer
 with an *interactive card* instead of JSON — what needs the owner, the store summary, orders,
-listings, catalog products, ads, connections and the approval request. They are a deliberate
+listings, catalog products, ads, connections, the plan and credits, and the approval request. They are a deliberate
 exception to the proxy design above, because a card is bound to one named tool and cannot be
 carried by a general-purpose one; to keep the list short, one tool covers both a list and one of
 its rows, found by the words the owner uses for it. One of them is callable only by the card
@@ -91,9 +91,11 @@ SERVER_INSTRUCTIONS = (
     "(`sellerclaw_store_summary`), the orders, or one order (`sellerclaw_orders`), listings, or one "
     "store's listing (`sellerclaw_listings`), a product with its supplier and every store it is "
     "listed in (`sellerclaw_products`), how the ads are doing (`sellerclaw_ads`), whether the "
-    "connections are healthy (`sellerclaw_connections`), something waiting on the owner "
+    "connections are healthy (`sellerclaw_connections`), the plan, the credits left and what they "
+    "went on (`sellerclaw_billing`), something waiting on the owner "
     "(`sellerclaw_approval`), generated images and videos or the owner's library of them "
-    "(`sellerclaw_media`), and the media studio where the owner picks the model and settings "
+    "(`sellerclaw_media`), and the media studio where the owner describes it, picks or uploads photos "
+    "and chooses the price and quality "
     "(`sellerclaw_media_studio`). Reach for these first when the question is one of those — the owner "
     "gets something they can look at and act on instead of a wall of numbers — and do not also run "
     "a command for the same data. Pass the owner's own words — an order number, a title, a SKU, a "
