@@ -7,10 +7,11 @@ back for more. SellerClaw ships eleven: what needs the owner, the store summary,
 listed in, ads, connections, the plan and credits, the approval card, generated media (with the file
 library), and the media studio.
 
-The cards read; they do not write. Three tools a card may call change anything, each callable by its
+The cards read; they do not write. Four tools a card may call change anything, each callable by its
 card alone: the approval card's answer, the studio's "Make default" — an owner's setting, set by
-the owner's own press — and the studio's "Upload", which puts a photo from the owner's device into
-their files. Every other button on a card either opens a page of ours
+the owner's own press — the studio's "Upload", which puts a photo from the owner's device into
+their files, and the studio's "Generate", which starts a generation on the owner's press and spends
+their credits. Every other button on a card either opens a page of ours
 or hands Claude a request in the owner's words —
 the same rule the web app follows, where listings, ads and orders are changed through the
 assistant and never by a button on the page.
@@ -143,6 +144,8 @@ _LIBRARY_LIMIT = 24
 _STUDIO_PICTURES = 12
 #: Photos Claude can carry into the studio: as many as one generation takes (an image from six).
 _STUDIO_REFERENCES = 6
+#: Versions one studio press makes of its request — the Agent API's own cap on a video's ``count``.
+_MAX_VERSIONS = 4
 #: The largest photo the studio's "Upload" takes. The card shrinks a photo to about 2000 pixels
 #: before sending, which lands far below this; the cap bounds what a tool call has to carry.
 _UPLOAD_MAX_BYTES = 15 * 1024 * 1024
@@ -1194,8 +1197,9 @@ message, so do not check the jobs again yourself. A finished image or edit can b
 way by its job id. With no `job`, the library: `category` is image or video (omit it for both),
 `query` narrows by words in the file name, each anywhere in it (a generated file is named after its
 prompt's first words), and `offset` skips that many of the newest — the answer's `library.next` is
-where the next page starts, present while older files remain. The card changes nothing; for
-another version, generate again.\
+where the next page starts, present while older files remain. From a finished result the owner
+can open the studio in the card — to change an image, make a video from it, or make a video again
+with changes — and what they start there is reported to you.\
 """
 
 _MEDIA_STUDIO_DESC = """\
@@ -1226,8 +1230,8 @@ Store the photo the owner chose on the studio card in their files and hand back 
 """
 
 _MEDIA_GENERATE_DESC = """\
-Start what the owner set up on the studio card, on their own press of Generate, and hand back the
-job for the card to follow.\
+Start what the owner set up on the studio card, on their own press of Generate — `count` versions of
+it, 1 to 4, each its own job and charge — and hand back the jobs for the card to follow.\
 """
 
 
@@ -2004,13 +2008,24 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
         return {"id": job_id, "kind": kind, "status": "queued", "prompt": prompt.strip(), "model": model}
 
     def _studio_request(
-        task: str, prompt: str, model: str, params: dict[str, Any] | None, photos: list[str] | None
+        task: str,
+        prompt: str,
+        model: str,
+        params: dict[str, Any] | None,
+        photos: list[str] | None,
+        count: int = 1,
     ) -> tuple[str, dict[str, Any]]:
-        """The Agent API call behind a studio press: which queue, and the body it takes."""
+        """The Agent API call behind a studio press: which queue, and the body it takes.
+
+        ``count`` versions go in the one call — the same image repeated, or a video's ``count`` — so
+        the server takes them all or refuses them all against the limit, never the first few alone.
+        """
         chosen = _media_task(task)
         words = _words(prompt)
         if words is None:
             raise ToolError("Describe what to make first.")
+        if not 1 <= count <= _MAX_VERSIONS:
+            raise ToolError(f"Make 1 to {_MAX_VERSIONS} versions at once; got {count}.")
         links = list(dict.fromkeys(url.strip() for url in photos or [] if url and url.strip()))
         wanted = {"image_edit": "1 to 6 photos", "video_from_image": "one photo"}.get(str(chosen))
         if wanted is None and links:
@@ -2020,9 +2035,13 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
         settings = params or None
         if chosen in ("image", "image_edit"):
             image = _query(prompt=words, model=model, params=settings, reference_urls=links or None)
-            return "/agent/media/image-jobs", {"images": [image]}
+            return "/agent/media/image-jobs", {"images": [image] * count}
         video = _query(
-            prompt=words, model=model, params=settings, reference_image_url=links[0] if links else None
+            prompt=words,
+            model=model,
+            params=settings,
+            reference_image_url=links[0] if links else None,
+            count=count if count > 1 else None,
         )
         return "/agent/media/video-jobs", video
 
@@ -2050,8 +2069,9 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
         model: str,
         params: dict[str, Any] | None = None,
         photos: list[str] | None = None,
+        count: int = 1,
     ) -> Any:
-        path, body = _studio_request(task, prompt, model, params, photos)
+        path, body = _studio_request(task, prompt, model, params, photos, count)
         with _refusals_in_their_own_words(), client_for_tool(DEFAULT_TIMEOUT_SECONDS) as client:
             queued = client.request("POST", path, json=body)
             ids = [str(job_id) for job_id in (queued or {}).get("job_ids") or []]

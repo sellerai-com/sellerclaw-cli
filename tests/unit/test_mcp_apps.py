@@ -2232,6 +2232,18 @@ def test_a_later_library_page_is_told_as_older_files_and_where_the_next_starts()
             {"prompt": "turn", "model": "runway-gen4-turbo", "reference_image_url": "https://api.test/a.png"},
             id="video-from-a-photo",
         ),
+        pytest.param(
+            {"task": "image", "prompt": "a mug", "model": "nano-banana-2", "count": 3},
+            "/agent/media/image-jobs",
+            {"images": [{"prompt": "a mug", "model": "nano-banana-2"}] * 3},
+            id="three-versions-of-an-image-in-one-call",
+        ),
+        pytest.param(
+            {"task": "video", "prompt": "waves", "model": "veo-3.1-lite", "count": 2},
+            "/agent/media/video-jobs",
+            {"prompt": "waves", "model": "veo-3.1-lite", "count": 2},
+            id="two-versions-of-a-video",
+        ),
     ],
 )
 @respx.mock
@@ -2279,6 +2291,16 @@ def test_the_studio_press_queues_what_the_card_shows_and_hands_back_the_job(
             {"task": "image", "prompt": "  ", "model": "m"}, "Describe what to make first", id="no-description"
         ),
         pytest.param({"task": "audio", "prompt": "x", "model": "m"}, "task is one of", id="unknown-task"),
+        pytest.param(
+            {"task": "video", "prompt": "x", "model": "m", "count": 5},
+            "Make 1 to 4 versions at once; got 5",
+            id="five-versions",
+        ),
+        pytest.param(
+            {"task": "image", "prompt": "x", "model": "m", "count": 0},
+            "Make 1 to 4 versions at once; got 0",
+            id="no-versions",
+        ),
     ],
 )
 def test_a_studio_press_that_does_not_add_up_is_refused_before_anything_is_spent(

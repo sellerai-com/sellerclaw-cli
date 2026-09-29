@@ -16,8 +16,8 @@ below is `sellerclaw_run` or a card tool; run the examples directly.
   `model`, `reference` — one photo link or a list). There they can also pick photos from their files
   or upload new ones. Their Generate press starts the generation from the card itself — you are told
   what started and, when it finishes, its link. Their "Ask Claude" press comes back as a message from
-  them with the idea, the model id, the settings and the photo links: write the prompt as below and
-  run it with exactly those.
+  them with the idea, the model id, the settings, the photo links and how many versions: write the
+  prompt as below and run it with exactly those.
 - The picture has to show the owner's own product → start from real photos of it (`edit-image` takes
   up to 6: the product from one, the scene from another; `generate-video` takes one as
   `reference_image_url`). A generation from text alone draws a different product. A photo the owner
@@ -43,6 +43,21 @@ sellerclaw_run(group="media", command="generate-video",
 - `generate-images` (1–5, one subject per prompt) and `generate-video` answer at once with `job_ids`
   and a `note` saying where the result goes — for you it is kept on the job, not posted anywhere.
   Leave `chat_id` out.
+
+## Several versions
+
+When the owner wants to choose from a few, make up to 4 versions of one request in one call — each
+is its own job and is billed on its own:
+
+```text
+sellerclaw_run(group="media", command="generate-images",
+  body={"images": [{"prompt": PROMPT}, {"prompt": PROMPT}, {"prompt": PROMPT}]})
+sellerclaw_run(group="media", command="generate-video", body={"prompt": PROMPT, "count": 2})
+```
+
+- The same prompt gives versions that differ as the model varies them. To compare one thing — the
+  background, the angle — change only that between the prompts.
+- Say the total price before starting more than one video.
 
 ## Write the prompt
 
@@ -103,7 +118,8 @@ sellerclaw_run(group="media", command="generate-image",
 
 - Every generation spends the owner's credits, and a video costs far more than an image; the prices
   are in `models`.
-- At most 10 images and 2 videos generate at once; over that the call is refused until some finish.
+- At most 15 images and 4 videos generate at once; a call that would pass that is refused whole,
+  until some finish.
 - A request that answered with a job id is already running. Sending it again starts, and bills, a
   second one.
 

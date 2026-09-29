@@ -91,7 +91,8 @@ SPECS = (
         "POST",
         "/agent/media/image-jobs",
         summary=(
-            "Queue 1-5 images in the background, each with its own prompt; returns job ids. "
+            "Queue 1-5 images in the background, each with its own prompt (the same item repeated makes "
+            "versions of one image); returns job ids. "
             'Body: {"images": [{"prompt": "...", "aspect_ratio"?, "size"?, "reference_urls"?, "model"?, "params"?}, '
             '...], "chat_id"?}. ' + _DELIVERY_NOTE
         ),
@@ -111,9 +112,10 @@ SPECS = (
         "POST",
         "/agent/media/video-jobs",
         summary=(
-            "Queue ONE video in the background; returns a job id. With reference_image_url it is "
-            'video from that photo, otherwise from text. Body: {"prompt": "...", "aspect_ratio"?, '
-            '"reference_image_url"?, "duration_seconds"?, "model"?, "params"?, "chat_id"?}. '
+            "Queue a video in the background — or several versions of it with count; returns job ids. "
+            "With reference_image_url it is video from that photo, otherwise from text. "
+            'Body: {"prompt": "...", "aspect_ratio"?, "reference_image_url"?, "duration_seconds"?, '
+            '"model"?, "params"?, "count"?, "chat_id"?}. '
             "Without a model, duration_seconds snaps to the nearest length the default model makes. "
             + _DELIVERY_NOTE
         ),
@@ -131,6 +133,11 @@ SPECS = (
             ),
             body_field("model", help=_MODEL_HELP),
             body_field("params", type=dict, help=_PARAMS_HELP),
+            body_field(
+                "count",
+                type=int,
+                help="Versions of this video to make, 1-4, each its own job and charge; all start or none does.",
+            ),
             body_field("chat_id", help=_CHAT_ID_HELP),
         ),
     ),
