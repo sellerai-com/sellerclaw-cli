@@ -17,6 +17,7 @@ from scripts.build_plugin import (
     check_target,
     committed_targets,
     default_guides_src,
+    default_shortcuts_src,
     pack_zip,
     read_version,
 )
@@ -145,12 +146,13 @@ COMMITTED_OUT = TARGETS["claude-code"].out
 def repo(tmp_path: Path) -> Path:
     """A throwaway repo: the plugin/ source plus a freshly built, in-sync committed plugins/ tree.
 
-    The task guides come along because the recipe skills are compiled from them — a repo without
-    them is not a repo the plugin can be built from.
+    The task guides and the shortcuts come along because the recipe skills and the owner's commands
+    are compiled from them — a repo without them is not a repo the plugin can be built from.
     """
     root = tmp_path / "repo"
     shutil.copytree(PLUGIN_SRC, root / "plugin")
     shutil.copytree(default_guides_src(PLUGIN_SRC), root / "sellerclaw_cli" / "guides")
+    shutil.copytree(default_shortcuts_src(PLUGIN_SRC), root / "sellerclaw_cli" / "shortcuts")
     build_target("claude-code", root)
     return root
 

@@ -50,6 +50,10 @@ HOSTED_TOOLS: list[dict[str, Any]] = [
     {"name": "sellerclaw_describe", "description": "describe", "inputSchema": {"type": "object"}},
     {"name": "sellerclaw_run", "description": "run", "inputSchema": {"type": "object"}},
 ]
+HOSTED_PROMPTS: list[dict[str, Any]] = [
+    {"name": "today", "title": "What needs me today", "arguments": []},
+    {"name": "orders", "title": "Orders", "arguments": [{"name": "order", "required": False}]},
+]
 VALID_TOKEN = "sca_" + "a" * 32
 USER_NAME = "Test Seller"
 VERIFICATION_URI = "https://app.sellerclaw.test/device"
@@ -193,6 +197,12 @@ def _handler(state: FakeSellerClaw) -> type[BaseHTTPRequestHandler]:
                 }
             elif method == "tools/list":
                 result = {"tools": HOSTED_TOOLS}
+            elif method == "prompts/list":
+                result = {"prompts": HOSTED_PROMPTS}
+            elif method == "prompts/get":
+                params = body.get("params") or {}
+                text = f"{params.get('name')}: {json.dumps(params.get('arguments'))}"
+                result = {"messages": [{"role": "user", "content": {"type": "text", "text": text}}]}
             elif method == "tools/call":
                 if state.tool_call_delay:
                     time.sleep(state.tool_call_delay)
@@ -346,8 +356,10 @@ def test_handshake_succeeds_without_credentials(start_bridge: Callable[..., Brid
     assert result["protocolVersion"] == "2025-06-18"
     assert result["serverInfo"]["name"] == "sellerclaw"
     assert "sellerclaw_login" in result["instructions"]
-    # listChanged must be on: the tool list grows the moment the user signs in.
+    # listChanged must be on: the tool list grows, and the ready-made commands appear, the moment
+    # the user signs in.
     assert result["capabilities"]["tools"]["listChanged"] is True
+    assert result["capabilities"]["prompts"]["listChanged"] is True
     assert hosted.mcp_requests == []
 
 
@@ -365,6 +377,11 @@ def test_unauthenticated_client_is_offered_sign_in_only(start_bridge: Callable[.
     assert called["result"]["isError"] is True
     assert "sellerclaw_login" in called["result"]["content"][0]["text"]
 
+    # No commands before sign-in, rather than a failure the client shows as a broken server.
+    prompts = bridge.call("prompts/list")
+
+    assert prompts["result"] == {"prompts": []}
+
 
 @requires_node
 def test_signed_in_client_gets_the_hosted_surface(
@@ -378,6 +395,7 @@ def test_signed_in_client_gets_the_hosted_surface(
     # Instructions and tools come from the hosted server — the bundle never carries its own copy.
     assert handshake["result"]["instructions"] == HOSTED_INSTRUCTIONS
     assert handshake["result"]["capabilities"]["tools"]["listChanged"] is True
+    assert handshake["result"]["capabilities"]["prompts"]["listChanged"] is True
     assert [tool["name"] for tool in listed["result"]["tools"]] == [
         "sellerclaw_groups",
         "sellerclaw_describe",
@@ -385,6 +403,21 @@ def test_signed_in_client_gets_the_hosted_surface(
         "sellerclaw_login",
     ]
     assert hosted.mcp_authorizations == [f"Bearer {VALID_TOKEN}"] * 2
+
+
+@requires_node
+def test_signed_in_client_gets_the_hosted_commands(
+    start_bridge: Callable[..., Bridge], hosted: FakeSellerClaw
+) -> None:
+    bridge = start_bridge(token=VALID_TOKEN)
+
+    listed = bridge.call("prompts/list")
+    got = bridge.call("prompts/get", {"name": "orders", "arguments": {"order": "#1001"}})
+
+    assert listed["result"]["prompts"] == HOSTED_PROMPTS
+    forwarded = [r for r in hosted.mcp_requests if r.get("method") == "prompts/get"]
+    assert [r["params"] for r in forwarded] == [{"name": "orders", "arguments": {"order": "#1001"}}]
+    assert got["result"]["messages"][0]["content"]["text"] == 'orders: {"order": "#1001"}'
 
 
 @requires_node
@@ -412,10 +445,12 @@ def test_rejected_token_reports_how_to_fix_it(start_bridge: Callable[..., Bridge
 
     listed = bridge.call("tools/list")
     called = bridge.call("tools/call", {"name": "sellerclaw_run", "arguments": {}})
+    prompts = bridge.call("prompts/list")
 
     assert [tool["name"] for tool in listed["result"]["tools"]] == ["sellerclaw_login"]
     assert called["result"]["isError"] is True
     assert "sellerclaw_login" in called["result"]["content"][0]["text"]
+    assert prompts["result"] == {"prompts": []}
 
 
 @requires_node
@@ -430,11 +465,13 @@ def test_sign_in_completes_in_chat_and_unlocks_the_hosted_tools(
     assert "Signed in" in response["result"]["content"][0]["text"]
     # Persisted where the CLI keeps it, so a later `sellerclaw auth whoami` sees the same session.
     assert _config_token(tmp_path) == VALID_TOKEN
-    # The client is told to re-read the tool list, so the real tools appear without a restart.
-    assert any(n.get("method") == "notifications/tools/list_changed" for n in bridge.notifications)
+    # The client is told to re-read the tool and command lists, so both appear without a restart.
+    methods = {n.get("method") for n in bridge.notifications}
+    assert {"notifications/tools/list_changed", "notifications/prompts/list_changed"} <= methods
 
     listed = bridge.call("tools/list")
     assert "sellerclaw_run" in {tool["name"] for tool in listed["result"]["tools"]}
+    assert bridge.call("prompts/list")["result"]["prompts"] == HOSTED_PROMPTS
 
 
 @requires_node

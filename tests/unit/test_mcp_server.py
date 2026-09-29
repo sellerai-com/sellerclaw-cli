@@ -591,6 +591,12 @@ def test_build_server_registers_the_proxy_tools_and_the_screens() -> None:
         "sellerclaw_products",
         "sellerclaw_ads",
         "sellerclaw_connections",
+        "sellerclaw_billing",
+        "sellerclaw_media",
+        "sellerclaw_media_studio",
+        "sellerclaw_media_set_default",
+        "sellerclaw_media_upload_image",
+        "sellerclaw_media_generate",
     }
     run_props = set(by_name["sellerclaw_run"].input_schema["properties"])
     assert {"group", "command", "positionals", "flags", "body"} <= run_props
@@ -617,6 +623,12 @@ def test_every_tool_carries_a_human_title() -> None:
         "sellerclaw_products": "Show a catalog product",
         "sellerclaw_ads": "Show the ads",
         "sellerclaw_connections": "Show the connections",
+        "sellerclaw_billing": "Show the plan and credits",
+        "sellerclaw_media": "Show generated images and videos",
+        "sellerclaw_media_studio": "Open the media studio",
+        "sellerclaw_media_set_default": "Make a model the default",
+        "sellerclaw_media_upload_image": "Upload a photo",
+        "sellerclaw_media_generate": "Generate from the studio",
     }
 
 

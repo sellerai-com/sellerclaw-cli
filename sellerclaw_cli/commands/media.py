@@ -2,49 +2,99 @@ from __future__ import annotations
 
 import typer
 
-from sellerclaw_cli._command_group import Cmd, body_field, build_group
+from sellerclaw_cli._command_group import Cmd, body_field, build_group, flag
 
 NAME = "media"
 
+#: A synchronous image is drawn inside the request: a slow model takes a minute, and the default
+#: budget would give up on a call that is still working (and still billed).
+_IMAGE_TIMEOUT_SECONDS = 120.0
+#: ``job-status`` holds the answer up to 25 s server-side; leave room for the reply on top.
+_JOB_WAIT_TIMEOUT_SECONDS = 40.0
+
+_MODEL_HELP = (
+    "Id of the one model to use (from `media models`), with no fallback. Omit for the owner's "
+    "default model for this task."
+)
+_PARAMS_HELP = (
+    "Settings of that model by name, e.g. {\"aspect_ratio\": \"16:9\", \"resolution\": \"2K\"} — "
+    "each model lists its own in `media models`. Needs model."
+)
+_CHAT_ID_HELP = (
+    "Chat to post the result into. Only for the SellerClaw agent answering in a chat; other "
+    "callers leave it out and read the result by job id."
+)
+_DELIVERY_NOTE = (
+    "The response's `note` says where the result goes: into the SellerClaw chat, or left for you "
+    "to read with `job-status <job_id> --wait-seconds 25`. Do not send the request again — that "
+    "starts, and bills, a second one."
+)
+
 SPECS = (
+    Cmd(
+        "models",
+        "GET",
+        "/agent/media/models",
+        summary=(
+            "Models the owner can use for each task (image, image_edit, video, video_from_image): "
+            "id, price in credits, which one is the default, and the settings each one takes. "
+            "Read it before passing model or params."
+        ),
+    ),
     Cmd(
         "generate-image",
         "POST",
         "/agent/media/images",
         summary=(
-            "Generate ONE image synchronously and return its URL. Use when you need the "
-            "result in this turn (e.g. to set it as a product photo). Body: "
-            '{"prompt": "...", "size"?, "aspect_ratio"?}.'
+            "Generate ONE image and return its URL and job id in this call. Use when you need the "
+            'result now (e.g. to set it as a product photo). Body: {"prompt": "...", '
+            '"aspect_ratio"?, "size"?, "model"?, "params"?}.'
         ),
         body=(
             body_field("prompt", required=True, help="Text description of the image to generate."),
-            body_field("size", help="Pixel size, e.g. 1024x1024."),
-            body_field("aspect_ratio", help="Aspect ratio, e.g. 1:1, 16:9."),
+            body_field("aspect_ratio", help="Aspect ratio, e.g. 1:1, 16:9; with model, one that model draws."),
+            body_field("size", help="Pixel size for the default model only, e.g. 1024x1024; not with model."),
+            body_field("model", help=_MODEL_HELP),
+            body_field("params", type=dict, help=_PARAMS_HELP),
         ),
+        timeout=_IMAGE_TIMEOUT_SECONDS,
     ),
     Cmd(
         "edit-image",
         "POST",
         "/agent/media/images/edit",
         summary=(
-            "Edit ONE image synchronously from a reference URL; returns the new image URL. "
-            'Body: {"prompt": "...", "reference_url": "https://...", "size"?}.'
+            "Make ONE image from the owner's photos — change one, or combine up to 6; returns the new "
+            "image URL and job id in this call. "
+            'Body: {"prompt": "...", "reference_urls": ["https://...", ...], "size"?, "model"?, "params"?}.'
         ),
         body=(
-            body_field("prompt", required=True, help="What to change in the reference image."),
-            body_field("reference_url", required=True, help="URL of the image to edit."),
-            body_field("size", help="Pixel size of the output, e.g. 1024x1024."),
+            body_field(
+                "prompt",
+                required=True,
+                help="What to make from the photos; it may name them by order (\"the bottle from the first\").",
+            ),
+            body_field(
+                "reference_urls",
+                repeatable=True,
+                help="Links to 1-6 photos to work from, in order. Required unless reference_url is given.",
+            ),
+            body_field("reference_url", help="One photo to work from — the single form of reference_urls."),
+            body_field("size", help="Pixel size of the output for the default model only, e.g. 1024x1024; not with model."),
+            body_field("model", help=_MODEL_HELP),
+            body_field("params", type=dict, help=_PARAMS_HELP),
         ),
+        timeout=_IMAGE_TIMEOUT_SECONDS,
     ),
     Cmd(
         "generate-images",
         "POST",
         "/agent/media/image-jobs",
         summary=(
-            "Queue 1-5 images (each with its own prompt); delivered to the chat when ready. "
-            'Returns job ids — do not re-queue the same request. Body: {"images": [{"prompt": "...", '
-            '"size"?, "aspect_ratio"?}, ...], "chat_id"?}. Pass the id of the chat you are in as '
-            "chat_id so the images come back to THIS conversation."
+            "Queue 1-5 images in the background, each with its own prompt (the same item repeated makes "
+            "versions of one image); returns job ids. "
+            'Body: {"images": [{"prompt": "...", "aspect_ratio"?, "size"?, "reference_urls"?, "model"?, "params"?}, '
+            '...], "chat_id"?}. ' + _DELIVERY_NOTE
         ),
         body=(
             body_field(
@@ -52,12 +102,9 @@ SPECS = (
                 type=dict,
                 repeatable=True,
                 required=True,
-                help="1-5 images to queue: array of {prompt*, size?, aspect_ratio?}.",
+                help="1-5 images to queue: array of {prompt*, aspect_ratio?, size?, reference_urls?, model?, params?}; reference_urls (1-6 photos, in order) makes that one from photos, as edit-image; size not with model.",
             ),
-            body_field(
-                "chat_id",
-                help="Chat to deliver the finished images into (the conversation you are in).",
-            ),
+            body_field("chat_id", help=_CHAT_ID_HELP),
         ),
     ),
     Cmd(
@@ -65,30 +112,33 @@ SPECS = (
         "POST",
         "/agent/media/video-jobs",
         summary=(
-            "Queue ONE video; delivered to the chat when ready. Returns a job id — do not "
-            're-queue the same request. Body: {"prompt": "...", "aspect_ratio"?, '
-            '"reference_image_url"?, "duration_seconds"?, "chat_id"?}. Pass the id of the chat '
-            "you are in as chat_id so the video comes back to THIS conversation. With a "
-            "reference_image_url it is image-to-video; otherwise text-to-video. duration_seconds "
-            "is optional and snapped to the provider's nearest supported length (text-to-video "
-            "4/6/8s, default 8)."
+            "Queue a video in the background — or several versions of it with count; returns job ids. "
+            "With reference_image_url it is video from that photo, otherwise from text. "
+            'Body: {"prompt": "...", "aspect_ratio"?, "reference_image_url"?, "duration_seconds"?, '
+            '"model"?, "params"?, "count"?, "chat_id"?}. '
+            "Without a model, duration_seconds snaps to the nearest length the default model makes. "
+            + _DELIVERY_NOTE
         ),
         body=(
             body_field("prompt", required=True, help="Text description of the video to generate."),
-            body_field("aspect_ratio", help="Aspect ratio, e.g. 16:9, 9:16."),
+            body_field("aspect_ratio", help="Aspect ratio: 16:9 or 9:16 from text; with model, one that model draws."),
             body_field(
                 "reference_image_url",
-                help="If set, image-to-video from this URL; otherwise text-to-video.",
+                help="If set, video from this photo; otherwise video from text.",
             ),
             body_field(
                 "duration_seconds",
                 type=int,
-                help="Clip length in seconds; snapped to the nearest supported length.",
+                help="Clip length in seconds; snapped for the default model, exact for a named one.",
             ),
+            body_field("model", help=_MODEL_HELP),
+            body_field("params", type=dict, help=_PARAMS_HELP),
             body_field(
-                "chat_id",
-                help="Chat to deliver the finished video into (the conversation you are in).",
+                "count",
+                type=int,
+                help="How many videos to make from this request, 1-3, to choose from; each is its own job and charge, and all start or none does.",
             ),
+            body_field("chat_id", help=_CHAT_ID_HELP),
         ),
     ),
     Cmd(
@@ -96,22 +146,37 @@ SPECS = (
         "GET",
         "/agent/media/jobs/{job_id}",
         summary=(
-            "Check one media job's status/result when the owner asks for an update. "
-            "Results normally arrive in chat automatically."
+            "One media job: status, and the result URL once it has succeeded (or why it failed). "
+            "--wait-seconds holds the answer until the job finishes or the wait runs out."
         ),
+        flags=(
+            flag(
+                "wait_seconds",
+                type=int,
+                minimum=0,
+                maximum=25,
+                default=0,
+                help="Hold the answer up to this many seconds until the job has finished.",
+            ),
+        ),
+        timeout=_JOB_WAIT_TIMEOUT_SECONDS,
     ),
     Cmd(
         "jobs",
         "GET",
         "/agent/media/jobs",
         summary=(
-            "List recent media jobs and their status when the owner asks for an update "
-            "or you need to recover job ids."
+            "Several media jobs at once: the ones named with --id (up to 10, in that order), "
+            "or the most recent ones."
+        ),
+        flags=(
+            flag("id", repeatable=True, help="Job id to read; repeat for several (up to 10)."),
+            flag("limit", type=int, minimum=1, maximum=50, default=20, help="Recent jobs to return."),
         ),
     ),
 )
 
-app = build_group(NAME, "Generate and edit images/videos for the chat.", SPECS)
+app = build_group(NAME, "Generate and edit images and videos, pick the model and its settings.", SPECS)
 
 
 def register(parent: typer.Typer) -> None:

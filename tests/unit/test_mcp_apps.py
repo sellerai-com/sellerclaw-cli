@@ -14,7 +14,10 @@ Three things here are worth a test each and would fail silently otherwise:
 from __future__ import annotations
 
 import asyncio
+import base64
+import json
 import time
+from decimal import Decimal
 from typing import Any
 
 import httpx
@@ -101,7 +104,10 @@ def test_both_ways_of_building_the_server_carry_the_screens(builder: Any) -> Non
         "ui://sellerclaw/products.html",
         "ui://sellerclaw/ads.html",
         "ui://sellerclaw/connections.html",
+        "ui://sellerclaw/billing.html",
         "ui://sellerclaw/approval.html",
+        "ui://sellerclaw/media.html",
+        "ui://sellerclaw/media-studio.html",
     }
     assert {tool.name for tool in asyncio.run(server.list_tools())} >= set(mcp_apps.tool_names())
 
@@ -127,13 +133,20 @@ def test_the_model_cannot_answer_an_approval_for_the_owner() -> None:
         "sellerclaw_products": ["model", "app"],
         "sellerclaw_ads": ["model", "app"],
         "sellerclaw_connections": ["model", "app"],
+        "sellerclaw_billing": ["model", "app"],
         "sellerclaw_approval": ["model", "app"],
         "sellerclaw_approval_decide": ["app"],
+        "sellerclaw_media": ["model", "app"],
+        "sellerclaw_media_studio": ["model", "app"],
+        "sellerclaw_media_set_default": ["app"],
+        "sellerclaw_media_upload_image": ["app"],
+        "sellerclaw_media_generate": ["app"],
     }
 
 
 def test_the_cards_that_only_show_things_are_read_only() -> None:
-    """Only one tool a card calls changes anything — the approval card's answer — and it is the card's alone.
+    """Three tools a card calls change anything — the approval card's answer, the studio's "Make
+    default" and its "Upload" — and each is its card's alone.
 
     Everything the new cards offer beyond reading is a request to Claude or a link to our website,
     so their tools must say they read — a client asking permission per write would otherwise put a
@@ -144,7 +157,12 @@ def test_the_cards_that_only_show_things_are_read_only() -> None:
     writes = {
         name for name in mcp_apps.tool_names() if not by_name[name].annotations.read_only_hint
     }
-    assert writes == {"sellerclaw_approval_decide"}
+    assert writes == {
+        "sellerclaw_approval_decide",
+        "sellerclaw_media_set_default",
+        "sellerclaw_media_upload_image",
+        "sellerclaw_media_generate",
+    }
 
 
 def test_every_screen_tool_points_at_a_resource_that_exists() -> None:
@@ -175,6 +193,8 @@ def test_the_resource_declares_our_origin_and_asks_for_no_network() -> None:
     csp = meta["ui"]["csp"]
     assert csp["connectDomains"] == []
     assert csp["resourceDomains"][0] == APPS_BASE
+    # Generated pictures and clips are served by the API; without it the media card draws nothing.
+    assert mcp_apps.DEFAULT_MEDIA_BASE in csp["resourceDomains"]
     assert "https://i.ebayimg.com" in csp["resourceDomains"]
     # A draft built from a CJ product still shows CJ's photos until it is published.
     assert "https://*.cjdropshipping.com" in csp["resourceDomains"]
@@ -1079,6 +1099,21 @@ def test_the_connections_card_is_the_agents_own_overview(
     assert result.structured_content == {"integrations": [{"kind": "ebay_store", "connections": []}]}
 
 
+@respx.mock
+def test_the_billing_card_reads_the_owners_plan_and_credits(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    overview = {"balance": {"subscription_state": "no_plan"}, "usage": {"categories": []}}
+    route = respx.get(f"{fake_api_url}/agent/billing/overview").mock(
+        return_value=httpx.Response(200, json=overview)
+    )
+
+    result = _call("sellerclaw_billing", {})
+
+    assert route.call_count == 1
+    assert result.structured_content == {"billing": overview}
+
+
 # --------------------------------------------------------------------------- what the model reads
 
 
@@ -1598,6 +1633,134 @@ def test_connections_are_told_by_what_needs_the_owner(integrations: list[Any], o
     assert mcp_apps._summarize_connections({"integrations": integrations}).startswith(opening)
 
 
+def _billing(
+    stage: str,
+    period: dict[str, Any] | None,
+    *,
+    categories: tuple[tuple[str, str], ...] = (),
+    preferences: dict[str, Any] | None = None,
+    pack: dict[str, Any] | None = None,
+    **balance: Any,
+) -> dict[str, Any]:
+    """A ``GET /agent/billing/overview`` answer, as the card receives it."""
+    return {
+        "billing": {
+            "balance": {"subscription_state": stage, "active_period": period, **balance},
+            "usage": {"categories": [{"label": label, "credits": credits} for label, credits in categories]},
+            "preferences": preferences or {"exhaustion_strategy": "soft_block"},
+            "auto_top_up_pack": pack,
+        }
+    }
+
+
+def _period(tier_id: str, tier_name: str, price: str, limit: str, used: str, **fields: Any) -> dict[str, Any]:
+    left = str(max(Decimal(0), Decimal(limit) - Decimal(used)))
+    return {
+        "tier_id": tier_id,
+        "tier_name": tier_name,
+        "tier_price_usd": price,
+        "credit_limit": limit,
+        "credits_used": used,
+        "balance": left,
+        "period_end": "2026-06-15T09:00:00Z",
+        "is_exhausted": left == "0",
+        "trial_ends_at": None,
+        **fields,
+    }
+
+
+_PRO = ("pro", "Pro — 20,000 credits / month", "160", "20000")
+_WEBSITE = (
+    "Buying credits, changing the plan or settling a payment happens on the SellerClaw website; "
+    "the card links there."
+)
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        pytest.param(
+            _billing(
+                "active",
+                _period(*_PRO, "7640.5"),
+                categories=(
+                    ("AI responses", "5210"),
+                    ("Media generation", "1480"),
+                    ("Market research", "620"),
+                    ("Web search & scraping", "240"),
+                ),
+                preferences={"exhaustion_strategy": "auto_top_up", "auto_top_up_max_per_period": 3},
+                pack={"credits": "5000", "price_usd": "50"},
+            ),
+            "On the Pro plan ($160/month). 12,360 credits left of 20,000 (7,640 used); they reset "
+            "2026-06-15. Spent this period: AI responses 5,210, Media generation 1,480, Market "
+            "research 620. When credits run out, 5,000 more are bought for $50, up to 3 times a period.",
+            id="working-with-top-up",
+        ),
+        pytest.param(
+            _billing("active", _period("growth", "Starter — 4,000 credits / month", "36", "4000", "4000")),
+            "On the Starter plan ($36/month). 0 credits left of 4,000 (4,000 used); they reset "
+            "2026-06-15. Credits are used up. When credits run out, work that spends them waits for more.",
+            id="used-up",
+        ),
+        pytest.param(
+            _billing(
+                "active",
+                _period("max", "Max — 40,000 credits / month", "320", "40000", "12900"),
+                preferences={"exhaustion_strategy": "auto_upgrade"},
+                scheduled_change={
+                    "tier_id": "plus",
+                    "tier_name": "Growth — 10,000 credits / month",
+                    "effective_at": None,
+                },
+            ),
+            "On the Max plan ($320/month). 27,100 credits left of 40,000 (12,900 used); they reset "
+            "2026-06-15. Renews on the Growth plan from 2026-06-15. When credits run out, the plan "
+            "moves up to the next one.",
+            id="smaller-plan-queued",
+        ),
+        pytest.param(
+            _billing("frozen", _period("plus", "Growth — 10,000 credits / month", "85", "10000", "6200")),
+            "On the Growth plan ($85/month), paused because the last payment failed; paying brings it "
+            "back. 3,800 credits left of 10,000 (6,200 used).",
+            id="paused",
+        ),
+        pytest.param(
+            _billing(
+                "pending_cancellation",
+                _period("plus", "Growth — 10,000 credits / month", "85", "10000", "2300"),
+                subscription_ends_at="2026-06-15T09:00:00Z",
+            ),
+            "On the Growth plan ($85/month), set to end on 2026-06-15 without renewing. 7,700 credits "
+            "left of 10,000 (2,300 used).",
+            id="ending",
+        ),
+        pytest.param(
+            _billing(
+                "trial",
+                _period("free", "Free", "0", "5000", "1240", period_end=None, trial_ends_at="2026-06-04T14:00:00Z"),
+            ),
+            "On a free trial. 3,760 credits left of 5,000 (1,240 used); the trial ends 2026-06-04.",
+            id="trial",
+        ),
+        pytest.param(
+            _billing("no_plan", _period("free", "Free", "0", "0", "0"), intro_offer={"price_usd": "1"}),
+            "No plan yet, so no credits. The first month costs $1.",
+            id="no-plan",
+        ),
+        pytest.param(
+            _billing("cancelled", None),
+            "The subscription has ended: no plan and no credits.",
+            id="ended",
+        ),
+    ],
+)
+def test_the_plan_is_told_with_the_figures_it_has_and_nothing_it_does_not(
+    payload: dict[str, Any], expected: str
+) -> None:
+    assert mcp_apps._summarize_billing(payload) == f"{expected} {_WEBSITE} {mcp_apps._SHOWN_TO_THE_OWNER}"
+
+
 @pytest.mark.parametrize(
     "summary",
     [
@@ -1618,6 +1781,10 @@ def test_connections_are_told_by_what_needs_the_owner(integrations: list[Any], o
             mcp_apps._summarize_ads({"overview": {"accounts": []}}), id="ads"
         ),
         pytest.param(mcp_apps._summarize_connections({"integrations": []}), id="connections"),
+        pytest.param(mcp_apps._summarize_billing({"billing": {"balance": {}}}), id="billing"),
+        pytest.param(mcp_apps._summarize_media({"jobs": [], "asked": ["j"]}), id="media-jobs"),
+        pytest.param(mcp_apps._summarize_media({"library": {"files": []}}), id="media-library"),
+        pytest.param(mcp_apps._summarize_media_studio({"models": {"tasks": []}}), id="media-studio"),
     ],
 )
 def test_a_client_without_cards_is_not_told_the_owner_is_looking_at_one(summary: str) -> None:
@@ -1628,3 +1795,556 @@ def test_a_client_without_cards_is_not_told_the_owner_is_looking_at_one(summary:
     """
     assert "If this client shows SellerClaw cards" in summary
     assert "structured result" in summary
+
+
+# --------------------------------------------------------------------------- media
+
+JOB_A = "55555555-5555-4555-8555-555555555555"
+JOB_B = "66666666-6666-4666-8666-666666666666"
+
+
+def _file(name: str, created_at: str) -> dict[str, Any]:
+    return {
+        "id": f"id-{name}",
+        "file_id": f"f-{name}",
+        "filename": name,
+        "content_type": "image/png",
+        "size_bytes": 10,
+        "download_url": f"https://api.test/agent/files/f-{name}/{name}",
+        "created_at": created_at,
+    }
+
+
+@respx.mock
+def test_the_media_card_reads_the_jobs_it_was_handed_in_one_call(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    jobs = respx.get(f"{fake_api_url}/agent/media/jobs").mock(
+        return_value=httpx.Response(200, json={"jobs": [{"id": JOB_A, "kind": "video", "status": "running"}]})
+    )
+
+    result = _call("sellerclaw_media", {"job": [JOB_A, JOB_B, JOB_A]})
+
+    # Asked once each: a repeat would be answered once and then counted as not the account's.
+    assert jobs.calls[0].request.url.params.get_list("id") == [JOB_A, JOB_B]
+    assert result.structured_content == {
+        "jobs": [{"id": JOB_A, "kind": "video", "status": "running"}],
+        "asked": [JOB_A, JOB_B],
+    }
+
+
+@respx.mock
+def test_the_library_is_images_and_videos_merged_newest_first(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    """The file library also holds documents; the card reads the two kinds it draws, and only them."""
+    def _page(request: httpx.Request) -> httpx.Response:
+        if request.url.params["category"] == "image":
+            return httpx.Response(200, json={"files": [_file("mug.png", "2026-09-27T10:00:00Z")], "total": 7})
+        return httpx.Response(200, json={"files": [_file("mug.mp4", "2026-09-28T10:00:00Z")], "total": 2})
+
+    files = respx.get(f"{fake_api_url}/agent/files/").mock(side_effect=_page)
+
+    result = _call("sellerclaw_media", {"query": "  mug "})
+
+    asked = [dict(call.request.url.params) for call in files.calls]
+    assert asked == [
+        {"category": "image", "q": "mug", "limit": "24"},
+        {"category": "video", "q": "mug", "limit": "24"},
+    ]
+    library = result.structured_content["library"]
+    assert [item["filename"] for item in library["files"]] == ["mug.mp4", "mug.png"]
+    assert [item["category"] for item in library["files"]] == ["video", "image"]
+    assert library["totals"] == {"image": 7, "video": 2}
+    # Nine match and two are shown: the next page starts after them.
+    assert library["next"] == 2
+    assert result.structured_content["filters"] == {"query": "mug"}
+
+
+@respx.mock
+def test_a_library_asked_for_one_kind_reads_only_that_kind(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    files = respx.get(f"{fake_api_url}/agent/files/").mock(
+        return_value=httpx.Response(200, json={"files": [], "total": 0})
+    )
+
+    result = _call("sellerclaw_media", {"category": "video"})
+
+    assert [dict(call.request.url.params) for call in files.calls] == [{"category": "video", "limit": "24"}]
+    assert result.structured_content["library"]["totals"] == {"video": 0}
+    assert "next" not in result.structured_content["library"]
+
+
+@pytest.mark.parametrize(
+    ("arguments", "asked", "total", "expected"),
+    [
+        pytest.param(
+            {"offset": 24},
+            {"category": "media", "limit": "24", "offset": "24"},
+            50,
+            {"totals": {}, "offset": 24, "next": 26},
+            id="both-kinds-as-one-list",
+        ),
+        pytest.param(
+            {"offset": 24, "category": "video", "query": "mug"},
+            {"category": "video", "q": "mug", "limit": "24", "offset": "24"},
+            26,
+            {"totals": {"video": 26}, "offset": 24},
+            id="one-kind-last-page",
+        ),
+    ],
+)
+@respx.mock
+def test_show_more_reads_the_library_from_where_the_card_stopped(
+    env_pointing_at_fake_api: None,
+    fake_api_url: str,
+    arguments: dict[str, Any],
+    asked: dict[str, str],
+    total: int,
+    expected: dict[str, Any],
+) -> None:
+    """A later page reads one list from the offset; each file keeps the kind the card draws it as."""
+    clip = {**_file("mug.mp4", "2026-09-20T10:00:00Z"), "content_type": "video/mp4"}
+    photo = _file("mug.png", "2026-09-19T10:00:00Z")
+    files = respx.get(f"{fake_api_url}/agent/files/").mock(
+        return_value=httpx.Response(200, json={"files": [clip, photo], "total": total})
+    )
+
+    result = _call("sellerclaw_media", arguments)
+
+    assert [dict(call.request.url.params) for call in files.calls] == [asked]
+    library = result.structured_content["library"]
+    kind = arguments.get("category")
+    assert [item["category"] for item in library["files"]] == [kind or "video", kind or "image"]
+    assert {key: value for key, value in library.items() if key != "files"} == expected
+
+
+@pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        pytest.param({"category": "document"}, "category is image or video", id="unknown-category"),
+        pytest.param({"job": [f"job-{n}" for n in range(11)]}, "at most 10 jobs", id="too-many-jobs"),
+        pytest.param({"offset": -1}, "0 or more", id="negative-offset"),
+    ],
+)
+def test_the_media_card_refuses_what_it_cannot_show(
+    env_pointing_at_fake_api: None, arguments: dict[str, Any], message: str
+) -> None:
+    with pytest.raises(ToolError, match=message):
+        _call("sellerclaw_media", arguments)
+
+
+@respx.mock
+def test_the_studio_opens_on_the_draft_with_the_models_and_the_latest_pictures(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    default = {"id": "gpt-image-2", "name": "GPT Image 2", "is_default": True}
+    models = {"tasks": [{"task": "image_edit", "models": [default]}]}
+    respx.get(f"{fake_api_url}/agent/media/models").mock(return_value=httpx.Response(200, json=models))
+    files = respx.get(f"{fake_api_url}/agent/files/").mock(
+        return_value=httpx.Response(200, json={"files": [_file("mug.png", "2026-09-27T10:00:00Z")], "total": 1})
+    )
+
+    result = _call(
+        "sellerclaw_media_studio",
+        {"task": "image_edit", "prompt": " white background ", "reference": "https://api.test/mug.png"},
+    )
+
+    assert dict(files.calls[0].request.url.params) == {"category": "image", "limit": "12"}
+    assert result.structured_content == {
+        "models": models,
+        "draft": {"task": "image_edit", "prompt": "white background", "references": ["https://api.test/mug.png"]},
+        "can_upload": True,
+        "recent_images": [_file("mug.png", "2026-09-27T10:00:00Z")],
+    }
+    assert "open on an image from photos" in result.content[0].text
+    assert "image_edit: GPT Image 2" in result.content[0].text
+
+
+@respx.mock
+def test_the_studio_opens_with_the_settings_it_is_handed(env_pointing_at_fake_api: None, fake_api_url: str) -> None:
+    """A result asked for again opens as it was made: same model, same shape and length."""
+    respx.get(f"{fake_api_url}/agent/media/models").mock(return_value=httpx.Response(200, json={"tasks": []}))
+    respx.get(f"{fake_api_url}/agent/files/").mock(return_value=httpx.Response(200, json={"files": [], "total": 0}))
+
+    result = _call(
+        "sellerclaw_media_studio",
+        {
+            "task": "video_from_image",
+            "model": "runway-gen4-turbo",
+            "params": {"aspect_ratio": "9:16", "duration_seconds": "5", "seed": None},
+            "reference": "https://api.test/start.png",
+        },
+    )
+
+    assert result.structured_content["draft"] == {
+        "task": "video_from_image",
+        "model": "runway-gen4-turbo",
+        "references": ["https://api.test/start.png"],
+        "params": {"aspect_ratio": "9:16", "duration_seconds": "5"},
+    }
+
+
+@respx.mock
+def test_the_studio_still_opens_when_the_library_cannot_be_read(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    respx.get(f"{fake_api_url}/agent/media/models").mock(return_value=httpx.Response(200, json={"tasks": []}))
+    respx.get(f"{fake_api_url}/agent/files/").mock(return_value=httpx.Response(500, json={"detail": "boom"}))
+
+    result = _call("sellerclaw_media_studio", {})
+
+    assert result.structured_content == {"models": {"tasks": []}, "draft": {}, "can_upload": True}
+
+
+def test_the_studio_refuses_a_task_it_does_not_make(env_pointing_at_fake_api: None) -> None:
+    with pytest.raises(ToolError, match="task is one of image, image_edit, video, video_from_image"):
+        _call("sellerclaw_media_studio", {"task": "audio"})
+
+
+@pytest.mark.parametrize(
+    ("reference", "expected"),
+    [
+        pytest.param(
+            ["https://api.test/bottle.png", " https://api.test/counter.png ", "https://api.test/bottle.png"],
+            ["https://api.test/bottle.png", "https://api.test/counter.png"],
+            id="several-in-order-each-once",
+        ),
+        pytest.param(["  ", ""], None, id="blanks-are-no-photo"),
+    ],
+)
+@respx.mock
+def test_the_studio_carries_the_photos_the_conversation_named(
+    env_pointing_at_fake_api: None, fake_api_url: str, reference: list[str], expected: list[str] | None
+) -> None:
+    respx.get(f"{fake_api_url}/agent/media/models").mock(return_value=httpx.Response(200, json={"tasks": []}))
+    respx.get(f"{fake_api_url}/agent/files/").mock(return_value=httpx.Response(200, json={"files": [], "total": 0}))
+
+    result = _call("sellerclaw_media_studio", {"task": "image_edit", "reference": reference})
+
+    assert result.structured_content["draft"].get("references") == expected
+
+
+def test_the_studio_refuses_more_photos_than_one_image_takes(env_pointing_at_fake_api: None) -> None:
+    with pytest.raises(ToolError, match="at most 6 photos; got 7"):
+        _call("sellerclaw_media_studio", {"reference": [f"https://api.test/{index}.png" for index in range(7)]})
+
+
+@respx.mock
+def test_upload_stores_the_owners_photo_in_their_files(env_pointing_at_fake_api: None, fake_api_url: str) -> None:
+    stored = {
+        "file_id": "f-1",
+        "filename": "bottle.jpg",
+        "content_type": "image/jpeg",
+        "size_bytes": 5,
+        "download_url": "https://api.test/files/f-1/bottle.jpg",
+    }
+    route = respx.post(f"{fake_api_url}/agent/files/upload-for-user").mock(
+        return_value=httpx.Response(201, json=stored)
+    )
+
+    result = _call(
+        "sellerclaw_media_upload_image",
+        {"filename": "bottle.jpg", "content_base64": "data:image/jpeg;base64," + base64.b64encode(b"JPEG!").decode()},
+    )
+
+    sent = route.calls[0].request
+    assert sent.headers["content-type"].startswith("multipart/form-data")
+    assert b'name="file"; filename="bottle.jpg"' in sent.content
+    assert b"Content-Type: image/jpeg" in sent.content
+    assert b"JPEG!" in sent.content
+    assert result.structured_content == {"file": stored}
+    assert "https://api.test/files/f-1/bottle.jpg" in result.content[0].text
+
+
+@pytest.mark.parametrize(
+    ("content_base64", "message"),
+    [
+        pytest.param("not base64 at all!", "did not arrive whole", id="garbled"),
+        pytest.param("", "is empty", id="empty"),
+        pytest.param(
+            base64.b64encode(b"x" * (15 * 1024 * 1024 + 1)).decode(),
+            "the studio takes up to 15 MB",
+            id="too-large",
+        ),
+    ],
+)
+def test_upload_refuses_a_photo_it_cannot_store(
+    env_pointing_at_fake_api: None, content_base64: str, message: str
+) -> None:
+    with pytest.raises(ToolError, match=message):
+        _call("sellerclaw_media_upload_image", {"filename": "photo.jpg", "content_base64": content_base64})
+
+
+@respx.mock
+def test_upload_refused_by_the_files_api_reaches_the_card_in_its_words(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    respx.post(f"{fake_api_url}/agent/files/upload-for-user").mock(
+        return_value=httpx.Response(
+            413, json={"detail": {"code": "storage_quota_exceeded", "message": "Your file storage is full."}}
+        )
+    )
+
+    photo = {"filename": "photo.jpg", "content_base64": base64.b64encode(b"x").decode()}
+    with pytest.raises(ToolError, match="storage is full"):
+        _call("sellerclaw_media_upload_image", photo)
+
+
+@respx.mock
+def test_make_default_is_the_owners_press_sent_as_it_was_made(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    default = {"id": "veo-3.1-lite", "name": "Veo 3.1 Lite", "is_default": True}
+    models = {"tasks": [{"task": "video", "models": [default]}]}
+    route = respx.put(f"{fake_api_url}/agent/media/models/video/default").mock(
+        return_value=httpx.Response(200, json=models)
+    )
+
+    result = _call("sellerclaw_media_set_default", {"task": "video", "model": "veo-3.1-lite"})
+
+    assert route.calls[0].request.content == b'{"model":"veo-3.1-lite"}'
+    assert result.structured_content == {"models": models, "draft": {"task": "video", "model": "veo-3.1-lite"}}
+
+
+@respx.mock
+def test_our_own_agent_being_refused_reaches_the_card_in_the_clouds_words(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    respx.put(f"{fake_api_url}/agent/media/models/image/default").mock(
+        return_value=httpx.Response(
+            403,
+            json={
+                "detail": {
+                    "code": "owner_present_only",
+                    "message": "The default media model is the owner's choice.",
+                }
+            },
+        )
+    )
+
+    with pytest.raises(ToolError, match="owner's choice"):
+        _call("sellerclaw_media_set_default", {"task": "image", "model": "recraft-v3"})
+
+
+def test_finished_media_is_told_with_its_links_and_what_is_left_with_how_to_wait() -> None:
+    summary = mcp_apps._summarize_media(
+        {
+            "jobs": [
+                {"id": "a", "kind": "image", "status": "succeeded", "result_url": "https://api.test/a.png"},
+                {"id": "b", "kind": "video", "status": "failed", "error": "Provider refused the prompt"},
+                {"id": "c", "kind": "video", "status": "running"},
+            ],
+            "asked": ["a", "b", "c"],
+        }
+    )
+
+    assert "Ready: image https://api.test/a.png." in summary
+    assert "The video failed: Provider refused the prompt." in summary
+    assert "1 job still generating" in summary
+    assert "end your turn" in summary
+    assert "wait_seconds 25" in summary
+
+
+def test_jobs_that_are_not_the_accounts_are_counted_not_invented() -> None:
+    summary = mcp_apps._summarize_media(
+        {"jobs": [{"id": "a", "kind": "image", "status": "queued"}], "asked": ["a", "b"]}
+    )
+
+    assert "1 job asked for is not this account's." in summary
+    assert "Ready" not in summary
+
+
+def test_the_library_is_told_by_its_counts_and_newest_links() -> None:
+    files = [_file(f"p{n}.png", f"2026-09-2{n}T10:00:00Z") for n in range(7)]
+
+    summary = mcp_apps._summarize_media(
+        {"library": {"files": files, "totals": {"image": 7, "video": 0}}, "filters": {"query": "p"}}
+    )
+
+    assert summary.startswith("The library matching “p”: 7 images, newest first.")
+    assert "p4.png https://api.test/agent/files/f-p4.png/p4.png" in summary
+    assert "p5.png" not in summary
+    assert "0 video" not in summary
+    assert "Older ones follow" not in summary
+
+
+def test_a_later_library_page_is_told_as_older_files_and_where_the_next_starts() -> None:
+    summary = mcp_apps._summarize_media(
+        {"library": {"files": [_file("old.png", "2026-08-01T10:00:00Z")], "totals": {}, "offset": 24, "next": 25}}
+    )
+
+    assert summary.startswith(
+        "Older files in the library, from number 25, newest first: "
+        "old.png https://api.test/agent/files/f-old.png/old.png."
+    )
+    assert "Older ones follow from offset 25." in summary
+
+
+@pytest.mark.parametrize(
+    ("arguments", "path", "body"),
+    [
+        pytest.param(
+            {
+                "task": "image",
+                "prompt": " a mug on a desk ",
+                "model": "nano-banana-2",
+                "params": {"aspect_ratio": "4:5"},
+            },
+            "/agent/media/image-jobs",
+            {"images": [{"prompt": "a mug on a desk", "model": "nano-banana-2", "params": {"aspect_ratio": "4:5"}}]},
+            id="image",
+        ),
+        pytest.param(
+            {
+                "task": "image_edit",
+                "prompt": "the bottle on the counter",
+                "model": "gpt-image-2",
+                "photos": ["https://api.test/bottle.png", "https://api.test/counter.png", "https://api.test/bottle.png"],
+            },
+            "/agent/media/image-jobs",
+            {
+                "images": [
+                    {
+                        "prompt": "the bottle on the counter",
+                        "model": "gpt-image-2",
+                        "reference_urls": ["https://api.test/bottle.png", "https://api.test/counter.png"],
+                    }
+                ]
+            },
+            id="image-from-photos-in-order",
+        ),
+        pytest.param(
+            {"task": "video", "prompt": "waves", "model": "veo-3.1-lite", "params": {"duration_seconds": "4"}},
+            "/agent/media/video-jobs",
+            {"prompt": "waves", "model": "veo-3.1-lite", "params": {"duration_seconds": "4"}},
+            id="video",
+        ),
+        pytest.param(
+            {
+                "task": "video_from_image",
+                "prompt": "turn",
+                "model": "runway-gen4-turbo",
+                "photos": ["https://api.test/a.png"],
+            },
+            "/agent/media/video-jobs",
+            {"prompt": "turn", "model": "runway-gen4-turbo", "reference_image_url": "https://api.test/a.png"},
+            id="video-from-a-photo",
+        ),
+        pytest.param(
+            {"task": "image", "prompt": "a mug", "model": "nano-banana-2", "count": 3},
+            "/agent/media/image-jobs",
+            {"images": [{"prompt": "a mug", "model": "nano-banana-2"}] * 3},
+            id="three-versions-of-an-image-in-one-call",
+        ),
+        pytest.param(
+            {"task": "video", "prompt": "waves", "model": "veo-3.1-lite", "count": 2},
+            "/agent/media/video-jobs",
+            {"prompt": "waves", "model": "veo-3.1-lite", "count": 2},
+            id="two-versions-of-a-video",
+        ),
+    ],
+)
+@respx.mock
+def test_the_studio_press_queues_what_the_card_shows_and_hands_back_the_job(
+    env_pointing_at_fake_api: None,
+    fake_api_url: str,
+    arguments: dict[str, Any],
+    path: str,
+    body: dict[str, Any],
+) -> None:
+    started = respx.post(f"{fake_api_url}{path}").mock(
+        return_value=httpx.Response(
+            200, json={"status": "queued", "count": 1, "job_ids": [JOB_A], "delivery": "caller", "note": "n"}
+        )
+    )
+    job = {"id": JOB_A, "kind": "image", "status": "queued", "prompt": "p", "model": arguments["model"]}
+    read = respx.get(f"{fake_api_url}/agent/media/jobs").mock(return_value=httpx.Response(200, json={"jobs": [job]}))
+
+    result = _call("sellerclaw_media_generate", arguments)
+
+    assert json.loads(started.calls[0].request.content) == body
+    assert read.calls[0].request.url.params.get_list("id") == [JOB_A]
+    assert result.structured_content == {"jobs": [job], "asked": [JOB_A]}
+
+
+@pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        pytest.param(
+            {"task": "image_edit", "prompt": "x", "model": "m"},
+            "image_edit is made from 1 to 6 photos; got 0",
+            id="edit-without-photos",
+        ),
+        pytest.param(
+            {"task": "video_from_image", "prompt": "x", "model": "m", "photos": ["https://a/1.png", "https://a/2.png"]},
+            "video_from_image is made from one photo; got 2",
+            id="video-from-two-photos",
+        ),
+        pytest.param(
+            {"task": "image", "prompt": "x", "model": "m", "photos": ["https://a/1.png"]},
+            "made without photos",
+            id="photos-for-text",
+        ),
+        pytest.param(
+            {"task": "image", "prompt": "  ", "model": "m"}, "Describe what to make first", id="no-description"
+        ),
+        pytest.param({"task": "audio", "prompt": "x", "model": "m"}, "task is one of", id="unknown-task"),
+        pytest.param(
+            {"task": "video", "prompt": "x", "model": "m", "count": 4},
+            "Make 1 to 3 videos at once; got 4",
+            id="four-videos",
+        ),
+        pytest.param(
+            {"task": "image", "prompt": "x", "model": "m", "count": 5},
+            "Make 1 to 4 images at once; got 5",
+            id="five-images",
+        ),
+        pytest.param(
+            {"task": "image", "prompt": "x", "model": "m", "count": 0},
+            "Make 1 to 4 images at once; got 0",
+            id="no-images",
+        ),
+    ],
+)
+def test_a_studio_press_that_does_not_add_up_is_refused_before_anything_is_spent(
+    env_pointing_at_fake_api: None, arguments: dict[str, Any], message: str
+) -> None:
+    with pytest.raises(ToolError, match=message):
+        _call("sellerclaw_media_generate", arguments)
+
+
+@respx.mock
+def test_a_refused_studio_press_reaches_the_card_in_the_servers_words(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    respx.post(f"{fake_api_url}/agent/media/video-jobs").mock(
+        return_value=httpx.Response(
+            402, json={"detail": {"code": "insufficient_credits", "message": "Not enough credits for this video."}}
+        )
+    )
+
+    with pytest.raises(ToolError, match="Not enough credits for this video"):
+        _call("sellerclaw_media_generate", {"task": "video", "prompt": "waves", "model": "veo-3.1-lite"})
+
+
+@respx.mock
+def test_a_studio_press_that_started_a_job_is_not_reported_as_failed_when_the_read_back_fails(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    """The job is queued and paid for; an error here would invite a second press and a second bill."""
+    respx.post(f"{fake_api_url}/agent/media/video-jobs").mock(
+        return_value=httpx.Response(
+            200, json={"status": "queued", "count": 1, "job_ids": [JOB_A], "delivery": "caller", "note": "n"}
+        )
+    )
+    respx.get(f"{fake_api_url}/agent/media/jobs").mock(return_value=httpx.Response(503, json={"detail": "down"}))
+
+    result = _call("sellerclaw_media_generate", {"task": "video", "prompt": " waves ", "model": "veo-3.1-lite"})
+
+    assert result.structured_content == {
+        "jobs": [{"id": JOB_A, "kind": "video", "status": "queued", "prompt": "waves", "model": "veo-3.1-lite"}],
+        "asked": [JOB_A],
+    }
+

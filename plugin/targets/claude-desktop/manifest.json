@@ -4,7 +4,7 @@
   "display_name": "SellerClaw",
   "version": "0.1.0",
   "description": "Operate your SellerClaw e-commerce and marketing channels from Claude — eBay, Shopify, Amazon, Meta Ads, Google Ads and more.",
-  "long_description": "SellerClaw connects your e-commerce and marketing channels — eBay, Shopify, Amazon, Meta Ads, Google Ads and more — and this extension lets you operate them from Claude. Nothing to install first: the extension talks to SellerClaw's hosted MCP server, so there is no Python, no uv and no CLI to set up. Ask Claude to sign in (the `sellerclaw_login` tool opens your browser to approve access — no API key to copy), then browse command groups, read a command's schema, and run it through three discovery tools. Some answers come back as interactive cards you can act on right in the conversation — what needs you today, a store's numbers, your orders and listings, a product with its supplier and every store it is on, your ads, the health of your connections, and anything waiting for your approval. Some actions (e.g. sending email or launching ad campaigns) still require the owner's approval, enforced server-side.",
+  "long_description": "SellerClaw connects your e-commerce and marketing channels — eBay, Shopify, Amazon, Meta Ads, Google Ads and more — and this extension lets you operate them from Claude. Nothing to install first: the extension talks to SellerClaw's hosted MCP server, so there is no Python, no uv and no CLI to set up. Ask Claude to sign in (the `sellerclaw_login` tool opens your browser to approve access — no API key to copy), then browse command groups, read a command's schema, and run it through three discovery tools. Some answers come back as interactive cards you can act on right in the conversation — what needs you today, a store's numbers, your orders and listings, a product with its supplier and every store it is on, your ads, the health of your connections, your plan and credits, and anything waiting for your approval. Ready-made commands under SellerClaw in the + menu open them in one click, or run a whole job — ship orders, publish a product, a business report, research a niche. Some actions (e.g. sending email or launching ad campaigns) still require the owner's approval, enforced server-side.",
   "author": {
     "name": "SellerAI",
     "email": "hello@sellerai.com",
@@ -60,7 +60,7 @@
   "tools": [
     {
       "name": "sellerclaw_guide",
-      "description": "Read a task guide with ready-to-run examples: listings, orders, ads, research, analytics."
+      "description": "Read a task guide with ready-to-run examples: listings, orders, ads, research, analytics, media."
     },
     {
       "name": "sellerclaw_groups",
@@ -107,11 +107,24 @@
       "description": "Show your connections as an interactive card, broken ones first with the page that fixes them."
     },
     {
+      "name": "sellerclaw_billing",
+      "description": "Show your SellerClaw plan and credits as an interactive card: what is left, when it resets and where it went."
+    },
+    {
+      "name": "sellerclaw_media",
+      "description": "Show generated images and videos as an interactive card that fills itself in, or your library of them."
+    },
+    {
+      "name": "sellerclaw_media_studio",
+      "description": "Open the media studio: pick the model and its settings, describe the image or video, and generate."
+    },
+    {
       "name": "sellerclaw_login",
       "description": "Sign in to SellerClaw by approving access in the browser."
     }
   ],
   "tools_generated": false,
+  "prompts_generated": true,
   "user_config": {
     "token": {
       "type": "string",

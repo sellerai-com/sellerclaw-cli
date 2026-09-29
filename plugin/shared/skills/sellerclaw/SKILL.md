@@ -60,7 +60,8 @@ The group map (what exists and where) is in [references/capabilities.md](referen
 
 Focused recipes load on their own when relevant: `sellerclaw-listings`, `sellerclaw-orders`,
 `sellerclaw-catalog`, `sellerclaw-suppliers`, `sellerclaw-email`, `sellerclaw-ads`,
-`sellerclaw-research`, `sellerclaw-analytics` (how the business is doing). The MCP tool
+`sellerclaw-research`, `sellerclaw-analytics` (how the business is doing), `sellerclaw-media`
+(images and videos). The MCP tool
 `sellerclaw_guide(topic)` serves the very same texts — reach for it if a recipe did not load.
 
 ## Setup & troubleshooting

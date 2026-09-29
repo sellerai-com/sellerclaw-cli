@@ -26,11 +26,19 @@ The screens
 -----------
 Alongside those four, :mod:`sellerclaw_cli.mcp_apps` contributes a small set of tools that answer
 with an *interactive card* instead of JSON — what needs the owner, the store summary, orders,
-listings, catalog products, ads, connections and the approval request. They are a deliberate
+listings, catalog products, ads, connections, the plan and credits, and the approval request. They are a deliberate
 exception to the proxy design above, because a card is bound to one named tool and cannot be
 carried by a general-purpose one; to keep the list short, one tool covers both a list and one of
 its rows, found by the words the owner uses for it. One of them is callable only by the card
 itself, so the owner's answer on an approval can only come from the owner pressing the button.
+
+The shortcuts
+-------------
+The ready-made commands an owner picks from a menu — "Orders", "Plan and credits", "Media studio",
+"Business report" — are served as MCP prompts from :mod:`sellerclaw_cli.shortcuts`, the same files
+the Claude plugin compiles into its ``/sellerclaw:<name>`` commands. A prompt is the one way claude.ai,
+Claude Desktop and other MCP clients offer a server's commands; each is a short instruction to open a
+card or run a guided job, with the owner's words carried in.
 
 Running
 -------
@@ -53,7 +61,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from sellerclaw_cli import guides, mcp_apps
+from sellerclaw_cli import guides, mcp_apps, shortcuts
 from sellerclaw_cli._client import DEFAULT_TIMEOUT_SECONDS, Client
 from sellerclaw_cli._command_group import (
     REGISTRY,
@@ -91,8 +99,12 @@ SERVER_INSTRUCTIONS = (
     "(`sellerclaw_store_summary`), the orders, or one order (`sellerclaw_orders`), listings, or one "
     "store's listing (`sellerclaw_listings`), a product with its supplier and every store it is "
     "listed in (`sellerclaw_products`), how the ads are doing (`sellerclaw_ads`), whether the "
-    "connections are healthy (`sellerclaw_connections`), and something waiting on the owner "
-    "(`sellerclaw_approval`). Reach for these first when the question is one of those — the owner "
+    "connections are healthy (`sellerclaw_connections`), the plan, the credits left and what they "
+    "went on (`sellerclaw_billing`), something waiting on the owner "
+    "(`sellerclaw_approval`), generated images and videos or the owner's library of them "
+    "(`sellerclaw_media`), and the media studio where the owner describes it, picks or uploads photos "
+    "and chooses the price and quality "
+    "(`sellerclaw_media_studio`). Reach for these first when the question is one of those — the owner "
     "gets something they can look at and act on instead of a wall of numbers — and do not also run "
     "a command for the same data. Pass the owner's own words — an order number, a title, a SKU, a "
     "marketplace id — and do not look up an id first: the card finds the thing, and opens it when "
@@ -103,7 +115,8 @@ SERVER_INSTRUCTIONS = (
     "The surface is large, so for everything else start with the guide for the job:\n"
     "0. `sellerclaw_guide(topic)` — a short guide with ready-to-run calls for publishing and "
     "maintaining listings, fulfilling orders, the catalog, suppliers, the seller's own SellerCart "
-    "storefront, mail and DMs, ads and campaigns, market research, or how the business is doing. "
+    "storefront, mail and DMs, ads and campaigns, market research, how the business is doing, or "
+    "making images and videos. "
     "Call it with no topic for the list, and read `start` once for the conventions every job "
     "shares. Prefer running a guide's example over re-deriving the call.\n"
     "For anything the guides do not cover, discover it:\n"
@@ -157,7 +170,8 @@ _RUN_TOOL_DESC = (
     "Invoke a SellerClaw command. `positionals` is a {name: value} map for the path arguments, "
     "`flags` a {name: value} map of filters, and `body` the JSON payload for write commands. "
     "Use sellerclaw_describe to learn the exact names. Returns the API response JSON. "
-    "A few commands (bulk publishing, drafting, attribute mapping) start background work and answer "
+    "A few commands (bulk publishing, drafting, attribute mapping, generating images or videos) "
+    "start background work and answer "
     "at once with the job instead of the outcome; that answer carries a `note` naming the call that "
     "reads the finished job. Read it — do not re-send the command, which would start a second job."
 )
@@ -167,7 +181,8 @@ _GUIDE_TOOL_DESC = (
     "(the owner's own products and their cost, bulk intake from a file), `suppliers` (source "
     "products, dropship orders), `storefront` (the owner's own SellerCart shop), `email` (mailbox, "
     "sending, social DMs), `ads` (Google, Meta, eBay Promoted, Klaviyo campaigns), `research` "
-    "(keywords, trends, competitors, social), `analytics` (how the business is doing), or `start` "
+    "(keywords, trends, competitors, social), `analytics` (how the business is doing), `media` "
+    "(generate and edit images and videos, pick the model and its settings), or `start` "
     "(how a call is shaped and the rules every job shares). Each guide is short and carries "
     "ready-to-run sellerclaw_run examples — read the relevant one before a multi-step job instead "
     "of deriving the calls from schemas. Omit `topic` to list them."
@@ -908,6 +923,40 @@ def _register_tools(server: Any) -> None:
     )
 
 
+def _shortcut_prompt(shortcut: shortcuts.Shortcut) -> Any:
+    """One shortcut as an MCP prompt: its words optional, so every client can offer it bare."""
+    from mcp.server.mcpserver.prompts.base import Prompt, PromptArgument
+
+    words = shortcut.words
+
+    def _render(**arguments: Any) -> str:
+        said = arguments.get(words.name) if words else None
+        return shortcuts.render(shortcut.name, None if said is None else str(said))
+
+    return Prompt(
+        name=shortcut.name,
+        title=shortcut.title,
+        description=shortcut.description,
+        arguments=[PromptArgument(name=words.name, description=words.description, required=False)]
+        if words
+        else [],
+        fn=_render,
+        # No request context to hand in: a shortcut's text is the same for every account.
+        context_kwarg=None,
+    )
+
+
+def _register_prompts(server: Any) -> None:
+    """Register every shortcut as a prompt — the commands a client lists under SellerClaw.
+
+    A required argument would hide a command from clients that cannot ask for one, and would refuse
+    "Orders" to someone who wants the whole board, so the owner's words are always optional and each
+    body reads right without them.
+    """
+    for shortcut in shortcuts.shortcuts():
+        server.add_prompt(_shortcut_prompt(shortcut))
+
+
 def build_server() -> Any:
     """Construct the stdio MCP server with the four discovery/proxy tools.
 
@@ -930,6 +979,7 @@ def build_server() -> Any:
         **_server_branding(),
     )
     _register_tools(server)
+    _register_prompts(server)
     return server
 
 
@@ -1016,6 +1066,7 @@ def build_http_server(
         **_server_branding(),
     )
     _register_tools(server)
+    _register_prompts(server)
     return server
 
 

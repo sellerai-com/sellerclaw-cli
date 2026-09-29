@@ -94,6 +94,10 @@ mailbox, Stripe — they are OAuth flows), **paying by card** (subscription, cre
 **changing how much they are asked** (Settings → the approval cards, including turning approvals back
 on for you). Say plainly which of these is needed and why; never stage work that cannot run.
 
+Seeing the plan is not one of them: the plan, the credits left, when they reset and what they went on
+are `sellerclaw_billing` (a card) or `sellerclaw account billing`. Check them before something that
+costs a lot of credits, such as a video.
+
 ## The other guides
 
 `listings` (publish and maintain marketplace listings, and get a refused one through) · `orders`
@@ -102,10 +106,11 @@ supplier file) · `suppliers` (source products, dropship orders) · `storefront`
 SellerCart shop: pages, products, domain, payouts, going live) · `email` (read the mailbox, send
 through the approval gate, social DMs) · `ads` (Google, Meta, eBay Promoted, Klaviyo campaigns) ·
 `research` (keywords, trends, competitors, social, a single page) · `analytics` (how the business is
-doing: sales, profit, stock, geography).
+doing: sales, profit, stock, geography) · `media` (make and edit images and videos, pick the model and
+its settings).
 
-Areas with no guide of their own, reachable the usual way with `sellerclaw_groups`: `media` (generate
-and edit listing and ad imagery), `files` / `spreadsheet` / `pdf` / `sheets` (produce and store
+Areas with no guide of their own, reachable the usual way with `sellerclaw_groups`: `files` /
+`spreadsheet` / `pdf` / `sheets` (produce and store
 documents, read and write the owner's Google Sheets), `reviews` and `ebay-feedback` (what buyers
 wrote back), `store-audit` (SEO, and how AI assistants answer about the shop), `amazon-fba` (Amazon's
 own warehouse), `kb` (what the owner has told SellerClaw before).

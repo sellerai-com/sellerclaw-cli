@@ -35,6 +35,7 @@ RECIPE_TOPICS = (
     "ads",
     "research",
     "analytics",
+    "media",
 )
 
 

@@ -1,0 +1,191 @@
+[
+  {
+    "name": "today",
+    "title": "What needs me today",
+    "description": "What needs you today: broken connections, late orders, refused listings and requests waiting on you.",
+    "file": "today.md"
+  },
+  {
+    "name": "summary",
+    "title": "Store summary",
+    "description": "How your stores are doing: revenue, orders, profit and best sellers.",
+    "file": "summary.md",
+    "words": {
+      "name": "store_and_period",
+      "hint": "[store] [period]",
+      "description": "A store, a period (last 7 days, last month, this year), or both. Empty for every store."
+    }
+  },
+  {
+    "name": "orders",
+    "title": "Orders",
+    "description": "Your orders, or one order by its number, buyer or item.",
+    "file": "orders.md",
+    "words": {
+      "name": "order",
+      "hint": "[#order | buyer | SKU | status]",
+      "description": "An order number (#1001), a buyer, a SKU or item, or a status. Empty for the whole board."
+    }
+  },
+  {
+    "name": "listings",
+    "title": "Listings",
+    "description": "Your listings: find one, or see which ones shoppers cannot buy and why.",
+    "file": "listings.md",
+    "words": {
+      "name": "listing",
+      "hint": "[title | SKU | item number | not selling]",
+      "description": "Part of a title, a SKU, a marketplace item number, a store, or 'not selling'."
+    }
+  },
+  {
+    "name": "product",
+    "title": "Product",
+    "description": "A catalog product with its supplier, cost, stock and every store it is listed in.",
+    "file": "product.md",
+    "words": {
+      "name": "product",
+      "hint": "[name | SKU]",
+      "description": "Part of the product's name, or its SKU. Empty for the newest products."
+    }
+  },
+  {
+    "name": "ads",
+    "title": "Ads",
+    "description": "Your ads across Google, Meta and eBay: spend, sales, return and every campaign.",
+    "file": "ads.md",
+    "words": {
+      "name": "days",
+      "hint": "[7 | 30 | 90 days]",
+      "description": "How many days back: 7, 30 or 90. Empty for the last 7."
+    }
+  },
+  {
+    "name": "connections",
+    "title": "Connections",
+    "description": "Your stores, ad accounts, suppliers and mailboxes: what is connected and what is broken.",
+    "file": "connections.md"
+  },
+  {
+    "name": "billing",
+    "title": "Plan and credits",
+    "description": "Your SellerClaw plan and credits: what is left, when it resets and where it went.",
+    "file": "billing.md"
+  },
+  {
+    "name": "media",
+    "title": "Images and videos",
+    "description": "Your library of generated images and videos.",
+    "file": "media.md",
+    "words": {
+      "name": "search",
+      "hint": "[words | images | videos]",
+      "description": "Words from a file's name, or 'images' / 'videos'. Empty for everything."
+    }
+  },
+  {
+    "name": "studio",
+    "title": "Media studio",
+    "description": "Open the media studio: describe an image or a video, pick photos, the model and the price.",
+    "file": "studio.md",
+    "words": {
+      "name": "idea",
+      "hint": "[what to make]",
+      "description": "What to make, e.g. 'a video of the red sneakers on a beach'. Empty to start blank."
+    }
+  },
+  {
+    "name": "approvals",
+    "title": "Waiting on my decision",
+    "description": "What is waiting on your decision, with the buttons to approve or decline.",
+    "file": "approvals.md"
+  },
+  {
+    "name": "ship",
+    "title": "Ship orders",
+    "description": "Get unshipped orders out the door: what each one still needs and the next step.",
+    "file": "ship.md",
+    "words": {
+      "name": "order",
+      "hint": "[#order]",
+      "description": "An order number, to handle just that one. Empty for every order still owed to a buyer."
+    }
+  },
+  {
+    "name": "publish",
+    "title": "Publish a product",
+    "description": "List a product for sale in one of your stores.",
+    "file": "publish.md",
+    "words": {
+      "name": "product_and_store",
+      "hint": "[product] [store]",
+      "description": "The product (name or SKU) and the store to sell it in."
+    }
+  },
+  {
+    "name": "fix-listings",
+    "title": "Fix listings",
+    "description": "Find out why listings are not selling, and fix them.",
+    "file": "fix-listings.md",
+    "words": {
+      "name": "store",
+      "hint": "[store]",
+      "description": "A store, to look at only that one. Empty for every store."
+    }
+  },
+  {
+    "name": "report",
+    "title": "Business report",
+    "description": "A short report on how the business did, with what to do next.",
+    "file": "report.md",
+    "words": {
+      "name": "period",
+      "hint": "[period]",
+      "description": "The period, e.g. 'last week', 'March', 'this year'. Empty for the last finished week."
+    }
+  },
+  {
+    "name": "restock",
+    "title": "Restock",
+    "description": "What is running out and what to reorder.",
+    "file": "restock.md",
+    "words": {
+      "name": "store",
+      "hint": "[store]",
+      "description": "A store, to look at only that one. Empty for every store."
+    }
+  },
+  {
+    "name": "research",
+    "title": "Research a product",
+    "description": "Research a product or a niche before you sell it: demand, competition, prices and a verdict.",
+    "file": "research.md",
+    "words": {
+      "name": "topic",
+      "hint": "[product | niche | keyword]",
+      "description": "The product, niche or keyword to research."
+    }
+  },
+  {
+    "name": "inbox",
+    "title": "Inbox",
+    "description": "Catch up on buyer emails and messages, with draft replies.",
+    "file": "inbox.md",
+    "words": {
+      "name": "search",
+      "hint": "[words]",
+      "description": "Words to look for, e.g. 'refund'. Empty for the latest messages."
+    }
+  },
+  {
+    "name": "generate",
+    "title": "Make an image or video",
+    "description": "Make an image or a video right away with your default model.",
+    "file": "generate.md",
+    "words": {
+      "name": "idea",
+      "hint": "[what to make]",
+      "description": "What to make, and any photo links to work from."
+    }
+  }
+]

@@ -84,7 +84,7 @@ Many groups take an id as the **first positional** (e.g. a store id for `shopify
 
 | Group | What |
 | --- | --- |
-| `media` | Generate and edit images and video — listing photography, ad creatives, banners. |
+| `media` | Generate and edit images and video — listing photography, ad creatives, banners — with the model and its settings chosen per generation. |
 | `files` | The owner's file library: list, fetch one by id, pull one in from a URL, upload a local path. |
 | `spreadsheet` / `sheets` / `pdf` | Build a spreadsheet, read and write the owner's Google Sheets, produce a PDF. |
 
