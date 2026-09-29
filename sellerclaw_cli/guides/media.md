@@ -102,6 +102,16 @@ sellerclaw_run(group="media", command="generate-image",
 - A request that answered with a job id is already running. Sending it again starts, and bills, a
   second one.
 
+## Change a result
+
+- An image: make a new one from it — `edit-image` with the result's link in `reference_urls` and a
+  prompt saying only what changes. To let the owner set it up, open `sellerclaw_media_studio` with
+  that link as `reference`.
+- A video: no model edits a finished clip. Make it again with the same photo, model and settings and
+  a changed prompt — the job's `photos`, `model` and `params` (from `media job-status`) are the
+  request it was made from.
+- A video from a finished image: `generate-video` with the image's link as `reference_image_url`.
+
 ## Where a result goes next
 
 - A catalog product's photos: `catalog update` with the new URL in `images`.

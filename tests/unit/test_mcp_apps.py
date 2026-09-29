@@ -1963,6 +1963,30 @@ def test_the_studio_opens_on_the_draft_with_the_models_and_the_latest_pictures(
 
 
 @respx.mock
+def test_the_studio_opens_with_the_settings_it_is_handed(env_pointing_at_fake_api: None, fake_api_url: str) -> None:
+    """A result asked for again opens as it was made: same model, same shape and length."""
+    respx.get(f"{fake_api_url}/agent/media/models").mock(return_value=httpx.Response(200, json={"tasks": []}))
+    respx.get(f"{fake_api_url}/agent/files/").mock(return_value=httpx.Response(200, json={"files": [], "total": 0}))
+
+    result = _call(
+        "sellerclaw_media_studio",
+        {
+            "task": "video_from_image",
+            "model": "runway-gen4-turbo",
+            "params": {"aspect_ratio": "9:16", "duration_seconds": "5", "seed": None},
+            "reference": "https://api.test/start.png",
+        },
+    )
+
+    assert result.structured_content["draft"] == {
+        "task": "video_from_image",
+        "model": "runway-gen4-turbo",
+        "references": ["https://api.test/start.png"],
+        "params": {"aspect_ratio": "9:16", "duration_seconds": "5"},
+    }
+
+
+@respx.mock
 def test_the_studio_still_opens_when_the_library_cannot_be_read(
     env_pointing_at_fake_api: None, fake_api_url: str
 ) -> None:

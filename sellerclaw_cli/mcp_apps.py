@@ -1211,7 +1211,10 @@ rarer settings, and lets the owner make a model their default.
 Open it when the owner wants to choose the quality, the price or the settings themselves, or asks
 for the studio; otherwise generate straight away with the default model. Carry over what the
 conversation already says: `task` (image, image_edit, video, video_from_image), `prompt`, `model`,
-and `reference`, the URL of a photo to work from — or a list of them.\
+`params` (that model's settings, e.g. {"aspect_ratio": "9:16"}), and `reference`, the URL of a
+photo to work from — or a list of them. To change a finished result, open it with the result's own
+link as the reference (an image is then made from it) — or, for a video, with the request it was
+made from.\
 """
 
 _MEDIA_SET_DEFAULT_DESC = """\
@@ -1927,12 +1930,15 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
         prompt: str | None = None,
         model: str | None = None,
         reference: str | list[str] | None = None,
+        params: dict[str, Any] | None = None,
     ) -> Any:
         draft = _query(
             task=_media_task(task),
             prompt=_words(prompt),
             model=_words(model),
             references=_studio_references(reference),
+            # The card keeps only the settings the model it opens on takes; the rest fall to defaults.
+            params={name: value for name, value in (params or {}).items() if value is not None} or None,
         )
         with _refusals_in_their_own_words(), client_for_tool(DEFAULT_TIMEOUT_SECONDS) as client:
             payload = _read_media_studio(client, draft)
