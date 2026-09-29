@@ -144,8 +144,9 @@ _LIBRARY_LIMIT = 24
 _STUDIO_PICTURES = 12
 #: Photos Claude can carry into the studio: as many as one generation takes (an image from six).
 _STUDIO_REFERENCES = 6
-#: Versions one studio press makes of its request — the Agent API's own cap on a video's ``count``.
-_MAX_VERSIONS = 4
+#: How many results one studio press makes of its request, to choose from: four images, three videos
+#: (the Agent API's own cap on a video's ``count``).
+_MAX_VERSIONS = {"image": 4, "video": 3}
 #: The largest photo the studio's "Upload" takes. The card shrinks a photo to about 2000 pixels
 #: before sending, which lands far below this; the cap bounds what a tool call has to carry.
 _UPLOAD_MAX_BYTES = 15 * 1024 * 1024
@@ -1230,8 +1231,9 @@ Store the photo the owner chose on the studio card in their files and hand back 
 """
 
 _MEDIA_GENERATE_DESC = """\
-Start what the owner set up on the studio card, on their own press of Generate — `count` versions of
-it, 1 to 4, each its own job and charge — and hand back the jobs for the card to follow.\
+Start what the owner set up on the studio card, on their own press of Generate — `count` of it to
+choose from, up to 4 images or 3 videos, each its own job and charge — and hand back the jobs for the
+card to follow.\
 """
 
 
@@ -2024,8 +2026,9 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
         words = _words(prompt)
         if words is None:
             raise ToolError("Describe what to make first.")
-        if not 1 <= count <= _MAX_VERSIONS:
-            raise ToolError(f"Make 1 to {_MAX_VERSIONS} versions at once; got {count}.")
+        kind = "video" if chosen in ("video", "video_from_image") else "image"
+        if not 1 <= count <= _MAX_VERSIONS[kind]:
+            raise ToolError(f"Make 1 to {_MAX_VERSIONS[kind]} {kind}s at once; got {count}.")
         links = list(dict.fromkeys(url.strip() for url in photos or [] if url and url.strip()))
         wanted = {"image_edit": "1 to 6 photos", "video_from_image": "one photo"}.get(str(chosen))
         if wanted is None and links:

@@ -2292,14 +2292,19 @@ def test_the_studio_press_queues_what_the_card_shows_and_hands_back_the_job(
         ),
         pytest.param({"task": "audio", "prompt": "x", "model": "m"}, "task is one of", id="unknown-task"),
         pytest.param(
-            {"task": "video", "prompt": "x", "model": "m", "count": 5},
-            "Make 1 to 4 versions at once; got 5",
-            id="five-versions",
+            {"task": "video", "prompt": "x", "model": "m", "count": 4},
+            "Make 1 to 3 videos at once; got 4",
+            id="four-videos",
+        ),
+        pytest.param(
+            {"task": "image", "prompt": "x", "model": "m", "count": 5},
+            "Make 1 to 4 images at once; got 5",
+            id="five-images",
         ),
         pytest.param(
             {"task": "image", "prompt": "x", "model": "m", "count": 0},
-            "Make 1 to 4 versions at once; got 0",
-            id="no-versions",
+            "Make 1 to 4 images at once; got 0",
+            id="no-images",
         ),
     ],
 )

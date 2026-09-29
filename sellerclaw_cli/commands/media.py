@@ -136,7 +136,7 @@ SPECS = (
             body_field(
                 "count",
                 type=int,
-                help="Versions of this video to make, 1-4, each its own job and charge; all start or none does.",
+                help="How many videos to make from this request, 1-3, to choose from; each is its own job and charge, and all start or none does.",
             ),
             body_field("chat_id", help=_CHAT_ID_HELP),
         ),

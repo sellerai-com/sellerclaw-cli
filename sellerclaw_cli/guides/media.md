@@ -11,7 +11,7 @@ below is `sellerclaw_run` or a card tool; run the examples directly.
   `model`, `reference` — one photo link or a list). There they can also pick photos from their files
   or upload new ones. Their Generate press starts the generation from the card itself — you are told
   what started and, when it finishes, its link. Their "Ask Claude" press comes back as a message from
-  them with the idea, the model id, the settings, the photo links and how many versions: write the
+  them with the idea, the model id, the settings, the photo links and how many to make: write the
   prompt as below and run it with exactly those.
 - The picture has to show the owner's own product → start from real photos of it (`edit-image` takes
   up to 6: the product from one, the scene from another; `generate-video` takes one as
@@ -41,8 +41,8 @@ sellerclaw_run(group="media", command="generate-video",
 
 ## Several versions
 
-When the owner wants to choose from a few, make up to 4 versions of one request in one call — each
-is its own job and is billed on its own:
+When the owner wants to choose from a few, make up to 4 images or 3 videos of one request in one
+call — each is its own job and is billed on its own:
 
 ```text
 sellerclaw_run(group="media", command="generate-images",
