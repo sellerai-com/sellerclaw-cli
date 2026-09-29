@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import json
 import time
 from decimal import Decimal
 from typing import Any
@@ -139,6 +140,7 @@ def test_the_model_cannot_answer_an_approval_for_the_owner() -> None:
         "sellerclaw_media_studio": ["model", "app"],
         "sellerclaw_media_set_default": ["app"],
         "sellerclaw_media_upload_image": ["app"],
+        "sellerclaw_media_generate": ["app"],
     }
 
 
@@ -159,6 +161,7 @@ def test_the_cards_that_only_show_things_are_read_only() -> None:
         "sellerclaw_approval_decide",
         "sellerclaw_media_set_default",
         "sellerclaw_media_upload_image",
+        "sellerclaw_media_generate",
     }
 
 
@@ -1853,6 +1856,8 @@ def test_the_library_is_images_and_videos_merged_newest_first(
     assert [item["filename"] for item in library["files"]] == ["mug.mp4", "mug.png"]
     assert [item["category"] for item in library["files"]] == ["video", "image"]
     assert library["totals"] == {"image": 7, "video": 2}
+    # Nine match and two are shown: the next page starts after them.
+    assert library["next"] == 2
     assert result.structured_content["filters"] == {"query": "mug"}
 
 
@@ -1868,6 +1873,51 @@ def test_a_library_asked_for_one_kind_reads_only_that_kind(
 
     assert [dict(call.request.url.params) for call in files.calls] == [{"category": "video", "limit": "24"}]
     assert result.structured_content["library"]["totals"] == {"video": 0}
+    assert "next" not in result.structured_content["library"]
+
+
+@pytest.mark.parametrize(
+    ("arguments", "asked", "total", "expected"),
+    [
+        pytest.param(
+            {"offset": 24},
+            {"category": "media", "limit": "24", "offset": "24"},
+            50,
+            {"totals": {}, "offset": 24, "next": 26},
+            id="both-kinds-as-one-list",
+        ),
+        pytest.param(
+            {"offset": 24, "category": "video", "query": "mug"},
+            {"category": "video", "q": "mug", "limit": "24", "offset": "24"},
+            26,
+            {"totals": {"video": 26}, "offset": 24},
+            id="one-kind-last-page",
+        ),
+    ],
+)
+@respx.mock
+def test_show_more_reads_the_library_from_where_the_card_stopped(
+    env_pointing_at_fake_api: None,
+    fake_api_url: str,
+    arguments: dict[str, Any],
+    asked: dict[str, str],
+    total: int,
+    expected: dict[str, Any],
+) -> None:
+    """A later page reads one list from the offset; each file keeps the kind the card draws it as."""
+    clip = {**_file("mug.mp4", "2026-09-20T10:00:00Z"), "content_type": "video/mp4"}
+    photo = _file("mug.png", "2026-09-19T10:00:00Z")
+    files = respx.get(f"{fake_api_url}/agent/files/").mock(
+        return_value=httpx.Response(200, json={"files": [clip, photo], "total": total})
+    )
+
+    result = _call("sellerclaw_media", arguments)
+
+    assert [dict(call.request.url.params) for call in files.calls] == [asked]
+    library = result.structured_content["library"]
+    kind = arguments.get("category")
+    assert [item["category"] for item in library["files"]] == [kind or "video", kind or "image"]
+    assert {key: value for key, value in library.items() if key != "files"} == expected
 
 
 @pytest.mark.parametrize(
@@ -1875,6 +1925,7 @@ def test_a_library_asked_for_one_kind_reads_only_that_kind(
     [
         pytest.param({"category": "document"}, "category is image or video", id="unknown-category"),
         pytest.param({"job": [f"job-{n}" for n in range(11)]}, "at most 10 jobs", id="too-many-jobs"),
+        pytest.param({"offset": -1}, "0 or more", id="negative-offset"),
     ],
 )
 def test_the_media_card_refuses_what_it_cannot_show(
@@ -2092,3 +2143,157 @@ def test_the_library_is_told_by_its_counts_and_newest_links() -> None:
     assert "p4.png https://api.test/agent/files/f-p4.png/p4.png" in summary
     assert "p5.png" not in summary
     assert "0 video" not in summary
+    assert "Older ones follow" not in summary
+
+
+def test_a_later_library_page_is_told_as_older_files_and_where_the_next_starts() -> None:
+    summary = mcp_apps._summarize_media(
+        {"library": {"files": [_file("old.png", "2026-08-01T10:00:00Z")], "totals": {}, "offset": 24, "next": 25}}
+    )
+
+    assert summary.startswith(
+        "Older files in the library, from number 25, newest first: "
+        "old.png https://api.test/agent/files/f-old.png/old.png."
+    )
+    assert "Older ones follow from offset 25." in summary
+
+
+@pytest.mark.parametrize(
+    ("arguments", "path", "body"),
+    [
+        pytest.param(
+            {
+                "task": "image",
+                "prompt": " a mug on a desk ",
+                "model": "nano-banana-2",
+                "params": {"aspect_ratio": "4:5"},
+            },
+            "/agent/media/image-jobs",
+            {"images": [{"prompt": "a mug on a desk", "model": "nano-banana-2", "params": {"aspect_ratio": "4:5"}}]},
+            id="image",
+        ),
+        pytest.param(
+            {
+                "task": "image_edit",
+                "prompt": "the bottle on the counter",
+                "model": "gpt-image-2",
+                "photos": ["https://api.test/bottle.png", "https://api.test/counter.png", "https://api.test/bottle.png"],
+            },
+            "/agent/media/image-jobs",
+            {
+                "images": [
+                    {
+                        "prompt": "the bottle on the counter",
+                        "model": "gpt-image-2",
+                        "reference_urls": ["https://api.test/bottle.png", "https://api.test/counter.png"],
+                    }
+                ]
+            },
+            id="image-from-photos-in-order",
+        ),
+        pytest.param(
+            {"task": "video", "prompt": "waves", "model": "veo-3.1-lite", "params": {"duration_seconds": "4"}},
+            "/agent/media/video-jobs",
+            {"prompt": "waves", "model": "veo-3.1-lite", "params": {"duration_seconds": "4"}},
+            id="video",
+        ),
+        pytest.param(
+            {
+                "task": "video_from_image",
+                "prompt": "turn",
+                "model": "runway-gen4-turbo",
+                "photos": ["https://api.test/a.png"],
+            },
+            "/agent/media/video-jobs",
+            {"prompt": "turn", "model": "runway-gen4-turbo", "reference_image_url": "https://api.test/a.png"},
+            id="video-from-a-photo",
+        ),
+    ],
+)
+@respx.mock
+def test_the_studio_press_queues_what_the_card_shows_and_hands_back_the_job(
+    env_pointing_at_fake_api: None,
+    fake_api_url: str,
+    arguments: dict[str, Any],
+    path: str,
+    body: dict[str, Any],
+) -> None:
+    started = respx.post(f"{fake_api_url}{path}").mock(
+        return_value=httpx.Response(
+            200, json={"status": "queued", "count": 1, "job_ids": [JOB_A], "delivery": "caller", "note": "n"}
+        )
+    )
+    job = {"id": JOB_A, "kind": "image", "status": "queued", "prompt": "p", "model": arguments["model"]}
+    read = respx.get(f"{fake_api_url}/agent/media/jobs").mock(return_value=httpx.Response(200, json={"jobs": [job]}))
+
+    result = _call("sellerclaw_media_generate", arguments)
+
+    assert json.loads(started.calls[0].request.content) == body
+    assert read.calls[0].request.url.params.get_list("id") == [JOB_A]
+    assert result.structured_content == {"jobs": [job], "asked": [JOB_A]}
+
+
+@pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        pytest.param(
+            {"task": "image_edit", "prompt": "x", "model": "m"},
+            "image_edit is made from 1 to 6 photos; got 0",
+            id="edit-without-photos",
+        ),
+        pytest.param(
+            {"task": "video_from_image", "prompt": "x", "model": "m", "photos": ["https://a/1.png", "https://a/2.png"]},
+            "video_from_image is made from one photo; got 2",
+            id="video-from-two-photos",
+        ),
+        pytest.param(
+            {"task": "image", "prompt": "x", "model": "m", "photos": ["https://a/1.png"]},
+            "made without photos",
+            id="photos-for-text",
+        ),
+        pytest.param(
+            {"task": "image", "prompt": "  ", "model": "m"}, "Describe what to make first", id="no-description"
+        ),
+        pytest.param({"task": "audio", "prompt": "x", "model": "m"}, "task is one of", id="unknown-task"),
+    ],
+)
+def test_a_studio_press_that_does_not_add_up_is_refused_before_anything_is_spent(
+    env_pointing_at_fake_api: None, arguments: dict[str, Any], message: str
+) -> None:
+    with pytest.raises(ToolError, match=message):
+        _call("sellerclaw_media_generate", arguments)
+
+
+@respx.mock
+def test_a_refused_studio_press_reaches_the_card_in_the_servers_words(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    respx.post(f"{fake_api_url}/agent/media/video-jobs").mock(
+        return_value=httpx.Response(
+            402, json={"detail": {"code": "insufficient_credits", "message": "Not enough credits for this video."}}
+        )
+    )
+
+    with pytest.raises(ToolError, match="Not enough credits for this video"):
+        _call("sellerclaw_media_generate", {"task": "video", "prompt": "waves", "model": "veo-3.1-lite"})
+
+
+@respx.mock
+def test_a_studio_press_that_started_a_job_is_not_reported_as_failed_when_the_read_back_fails(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    """The job is queued and paid for; an error here would invite a second press and a second bill."""
+    respx.post(f"{fake_api_url}/agent/media/video-jobs").mock(
+        return_value=httpx.Response(
+            200, json={"status": "queued", "count": 1, "job_ids": [JOB_A], "delivery": "caller", "note": "n"}
+        )
+    )
+    respx.get(f"{fake_api_url}/agent/media/jobs").mock(return_value=httpx.Response(503, json={"detail": "down"}))
+
+    result = _call("sellerclaw_media_generate", {"task": "video", "prompt": " waves ", "model": "veo-3.1-lite"})
+
+    assert result.structured_content == {
+        "jobs": [{"id": JOB_A, "kind": "video", "status": "queued", "prompt": "waves", "model": "veo-3.1-lite"}],
+        "asked": [JOB_A],
+    }
+

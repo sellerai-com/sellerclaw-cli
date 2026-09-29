@@ -95,6 +95,7 @@ def test_build_http_server_registers_the_same_tools_as_stdio() -> None:
         "sellerclaw_media_studio",
         "sellerclaw_media_set_default",
         "sellerclaw_media_upload_image",
+        "sellerclaw_media_generate",
     }
 
 
@@ -210,6 +211,7 @@ def test_an_authenticated_client_can_list_the_tools_over_http(
         "sellerclaw_media_studio",
         "sellerclaw_media_set_default",
         "sellerclaw_media_upload_image",
+        "sellerclaw_media_generate",
     }
     if expects_cache_fields:
         assert result["ttlMs"] == _LIST_CACHE_TTL_MS

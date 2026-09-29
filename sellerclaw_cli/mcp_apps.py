@@ -990,21 +990,31 @@ def _summarize_media_library(payload: dict[str, Any]) -> str:
     library = payload.get("library") or {}
     files = [item for item in library.get("files") or [] if isinstance(item, dict)]
     totals = library.get("totals") or {}
+    offset = int(library.get("offset") or 0)
     query = (payload.get("filters") or {}).get("query")
     matching = f" matching “{query}”" if query else ""
     counts = [
         _plural(int(totals[kind]), kind) for kind in ("image", "video") if totals.get(kind)
     ]
+    links = "; ".join(
+        f"{item.get('filename')} {item.get('download_url')}" for item in files[:_LINKS_TOLD]
+    )
     if not files:
-        lines = [f"No images or videos in the library{matching}."]
+        what = "No older" if offset else "No"
+        lines = [f"{what} images or videos in the library{matching}."]
+    elif offset:
+        lines = [f"Older files in the library{matching}, from number {offset + 1}, newest first: {links}."]
     else:
-        lines = [f"The library{matching}: {' and '.join(counts)}, newest first."]
-        newest = "; ".join(
-            f"{item.get('filename')} {item.get('download_url')}" for item in files[:_LINKS_TOLD]
-        )
-        lines.append(f"Newest: {newest}.")
+        lines = [f"The library{matching}: {' and '.join(counts)}, newest first.", f"Newest: {links}."]
+    if isinstance(library.get("next"), int):
+        lines.append(f"Older ones follow from offset {library['next']}.")
     lines.append(_SHOWN_TO_THE_OWNER)
     return " ".join(lines)
+
+
+def _media_kind(item: dict[str, Any]) -> str:
+    """A file read from the combined list, by its type: the card draws a video as a player."""
+    return "video" if str(item.get("content_type") or "").startswith("video/") else "image"
 
 
 def _summarize_media(payload: dict[str, Any]) -> str:
@@ -1181,16 +1191,21 @@ in as it finishes (a picture, or a player for a video) — or the owner's librar
 After starting a generation in the background, pass its job ids as `job` and end your turn: the
 card shows each result as soon as it is ready and hands you its link with the owner's next
 message, so do not check the jobs again yourself. A finished image or edit can be shown the same
-way by its job id. With no `job`, the library: `category` is image or video (omit it for both) and
-`query` narrows by file name. The card changes nothing; for another version, generate again.\
+way by its job id. With no `job`, the library: `category` is image or video (omit it for both),
+`query` narrows by words in the file name, each anywhere in it (a generated file is named after its
+prompt's first words), and `offset` skips that many of the newest — the answer's `library.next` is
+where the next page starts, present while older files remain. The card changes nothing; for
+another version, generate again.\
 """
 
 _MEDIA_STUDIO_DESC = """\
 The media studio as an interactive card: the owner describes an image or a video, may pick photos
 from their files or upload new ones to work from (up to 6 for an image, 1 to start a video),
 chooses the shape, the size and a price-and-quality tier — each with its price in credits — and
-presses Generate. The press reaches you as an ordinary message from them naming the model, the
-settings and the photos; run it with the media commands. The full view lists every model, their
+presses one of two buttons. Generate starts it from the card with their description as written —
+you are told what started, and its link when it finishes. Ask Claude reaches you as an ordinary
+message from them with the idea, the model and the settings: write the full prompt and run it. The
+full view lists every model, their
 rarer settings, and lets the owner make a model their default.
 
 Open it when the owner wants to choose the quality, the price or the settings themselves, or asks
@@ -1205,6 +1220,11 @@ Record the owner's press of "Make default" on the studio card and hand back the 
 
 _MEDIA_UPLOAD_DESC = """\
 Store the photo the owner chose on the studio card in their files and hand back its link.\
+"""
+
+_MEDIA_GENERATE_DESC = """\
+Start what the owner set up on the studio card, on their own press of Generate, and hand back the
+job for the card to follow.\
 """
 
 
@@ -1765,35 +1785,48 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
         return _result(payload, _summarize_billing(payload))
 
     def _library_page(
-        client: Client, category: str, query: str | None, limit: int
+        client: Client, category: str, query: str | None, limit: int, offset: int = 0
     ) -> dict[str, Any]:
         return client.request(
             "GET",
             "/agent/files/",
-            params=_query(category=category, q=query, limit=limit),
+            params=_query(category=category, q=query, limit=limit, offset=offset or None),
             read_only=True,
         )
 
     def _read_media_library(
-        client: Client, category: str | None, query: str | None
+        client: Client, category: str | None, query: str | None, offset: int = 0
     ) -> dict[str, Any]:
         """The owner's images and videos, newest first — both kinds unless one was asked for.
 
-        The file library also holds documents and spreadsheets; this card is about pictures, so each
-        kind is read on its own and the two are merged by date.
+        The file library also holds documents and spreadsheets; this card is about pictures. The
+        first page reads each kind on its own, which is where each kind's total comes from, and
+        merges them by date. A later page ("Show more") reads from where the card stopped — both
+        kinds as the one list the API calls ``media``. ``next`` is where the page after this one
+        starts, present only while there is one.
         """
-        kinds = (category,) if category else ("image", "video")
         files: list[dict[str, Any]] = []
         totals: dict[str, int] = {}
-        for kind in kinds:
-            page = _library_page(client, kind, query, _LIBRARY_LIMIT)
-            totals[kind] = int(page.get("total") or 0)
-            files.extend({**item, "category": kind} for item in page.get("files") or [])
-        files.sort(key=lambda item: str(item.get("created_at") or ""), reverse=True)
-        return {
-            "library": {"files": files[:_LIBRARY_LIMIT], "totals": totals},
-            "filters": _query(category=category, query=query),
-        }
+        if offset:
+            page = _library_page(client, category or "media", query, _LIBRARY_LIMIT, offset)
+            files = [{**item, "category": category or _media_kind(item)} for item in page.get("files") or []]
+            total = int(page.get("total") or 0)
+            if category:
+                totals[category] = total
+        else:
+            for kind in (category,) if category else ("image", "video"):
+                page = _library_page(client, kind, query, _LIBRARY_LIMIT)
+                totals[kind] = int(page.get("total") or 0)
+                files.extend({**item, "category": kind} for item in page.get("files") or [])
+            files.sort(key=lambda item: str(item.get("created_at") or ""), reverse=True)
+            total = sum(totals.values())
+        library: dict[str, Any] = {"files": files[:_LIBRARY_LIMIT], "totals": totals}
+        if offset:
+            library["offset"] = offset
+        shown_to = offset + len(library["files"])
+        if library["files"] and shown_to < total:
+            library["next"] = shown_to
+        return {"library": library, "filters": _query(category=category, query=query)}
 
     def _media_jobs(job: str | list[str]) -> list[str]:
         ids = [job] if isinstance(job, str) else list(job)
@@ -1866,16 +1899,19 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
         job: str | list[str] | None = None,
         category: str | None = None,
         query: str | None = None,
+        offset: int | None = None,
     ) -> Any:
         ids = _media_jobs(job) if job else []
         if category not in (None, "image", "video"):
             raise ToolError(f"category is image or video; got {category!r}.")
+        if offset is not None and offset < 0:
+            raise ToolError(f"offset counts files from the newest, so it is 0 or more; got {offset}.")
         with _refusals_in_their_own_words(), client_for_tool(DEFAULT_TIMEOUT_SECONDS) as client:
             if ids:
                 found = client.request("GET", "/agent/media/jobs", params={"id": ids}, read_only=True)
                 payload = {"jobs": (found or {}).get("jobs") or [], "asked": ids}
             else:
-                payload = _read_media_library(client, category, _words(query))
+                payload = _read_media_library(client, category, _words(query), offset or 0)
         return _result(payload, _summarize_media(payload))
 
     @apps.tool(
@@ -1956,6 +1992,74 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
             "It is picked on the studio card; wait for Generate.",
         )
 
+    def _just_queued(job_id: str, task: str, prompt: str, model: str) -> dict[str, Any]:
+        """A job the server accepted, as far as this press knows it without reading it back."""
+        kind = "video" if task in ("video", "video_from_image") else "image"
+        return {"id": job_id, "kind": kind, "status": "queued", "prompt": prompt.strip(), "model": model}
+
+    def _studio_request(
+        task: str, prompt: str, model: str, params: dict[str, Any] | None, photos: list[str] | None
+    ) -> tuple[str, dict[str, Any]]:
+        """The Agent API call behind a studio press: which queue, and the body it takes."""
+        chosen = _media_task(task)
+        words = _words(prompt)
+        if words is None:
+            raise ToolError("Describe what to make first.")
+        links = list(dict.fromkeys(url.strip() for url in photos or [] if url and url.strip()))
+        wanted = {"image_edit": "1 to 6 photos", "video_from_image": "one photo"}.get(str(chosen))
+        if wanted is None and links:
+            raise ToolError(f"{chosen} is made without photos; with photos it is image_edit or video_from_image.")
+        if wanted is not None and not (1 <= len(links) <= (6 if chosen == "image_edit" else 1)):
+            raise ToolError(f"{chosen} is made from {wanted}; got {len(links)}.")
+        settings = params or None
+        if chosen in ("image", "image_edit"):
+            image = _query(prompt=words, model=model, params=settings, reference_urls=links or None)
+            return "/agent/media/image-jobs", {"images": [image]}
+        video = _query(
+            prompt=words, model=model, params=settings, reference_image_url=links[0] if links else None
+        )
+        return "/agent/media/video-jobs", video
+
+    @apps.tool(
+        resource_uri=resource_uri("media-studio"),
+        # The studio's Generate: the owner's own press starts it and spends their credits, with the
+        # description as they wrote it. Having Claude write a fuller prompt is the card's other
+        # button, which goes through the conversation instead.
+        visibility=["app"],
+        name="sellerclaw_media_generate",
+        title="Generate from the studio",
+        description=_MEDIA_GENERATE_DESC,
+        annotations=ToolAnnotations(
+            title="Generate from the studio",
+            read_only_hint=False,
+            destructive_hint=False,
+            # Pressed twice, two are made — and billed.
+            idempotent_hint=False,
+            open_world_hint=True,
+        ),
+    )
+    def sellerclaw_media_generate(
+        task: str,
+        prompt: str,
+        model: str,
+        params: dict[str, Any] | None = None,
+        photos: list[str] | None = None,
+    ) -> Any:
+        path, body = _studio_request(task, prompt, model, params, photos)
+        with _refusals_in_their_own_words(), client_for_tool(DEFAULT_TIMEOUT_SECONDS) as client:
+            queued = client.request("POST", path, json=body)
+            ids = [str(job_id) for job_id in (queued or {}).get("job_ids") or []]
+            # Answered in the results card's own shape, so the studio follows the job the same way.
+            try:
+                found = client.request("GET", "/agent/media/jobs", params={"id": ids}, read_only=True) if ids else {}
+            except CliError:
+                # It is queued and paid for: a read that failed must not look like a press that did
+                # not take, or a second press makes — and bills — a second one. The card's own
+                # checks read the real state.
+                found = {"jobs": [_just_queued(job_id, task, prompt, model) for job_id in ids]}
+        payload = {"jobs": (found or {}).get("jobs") or [], "asked": ids}
+        return _result(payload, _summarize_media_jobs(payload))
+
     return apps
 
 
@@ -1977,4 +2081,5 @@ def tool_names() -> Sequence[str]:
         "sellerclaw_media_studio",
         "sellerclaw_media_set_default",
         "sellerclaw_media_upload_image",
+        "sellerclaw_media_generate",
     )

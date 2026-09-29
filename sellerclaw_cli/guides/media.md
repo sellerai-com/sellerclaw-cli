@@ -9,8 +9,10 @@ below is `sellerclaw_run` or a card tool; run the examples directly.
 - The owner wants to choose the quality, the price or the settings, or asks for the studio → open the
   card tool `sellerclaw_media_studio`, carrying over what they already said (`task`, `prompt`,
   `model`, `reference` — one photo link or a list). There they can also pick photos from their files
-  or upload new ones. Their Generate press comes back as a message from them naming the model, the
-  settings and the photos; run exactly that.
+  or upload new ones. Their Generate press starts the generation from the card itself — you are told
+  what started and, when it finishes, its link. Their "Ask Claude" press comes back as a message from
+  them with the idea, the model id, the settings and the photo links: write the prompt as below and
+  run it with exactly those.
 - The picture has to show the owner's own product → start from real photos of it (`edit-image` takes
   up to 6: the product from one, the scene from another; `generate-video` takes one as
   `reference_image_url`). A generation from text alone draws a different product. A photo the owner
@@ -36,6 +38,22 @@ sellerclaw_run(group="media", command="generate-video",
 - `generate-images` (1–5, one subject per prompt) and `generate-video` answer at once with `job_ids`
   and a `note` saying where the result goes — for you it is kept on the job, not posted anywhere.
   Leave `chat_id` out.
+
+## Write the prompt
+
+Turn the owner's words into the prompt; do not pass them on as typed, unless they ask for that.
+
+- Write it in English, whatever language they used: the models follow English best.
+- Keep everything they asked for, and add only what makes the result concrete. Invent no product
+  features, brands or text on the picture.
+- An image: the subject, where it is, the angle and framing, the light and the mood.
+- From photos: what stays exactly as in them (the product's shape, colours, label, text) and what
+  changes; name the photos by their order.
+- A video: one continuous shot — the scene, one main action, how the camera moves, the pace.
+- A video from a photo: only the motion and the camera. The photo already sets the scene.
+- Leave the shape, size and length out: they are settings.
+
+Give the owner the prompt you used in one line, so they can ask for changes.
 
 ## Show the result
 

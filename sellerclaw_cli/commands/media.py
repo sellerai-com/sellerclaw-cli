@@ -92,7 +92,7 @@ SPECS = (
         "/agent/media/image-jobs",
         summary=(
             "Queue 1-5 images in the background, each with its own prompt; returns job ids. "
-            'Body: {"images": [{"prompt": "...", "aspect_ratio"?, "size"?, "model"?, "params"?}, '
+            'Body: {"images": [{"prompt": "...", "aspect_ratio"?, "size"?, "reference_urls"?, "model"?, "params"?}, '
             '...], "chat_id"?}. ' + _DELIVERY_NOTE
         ),
         body=(
@@ -101,7 +101,7 @@ SPECS = (
                 type=dict,
                 repeatable=True,
                 required=True,
-                help="1-5 images to queue: array of {prompt*, aspect_ratio?, size?, model?, params?}; size not with model.",
+                help="1-5 images to queue: array of {prompt*, aspect_ratio?, size?, reference_urls?, model?, params?}; reference_urls (1-6 photos, in order) makes that one from photos, as edit-image; size not with model.",
             ),
             body_field("chat_id", help=_CHAT_ID_HELP),
         ),
