@@ -12,7 +12,7 @@
       "name": "sellerclaw",
       "source": "./plugins/claude-code",
       "displayName": "SellerClaw",
-      "description": "Operate your SellerClaw e-commerce and marketing channels from Claude — products, orders, listings, ads and suppliers — through three discovery tools plus task skills.",
+      "description": "Operate your SellerClaw e-commerce and marketing channels from Claude — products, orders, listings, ads and suppliers — through three discovery tools, task skills and ready-made /sellerclaw: commands.",
       "author": {
         "name": "SellerAI",
         "url": "https://sellerai.com"

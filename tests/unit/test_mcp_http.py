@@ -10,6 +10,7 @@ import httpx
 import pytest
 import respx
 
+from sellerclaw_cli import shortcuts
 from sellerclaw_cli._client import DEFAULT_TIMEOUT_SECONDS
 from sellerclaw_cli._command_group import LONG_TIMEOUT_SECONDS
 from sellerclaw_cli._errors import UserInputError
@@ -20,6 +21,7 @@ from sellerclaw_cli.mcp_server import (
     _http_transport_options,
     _request_token,
     build_http_server,
+    build_server,
     create_http_app,
 )
 
@@ -97,6 +99,16 @@ def test_build_http_server_registers_the_same_tools_as_stdio() -> None:
         "sellerclaw_media_upload_image",
         "sellerclaw_media_generate",
     }
+
+
+def test_build_http_server_offers_the_same_ready_made_commands_as_stdio() -> None:
+    """claude.ai reaches the shortcuts only through the hosted server, so it must not lose them."""
+    hosted = build_http_server(issuer_url=ISSUER, resource_url=RESOURCE, api_url=API_URL)
+    local = build_server()
+
+    hosted_prompts = asyncio.run(hosted.list_prompts())
+    assert [p.name for p in hosted_prompts] == list(shortcuts.names())
+    assert hosted_prompts == asyncio.run(local.list_prompts())
 
 
 def test_protected_resource_metadata_points_at_issuer() -> None:

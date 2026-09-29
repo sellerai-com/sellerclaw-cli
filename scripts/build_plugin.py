@@ -6,6 +6,8 @@ Source of truth is ``plugin/``:
     plugin/shared/{skills,hooks}/   generic core (works for any MCP agent)
     plugin/claude/{skills,hooks}/   Claude-family overlay (all claude-* targets)
     plugin/targets/<target>/        per-target manifests + MCP/connector declaration
+    sellerclaw_cli/guides/          task guides, compiled into recipe skills
+    sellerclaw_cli/shortcuts/       the owner's ready-made commands, compiled into /sellerclaw:<name>
 
 Each target is assembled by merging the layer component dirs (skills/, hooks/) and then overlaying
 the target's own files (``.claude-plugin/plugin.json``, ``.mcp.json``/``connector.json``, ...). The
@@ -109,6 +111,39 @@ def _write_guide_skills(out: Path, guides_src: Path) -> None:
         skill_file.write_text(f'---\nname: {skill}\ndescription: "{description}"\n---\n\n{body}')
 
 
+def default_shortcuts_src(plugin_src: Path) -> Path:
+    """Where the shortcuts live relative to ``plugin/`` — ``<repo>/sellerclaw_cli/shortcuts``."""
+    return plugin_src.parent / "sellerclaw_cli" / "shortcuts"
+
+
+def _write_shortcut_skills(out: Path, shortcuts_src: Path) -> None:
+    """Compile every shortcut into a skill only the owner starts: ``/sellerclaw:<name>``.
+
+    The same files are the MCP server's prompts, which is how claude.ai and other clients list them;
+    Claude Code and Cowork list a plugin's skills instead. ``disable-model-invocation`` keeps them
+    out of Claude's own choice — a shortcut is something the owner picks, and the model already
+    knows the cards and guides it points to. The body's ``$ARGUMENTS`` is Claude Code's own
+    placeholder for the words typed after the command, so it ships as written.
+    """
+    for item in json.loads((shortcuts_src / "shortcuts.json").read_text()):
+        name = item["name"]
+        skill_file = out / "skills" / name / "SKILL.md"
+        if skill_file.parent.exists():
+            raise ValueError(f"shortcut {name!r}: a skill of that name already ships in the plugin")
+        quoted = {"description": item["description"], "argument-hint": (item.get("words") or {}).get("hint")}
+        lines = [f"name: {name}"]
+        for key, value in quoted.items():
+            if value is None:
+                continue
+            if '"' in value:
+                raise ValueError(f"shortcut {name!r}: {key} must not contain a double quote")
+            lines.append(f'{key}: "{value}"')
+        lines.append("disable-model-invocation: true")
+        body = (shortcuts_src / item["file"]).read_text()
+        skill_file.parent.mkdir(parents=True)
+        skill_file.write_text("---\n" + "\n".join(lines) + "\n---\n\n" + body)
+
+
 def _stamp_version(out: Path, version: str) -> None:
     for rel in MANIFESTS:
         manifest = out / rel
@@ -125,6 +160,7 @@ def assemble(
     version: str,
     layers: tuple[str, ...] = CLAUDE_LAYERS,
     guides_src: Path | None = None,
+    shortcuts_src: Path | None = None,
 ) -> Path:
     """Build one target into ``out`` from ``plugin_src``. Pure in its paths (no repo-layout policy)."""
     if out.exists():
@@ -136,6 +172,7 @@ def assemble(
         # Only skill-carrying targets get the compiled guides; the Desktop .mcpb has no skills
         # concept and reaches the same text through the `sellerclaw_guide` tool instead.
         _write_guide_skills(out, guides_src or default_guides_src(plugin_src))
+        _write_shortcut_skills(out, shortcuts_src or default_shortcuts_src(plugin_src))
     shutil.copytree(plugin_src / "targets" / target, out, dirs_exist_ok=True)
     _stamp_version(out, version)
     return out

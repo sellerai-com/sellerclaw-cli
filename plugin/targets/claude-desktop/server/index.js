@@ -448,9 +448,10 @@ async function handleLogin(message) {
     pendingDevice = null
     token = granted
     saveToken(granted)
-    // The tool list was just the login tool while unauthenticated; tell the client to re-read it so
-    // the real SellerClaw tools appear without restarting Claude.
+    // The tool list was just the login tool while unauthenticated, and there were no ready-made
+    // commands; tell the client to re-read both so they appear without restarting Claude.
     send({ jsonrpc: '2.0', method: 'notifications/tools/list_changed' })
+    send({ jsonrpc: '2.0', method: 'notifications/prompts/list_changed' })
     sendResult(message.id, {
       content: [{
         type: 'text',
@@ -484,10 +485,14 @@ async function handleInitialize(message) {
         if (typeof reply.result.protocolVersion === 'string') {
           negotiatedProtocolVersion = reply.result.protocolVersion
         }
-        // Force listChanged on: the tool list changes locally the moment a sign-in succeeds, and
-        // the client only re-reads it if the server said it might.
+        // Force listChanged on: the tool and command lists change locally the moment a sign-in
+        // succeeds, and the client only re-reads them if the server said they might.
         const capabilities = reply.result.capabilities || {}
-        reply.result.capabilities = { ...capabilities, tools: { ...(capabilities.tools || {}), listChanged: true } }
+        reply.result.capabilities = {
+          ...capabilities,
+          tools: { ...(capabilities.tools || {}), listChanged: true },
+          prompts: { ...(capabilities.prompts || {}), listChanged: true },
+        }
         send(reply)
         return
       }
@@ -498,7 +503,7 @@ async function handleInitialize(message) {
 
   sendResult(message.id, {
     protocolVersion: requested,
-    capabilities: { tools: { listChanged: true } },
+    capabilities: { tools: { listChanged: true }, prompts: { listChanged: true } },
     serverInfo: { name: SERVER_NAME, version: bundleVersion() },
     instructions: FALLBACK_INSTRUCTIONS,
   })
@@ -523,6 +528,29 @@ async function handleToolsList(message) {
   } catch (err) {
     if (err.unauthorized) {
       sendResult(message.id, { tools: [LOGIN_TOOL] })
+      return
+    }
+    sendFailure(message, err.message)
+  }
+}
+
+/** The owner's ready-made commands come from the hosted server; before sign-in there are none. */
+async function handlePromptsList(message) {
+  if (!token) {
+    sendResult(message.id, { prompts: [] })
+    return
+  }
+  try {
+    const replies = await callUpstream(message, { timeoutMs: TOOLS_LIST_TIMEOUT_MS })
+    const reply = replies.find((m) => m && m.result && m.id === message.id)
+    if (!reply) {
+      sendResult(message.id, { prompts: [] })
+      return
+    }
+    send(reply)
+  } catch (err) {
+    if (err.unauthorized) {
+      sendResult(message.id, { prompts: [] })
       return
     }
     sendFailure(message, err.message)
@@ -558,6 +586,9 @@ async function handleRequest(message) {
       return
     case 'tools/list':
       await handleToolsList(message)
+      return
+    case 'prompts/list':
+      await handlePromptsList(message)
       return
     case 'tools/call':
       if (message.params && message.params.name === LOGIN_TOOL.name) {

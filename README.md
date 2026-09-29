@@ -507,11 +507,46 @@ recipe is written once and reaches both audiences. Clients that have no skills a
 Desktop extension, Cursor, the hosted connector) would otherwise have nothing but tool descriptions
 to work from.
 
+### Ready-made commands
+
+The owner does not have to phrase a request to open a card or start a common job: the server
+offers **ready-made commands** as MCP prompts — claude.ai, Claude Desktop and Cursor list them under
+SellerClaw (in claude.ai, the **+** menu) — and the Claude plugin ships the same ones as
+`/sellerclaw:<name>` in Claude Code and Cowork. Words typed after a command are passed on:
+`/sellerclaw:orders #1001`, `/sellerclaw:studio a banner for the summer sale`.
+
+| Command | What it does |
+| --- | --- |
+| `today` | What needs the owner today (`sellerclaw_attention`) |
+| `summary` | How the stores are doing — a store and a period are optional |
+| `orders` | The order board, or one order by its number, buyer or item |
+| `listings` | Listings — find one, or see which ones shoppers cannot buy |
+| `product` | A catalog product with its supplier and every store it is in |
+| `ads` | Ads across Google, Meta and eBay over 7, 30 or 90 days |
+| `connections` | Every connection, broken ones first |
+| `billing` | The plan and the credits left |
+| `media` | The library of generated images and videos |
+| `studio` | The media studio, with the idea carried in |
+| `approvals` | What is waiting on the owner's decision |
+| `ship` | Orders still owed to buyers: what each needs next |
+| `publish` | List a product in one of the stores |
+| `fix-listings` | Why listings are not selling, and the fixes |
+| `report` | A written report on a period, with what to do next |
+| `restock` | What is running out and what to reorder |
+| `research` | Demand, competition and prices for a product or niche, with a verdict |
+| `inbox` | Buyer emails and messages, with draft replies |
+| `generate` | An image or a video, made right away with the default model |
+
+They live in [`sellerclaw_cli/shortcuts/`](sellerclaw_cli/shortcuts/): one short Markdown body per
+command, read by the server as a prompt and compiled by `make plugin` into a skill only the owner
+starts (`disable-model-invocation`).
+
 ### Claude plugin (skills + hooks + MCP in one install)
 
 For **Claude Code** and **claude.ai** the cleanest path is the SellerClaw **plugin** — one install
 brings the MCP server, the task skills (discover → describe → run, plus listings / orders / ads /
-research recipes), and a session-start primer hook together, from our marketplace:
+research recipes), the ready-made `/sellerclaw:` commands above, and a session-start primer hook
+together, from our marketplace:
 
 ```text
 /plugin marketplace add sellerai-com/sellerclaw-cli

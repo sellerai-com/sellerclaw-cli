@@ -3,7 +3,7 @@
   "name": "sellerclaw",
   "displayName": "SellerClaw",
   "version": "0.0.0",
-  "description": "Operate your e-commerce and marketing channels in Claude Cowork — eBay, Shopify, Amazon, Meta Ads, Google Ads and more. Connect them once on SellerClaw, then manage products, orders, listings, ads and suppliers through the SellerClaw connector plus task skills.",
+  "description": "Operate your e-commerce and marketing channels in Claude Cowork — eBay, Shopify, Amazon, Meta Ads, Google Ads and more. Connect them once on SellerClaw, then manage products, orders, listings, ads and suppliers through the SellerClaw connector, task skills and ready-made /sellerclaw: commands.",
   "author": {
     "name": "SellerAI",
     "email": "hello@sellerai.com",

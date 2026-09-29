@@ -32,6 +32,14 @@ carried by a general-purpose one; to keep the list short, one tool covers both a
 its rows, found by the words the owner uses for it. One of them is callable only by the card
 itself, so the owner's answer on an approval can only come from the owner pressing the button.
 
+The shortcuts
+-------------
+The ready-made commands an owner picks from a menu — "Orders", "Plan and credits", "Media studio",
+"Business report" — are served as MCP prompts from :mod:`sellerclaw_cli.shortcuts`, the same files
+the Claude plugin compiles into its ``/sellerclaw:<name>`` commands. A prompt is the one way claude.ai,
+Claude Desktop and other MCP clients offer a server's commands; each is a short instruction to open a
+card or run a guided job, with the owner's words carried in.
+
 Running
 -------
 The ``mcp`` SDK is an optional dependency (imported lazily, so the core CLI never depends on it)::
@@ -53,7 +61,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from sellerclaw_cli import guides, mcp_apps
+from sellerclaw_cli import guides, mcp_apps, shortcuts
 from sellerclaw_cli._client import DEFAULT_TIMEOUT_SECONDS, Client
 from sellerclaw_cli._command_group import (
     REGISTRY,
@@ -915,6 +923,40 @@ def _register_tools(server: Any) -> None:
     )
 
 
+def _shortcut_prompt(shortcut: shortcuts.Shortcut) -> Any:
+    """One shortcut as an MCP prompt: its words optional, so every client can offer it bare."""
+    from mcp.server.mcpserver.prompts.base import Prompt, PromptArgument
+
+    words = shortcut.words
+
+    def _render(**arguments: Any) -> str:
+        said = arguments.get(words.name) if words else None
+        return shortcuts.render(shortcut.name, None if said is None else str(said))
+
+    return Prompt(
+        name=shortcut.name,
+        title=shortcut.title,
+        description=shortcut.description,
+        arguments=[PromptArgument(name=words.name, description=words.description, required=False)]
+        if words
+        else [],
+        fn=_render,
+        # No request context to hand in: a shortcut's text is the same for every account.
+        context_kwarg=None,
+    )
+
+
+def _register_prompts(server: Any) -> None:
+    """Register every shortcut as a prompt — the commands a client lists under SellerClaw.
+
+    A required argument would hide a command from clients that cannot ask for one, and would refuse
+    "Orders" to someone who wants the whole board, so the owner's words are always optional and each
+    body reads right without them.
+    """
+    for shortcut in shortcuts.shortcuts():
+        server.add_prompt(_shortcut_prompt(shortcut))
+
+
 def build_server() -> Any:
     """Construct the stdio MCP server with the four discovery/proxy tools.
 
@@ -937,6 +979,7 @@ def build_server() -> Any:
         **_server_branding(),
     )
     _register_tools(server)
+    _register_prompts(server)
     return server
 
 
@@ -1023,6 +1066,7 @@ def build_http_server(
         **_server_branding(),
     )
     _register_tools(server)
+    _register_prompts(server)
     return server
 
 
