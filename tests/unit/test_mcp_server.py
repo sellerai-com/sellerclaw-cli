@@ -341,6 +341,24 @@ def test_run_command_sends_json_body_for_write_commands(
     assert json.loads(route.calls.last.request.content) == body
 
 
+@respx.mock
+def test_run_command_pulls_a_file_in_by_url_with_the_url_in_the_body(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """A remote connector has no local path, so `from-url` is its only way to hand SellerClaw a
+    file. Sent as query parameters, the API refused every such call for want of a body."""
+    route = respx.post(f"{fake_api_url}/agent/files/from-url").mock(
+        return_value=httpx.Response(201, json={"file_id": "f-1"})
+    )
+    run_command(
+        "files", "from-url", body={"url": "https://example.com/lamp.jpg", "filename": "lamp.jpg"}
+    )
+    request = route.calls.last.request
+    assert json.loads(request.content) == {"url": "https://example.com/lamp.jpg", "filename": "lamp.jpg"}
+    assert dict(request.url.params) == {}
+
+
 def test_run_command_missing_positional_raises() -> None:
     with pytest.raises(UserInputError, match="missing positional argument"):
         run_command("ebay-listings", "list", positionals={})

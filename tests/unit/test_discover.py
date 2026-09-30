@@ -66,8 +66,12 @@ def test_files_group_discoverable() -> None:
     assert described.exit_code == 0, described.output
     detail = _data(described.stdout)
     assert detail["method"] == "POST"
-    flags = {f["flag"]: f for f in detail["flags"]}
-    assert flags["--url"]["required"] is True
+    # The API takes the URL in the JSON body; described as a flag, an MCP caller sent it as a query
+    # parameter and was refused. The CLI keeps its `--url` spelling for the same field.
+    assert detail["flags"] == []
+    fields = {f["field"]: f for f in detail["body_fields"]}
+    assert (fields["url"]["required"], fields["url"]["option"]) == (True, "--url")
+    assert (fields["filename"]["required"], fields["filename"]["option"]) == (False, "--filename")
 
 
 _LISTINGS_COMMANDS = [

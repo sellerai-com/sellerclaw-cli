@@ -61,7 +61,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from sellerclaw_cli import guides, mcp_apps, shortcuts
+from sellerclaw_cli import guides, mcp_apps, mcp_usage, shortcuts
 from sellerclaw_cli._client import DEFAULT_TIMEOUT_SECONDS, Client
 from sellerclaw_cli._command_group import (
     REGISTRY,
@@ -836,6 +836,22 @@ def _apps_extension() -> Any:
     return mcp_apps.build_extension(_client_for_tool)
 
 
+def _usage_reporter(api_url: str | None = None) -> mcp_usage.UsageReporter:
+    """Report every served call to the account it was made for (see :mod:`sellerclaw_cli.mcp_usage`).
+
+    Middleware rather than a wrapper around each tool: the card tools are registered by the apps
+    extension and the prompts by the SDK, and one layer every request passes through sees them all.
+    Like the tools, the hosted server uses the request's OAuth bearer and stdio the configured token.
+    ``api_url`` is the hosted server's own Agent API; stdio reads the configured one, as its tools do.
+    """
+    from sellerclaw_cli import _config
+
+    return mcp_usage.UsageReporter(
+        api_url=(lambda: api_url) if api_url else (lambda: _config.load().api_url),
+        token_for_request=lambda: _request_token() or _config.load().token,
+    )
+
+
 def _refusals_reach_the_caller(tool: Callable[..., Any]) -> Callable[..., Any]:
     """Hand a failed call back as the CLI's own error JSON instead of a generic failure.
 
@@ -976,6 +992,7 @@ def build_server() -> Any:
         version=__version__,
         cache_hints=_cache_hints(),
         extensions=[_apps_extension()],
+        middleware=[_usage_reporter()],
         **_server_branding(),
     )
     _register_tools(server)
@@ -1063,6 +1080,7 @@ def build_http_server(
         auth=auth,
         cache_hints=_cache_hints(),
         extensions=[_apps_extension()],
+        middleware=[_usage_reporter(api_url)],
         **_server_branding(),
     )
     _register_tools(server)

@@ -47,7 +47,7 @@ retype it into `create` row by row.
 ```text
 sellerclaw_run(group="catalog-file", command="template")                 # blank file + column notes
 sellerclaw_run(group="files", command="list", flags={"limit": 10})       # what they have uploaded
-sellerclaw_run(group="files", command="from-url", flags={"url": "https://..."})   # or pull one in
+sellerclaw_run(group="files", command="from-url", body={"url": "https://..."})    # or pull one in
 sellerclaw_run(group="catalog-file", command="check",   body={"file_id": FILE_ID})
 sellerclaw_run(group="catalog-file", command="preview", body={"file_id": FILE_ID})
 sellerclaw_run(group="catalog-file", command="apply",   body={"file_id": FILE_ID})

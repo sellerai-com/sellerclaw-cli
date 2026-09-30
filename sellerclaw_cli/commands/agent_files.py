@@ -24,6 +24,7 @@ from sellerclaw_cli._command_group import (
     SEARCH_FLAG_SPELLINGS,
     Cmd,
     GroupSpec,
+    body_field,
     flag,
 )
 from sellerclaw_cli._errors import CliError, UserInputError
@@ -77,9 +78,22 @@ _SPECS = (
         # large one is minutes of work, not a lookup.
         timeout=LONG_TIMEOUT_SECONDS,
         summary="Download a remote URL into the user's files; returns id + download_url.",
-        flags=(
-            flag("url", required=True, help="HTTP(S) URL to download the file from."),
-            flag("filename", help="Override the filename suggested by the response."),
+        # Body fields, as the API takes them. Declared as flags they reached an MCP caller as query
+        # parameters, and every call from a remote connector — which has no local path to `upload`
+        # — was refused with "body: Field required". The options keep the CLI's `--url` spelling.
+        body=(
+            body_field(
+                "url",
+                required=True,
+                option="--url",
+                help="HTTP(S) URL to download the file from.",
+                example="https://example.com/photo.jpg",
+            ),
+            body_field(
+                "filename",
+                option="--filename",
+                help="Override the filename suggested by the response.",
+            ),
         ),
     ),
     Cmd(
