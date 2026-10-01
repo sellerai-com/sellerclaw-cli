@@ -45,6 +45,25 @@ sellerclaw_run(group="shopify-listings", command="sync-stock",
 Other Shopify commands (confirm fields with `sellerclaw_describe` if unsure): `update`, `publish`,
 `withdraw`, `delete`, `list-drafts`, `create-drafts`, `publish-drafts`.
 
+### Videos on a Shopify listing
+
+`videos` is the listing's whole list of videos, shown after the photos so the cover stays a photo.
+A generated video is its job's `result_url`; any public MP4, MOV or WEBM link up to 50 MB works.
+`[]` removes the videos SellerClaw put there; a video the seller uploaded in the Shopify admin is
+never touched. Other marketplaces refuse `videos` with the reason.
+
+```text
+sellerclaw_run(group="listings", command="bulk-update",
+  body={"items": [{"listing_id": LISTING_ID,
+                   "patch": {"videos": ["https://api.sellerclaw.ai/agent/files/FILE_ID/lamp.mp4"]}}]})
+# Uploading a video takes a while: publish in the background.
+sellerclaw_run(group="listings", command="bulk-publish", positionals={"store_id": STORE_ID},
+  body={"kind": "publish", "listing_ids": [LISTING_ID]})
+```
+
+A video that did not go up leaves the product live and shows as a `shopify_videos_rejected` problem
+(`listing-problems list`) naming the link and the reason.
+
 ## eBay
 
 ```text

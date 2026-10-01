@@ -1753,6 +1753,73 @@ _WEBSITE = (
             "The subscription has ended: no plan and no credits.",
             id="ended",
         ),
+        pytest.param(
+            _billing(
+                "no_plan",
+                _period("free", "Free", "0", "0", "0"),
+                intro_offer={"price_usd": "1"},
+                assistant_trial={
+                    "status": "active",
+                    "ends_at": "2026-06-04T14:00:00Z",
+                    "plan": {"name": "Your Own AI", "price_usd": "10"},
+                },
+            ),
+            "SellerClaw is on its free trial for AI assistants until 2026-06-04, with no credits; "
+            "after it, the Your Own AI plan ($10/month) keeps it working here.",
+            id="assistant-trial-running-never-names-the-agent-month",
+        ),
+        pytest.param(
+            _billing(
+                "no_plan",
+                _period("free", "Free", "0", "0", "0"),
+                assistant_trial={
+                    "status": "ended",
+                    "ends_at": "2026-06-04T14:00:00Z",
+                    "plan": {"name": "Your Own AI", "price_usd": "10"},
+                },
+            ),
+            "The free trial for AI assistants is over, so SellerClaw is paused here until the owner "
+            "subscribes to the Your Own AI plan ($10/month).",
+            id="assistant-trial-over",
+        ),
+        pytest.param(
+            _billing(
+                "cancelled",
+                None,
+                assistant_trial={"status": "not_eligible", "plan": {"name": "Your Own AI", "price_usd": "10"}},
+            ),
+            "The subscription has ended: no plan and no credits. Using SellerClaw from an assistant "
+            "takes the Your Own AI plan ($10/month).",
+            id="former-customer",
+        ),
+        pytest.param(
+            _billing(
+                "no_plan",
+                _period("free", "Free", "0", "0", "0"),
+                assistant_trial={
+                    "status": "available",
+                    "duration_days": 3,
+                    "plan": {"name": "Your Own AI", "price_usd": "10"},
+                },
+            ),
+            "No plan yet, so no credits. The free trial for AI assistants (3 days, no card) starts with "
+            "the next SellerClaw request; after it, the Your Own AI plan ($10/month) keeps it working here.",
+            id="assistant-trial-not-started-yet-is-not-sold-as-a-plan",
+        ),
+        pytest.param(
+            _billing(
+                "trial_expired",
+                _period("free", "Free", "0", "5000", "5000", period_end=None, trial_ends_at="2026-05-04T14:00:00Z"),
+                assistant_trial={
+                    "status": "active",
+                    "ends_at": "2026-06-04T14:00:00Z",
+                    "plan": {"name": "Your Own AI", "price_usd": "10"},
+                },
+            ),
+            "SellerClaw is on its free trial for AI assistants until 2026-06-04, with no credits; "
+            "after it, the Your Own AI plan ($10/month) keeps it working here.",
+            id="an-old-trial-that-ran-dry-reads-as-its-assistant-trial",
+        ),
     ],
 )
 def test_the_plan_is_told_with_the_figures_it_has_and_nothing_it_does_not(
@@ -2327,6 +2394,66 @@ def test_a_refused_studio_press_reaches_the_card_in_the_servers_words(
 
     with pytest.raises(ToolError, match="Not enough credits for this video"):
         _call("sellerclaw_media_generate", {"task": "video", "prompt": "waves", "model": "veo-3.1-lite"})
+
+
+_RELAY = "The owner's free 3-day trial of SellerClaw in their AI assistant ended. Don't retry."
+_FOR_OWNER = "Your free trial ended on June 4, 2026 at 14:00 UTC."
+_PAUSED = {
+    "detail": {
+        "code": "assistant_trial_ended",
+        "message": _RELAY,
+        "owner_message": _FOR_OWNER,
+        "action": "Subscribe — $10/month",
+        "url": "https://app.example.test/settings/billing?select-plan=starter",
+    }
+}
+
+
+@pytest.mark.parametrize(
+    ("detail", "on_the_card"),
+    [
+        pytest.param(_PAUSED["detail"], _FOR_OWNER, id="the-owner-reads-their-own-words"),
+        pytest.param(
+            {key: value for key, value in _PAUSED["detail"].items() if key != "owner_message"},
+            _RELAY,
+            id="a-server-without-owner-words-still-draws-the-pause",
+        ),
+    ],
+)
+@respx.mock
+def test_a_paused_account_gets_the_paywall_on_the_card_instead_of_a_failure(
+    env_pointing_at_fake_api: None, fake_api_url: str, detail: dict[str, str], on_the_card: str
+) -> None:
+    """The card draws the pause with its button; Claude gets the server's words to pass on."""
+    respx.get(f"{fake_api_url}/agent/dashboard/summary").mock(
+        return_value=httpx.Response(402, json={"detail": detail})
+    )
+
+    result = _call("sellerclaw_attention", {})
+
+    assert result.structured_content == {
+        "paywall": {
+            "code": "assistant_trial_ended",
+            "message": on_the_card,
+            "label": "Subscribe — $10/month",
+            "url": "https://app.example.test/settings/billing?select-plan=starter",
+        }
+    }
+    # Claude relays the version written for it, whatever the card shows.
+    assert result.content[0].text == _RELAY
+
+
+@respx.mock
+def test_a_card_action_on_a_paused_account_answers_with_the_paywall_too(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    respx.post(f"{fake_api_url}/agent/media/video-jobs").mock(
+        return_value=httpx.Response(402, json=_PAUSED)
+    )
+
+    result = _call("sellerclaw_media_generate", {"task": "video", "prompt": "waves", "model": "veo-3.1-lite"})
+
+    assert result.structured_content["paywall"]["code"] == "assistant_trial_ended"
 
 
 @respx.mock

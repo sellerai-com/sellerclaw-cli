@@ -5,8 +5,9 @@ Until this existed even that was invisible: a guide read, a card opened and the 
 client makes all looked the same from the API's side — a token check and nothing else.
 
 So after every ``tools/call`` and ``prompts/get`` the server reports, with the caller's own token:
-which tool or prompt (and, for ``sellerclaw_run``, which command), whether it worked, how long it
-took, and the name the client gave itself when the protocol carried one. **Never the arguments** —
+which tool or prompt (and, for ``sellerclaw_run``, which command), whether it worked — and when it
+did not, the refusal's code and HTTP status, never its message — how long it took, and the name the
+client gave itself when the protocol carried one. **Never the arguments** —
 they carry the owner's own words, and so does any name that is not shaped like one of ours. The cloud
 decides which app it was: from the connection the token belongs to, and only failing that from the
 name the client gave.
@@ -19,6 +20,7 @@ slow or broken report must never delay or fail a tool. An API that does not know
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
 import time
@@ -43,6 +45,9 @@ _MAX_COMMAND_CHARS: Final[int] = 128
 #: else — a sentence, an address — is its text, not our name, and is never sent.
 _NAME_SHAPE: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$")
 
+#: A refusal as the report carries it: ``(code, HTTP status)``, either unknown.
+Failure = tuple[str | None, int | None]
+
 #: Reports in flight. The event loop keeps only weak references to tasks, and the request's own task
 #: group is torn down when the request ends — so the reports are held here until they finish.
 _in_flight: set[asyncio.Task[None]] = set()
@@ -66,14 +71,22 @@ class UsageReporter:
             return await call_next(ctx)
         started = time.monotonic()
         ok = False
+        failure: Failure = (None, None)
         try:
             result = await call_next(ctx)
             ok = not _is_error(result)
+            if not ok:
+                failure = failure_of(result)
             return result
+        except Exception as exc:
+            failure = (_exception_code(exc), None)
+            raise
         finally:
-            self._schedule(ctx, kind=kind, ok=ok, duration_ms=int((time.monotonic() - started) * 1000))
+            self._schedule(
+                ctx, kind=kind, ok=ok, failure=failure, duration_ms=int((time.monotonic() - started) * 1000)
+            )
 
-    def _schedule(self, ctx: Any, *, kind: str, ok: bool, duration_ms: int) -> None:
+    def _schedule(self, ctx: Any, *, kind: str, ok: bool, failure: Failure, duration_ms: int) -> None:
         try:
             token = self._token_for_request()
             params = ctx.params if isinstance(ctx.params, Mapping) else {}
@@ -89,12 +102,64 @@ class UsageReporter:
             client_name = client_name_of(ctx)
             if client_name is not None:
                 body["client_name"] = client_name
+            error_code, error_status = failure
+            if error_code is not None:
+                body["error_code"] = error_code
+            if error_status is not None:
+                body["error_status"] = error_status
             task = asyncio.get_running_loop().create_task(send_usage_report(self._api_url(), token, body))
         except Exception:  # a report must never cost the caller its answer
             _logger.warning("mcp_usage_report_not_scheduled", exc_info=True)
             return
         _in_flight.add(task)
         task.add_done_callback(_in_flight.discard)
+
+
+#: What a failure that never produced a result is filed under: the request itself was wrong (an
+#: unknown tool or prompt, arguments that do not fit), or something broke on our side.
+_REQUEST_ERRORS: Final[frozenset[str]] = frozenset({"MCPError", "ValidationError", "ValueError", "KeyError"})
+
+
+def failure_of(result: Any) -> Failure:
+    """The code and HTTP status of a refused tool call — only when the tool answered with our error JSON.
+
+    The command runner answers a refusal with ``{"error": {"code", "status", "details"}}`` (behind the
+    SDK's "Error executing tool …:" prefix). The API's own code (``order_not_found``) says more than the
+    CLI's class of error (``api_error``), so it wins when there is one. The message is never read: it
+    can quote what the owner asked for. A refusal in any other shape — a card's plain sentence — has
+    no code to give, and says so by giving none.
+    """
+    text = _first_text(result)
+    start = text.find("{") if text else -1
+    if text is None or start < 0:
+        return None, None
+    try:
+        payload, _ = json.JSONDecoder().raw_decode(text[start:])
+    except ValueError:
+        return None, None
+    error = payload.get("error") if isinstance(payload, Mapping) else None
+    if not isinstance(error, Mapping):
+        return None, None
+    details = error.get("details")
+    detail = details.get("detail") if isinstance(details, Mapping) else None
+    api_code = detail.get("code") if isinstance(detail, Mapping) else None
+    code = _shaped_name(api_code) or _shaped_name(error.get("code"))
+    status = error.get("status")
+    valid_status = status if isinstance(status, int) and not isinstance(status, bool) and 100 <= status <= 599 else None
+    return code, valid_status
+
+
+def _first_text(result: Any) -> str | None:
+    content = result.get("content") if isinstance(result, Mapping) else getattr(result, "content", None)
+    for item in content if isinstance(content, list) else []:
+        text = item.get("text") if isinstance(item, Mapping) else getattr(item, "text", None)
+        if isinstance(text, str):
+            return text
+    return None
+
+
+def _exception_code(exc: BaseException) -> str:
+    return "invalid_request" if type(exc).__name__ in _REQUEST_ERRORS else "internal_error"
 
 
 def _is_error(result: Any) -> bool:
