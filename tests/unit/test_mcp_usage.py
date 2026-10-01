@@ -22,6 +22,8 @@ from sellerclaw_cli.mcp_server import build_http_server, build_server
 
 pytestmark = pytest.mark.unit
 
+ORDER_ID = "22222222-2222-4222-8222-222222222222"
+
 
 @pytest.fixture
 def env_pointing_at_fake_api(
@@ -91,7 +93,7 @@ def test_a_command_run_is_reported_with_its_command_and_the_clients_name(fake_ap
         pytest.param(
             "sellerclaw_run",
             {"group": "no-such-group", "command": "list"},
-            {"name": "sellerclaw_run", "ok": False, "command": "no-such-group list"},
+            {"name": "sellerclaw_run", "ok": False, "command": "no-such-group list", "error_code": "user_error"},
             id="refused-command-is-a-failure",
         ),
         pytest.param("sellerclaw_groups", {}, {"name": "sellerclaw_groups", "ok": True}, id="discovery-tool"),
@@ -113,6 +115,28 @@ def test_every_tool_call_is_reported_with_its_outcome(
     assert {k: v for k, v in report.items() if k in expected} == expected
     assert report["kind"] == "tool"
     assert ("command" in report) == ("command" in expected)
+
+
+@pytest.mark.usefixtures("env_pointing_at_fake_api")
+@respx.mock
+def test_a_refusal_is_reported_with_the_apis_own_code_and_status_but_not_its_message(fake_api_url: str) -> None:
+    respx.get(f"{fake_api_url}/agent/orders/{ORDER_ID}").mock(
+        return_value=httpx.Response(
+            404, json={"detail": {"code": "order_not_found", "message": "No order for Jane Doe, 12 Main St"}}
+        )
+    )
+    reported = respx.post(f"{fake_api_url}/agent/mcp/calls").mock(return_value=httpx.Response(204))
+
+    result = _drive(
+        lambda c: c.call_tool(
+            "sellerclaw_run", {"group": "orders", "command": "get", "positionals": {"order_id": ORDER_ID}}
+        )
+    )
+
+    assert result.is_error is True
+    [report] = _reports(reported)
+    assert (report["ok"], report["error_code"], report["error_status"]) == (False, "order_not_found", 404)
+    assert "Jane" not in reported.calls[0].request.content.decode()
 
 
 @pytest.mark.usefixtures("env_pointing_at_fake_api")
@@ -273,3 +297,42 @@ def test_command_of(name: str, arguments: Any, expected: str | None) -> None:
 )
 def test_client_name_of(ctx: Any, expected: str | None) -> None:
     assert mcp_usage.client_name_of(ctx) == expected
+
+
+@pytest.mark.parametrize(
+    ("result", "expected"),
+    [
+        pytest.param(
+            {
+                "isError": True,
+                "content": [
+                    {
+                        "type": "text",
+                        "text": 'Error executing tool sellerclaw_run: {"error":{"code":"api_error","message":"x",'
+                        '"status":409,"details":{"detail":{"code":"listing_locked","message":"busy"}}}}',
+                    }
+                ],
+            },
+            ("listing_locked", 409),
+            id="api-code-wins-over-the-cli-class",
+        ),
+        pytest.param(
+            {"content": [{"type": "text", "text": '{"error":{"code":"server_error","status":503,"message":"m"}}'}]},
+            ("server_error", 503),
+            id="no-api-code-falls-back-to-the-cli-class",
+        ),
+        pytest.param(
+            {"content": [{"type": "text", "text": '{"error":{"code":"orders for Jane","status":true}}'}]},
+            (None, None),
+            id="text-shaped-code-and-non-numeric-status-dropped",
+        ),
+        pytest.param(
+            {"content": [{"type": "text", "text": "The channel refused: ship it first."}]},
+            (None, None),
+            id="a-cards-plain-sentence-has-no-code",
+        ),
+        pytest.param({"content": []}, (None, None), id="no-content"),
+    ],
+)
+def test_failure_of(result: dict[str, Any], expected: tuple[str | None, int | None]) -> None:
+    assert mcp_usage.failure_of(result) == expected

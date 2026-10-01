@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import functools
 import mimetypes
 import os
 import threading
@@ -877,16 +878,56 @@ def _summarize_billing(payload: dict[str, Any]) -> str:
 
     # A free period with no allowance is an account without a plan, not an empty plan: the web
     # billing page draws it that way, and "0 of 0 credits used" would tell the model a plan exists.
-    if period is None or (
-        _is_free_tier(period.get("tier_id")) and (_decimal(period.get("credit_limit")) or 0) <= 0
+    # So is an old free trial that ran dry once the server sends the assistant trial: that block
+    # only comes where no plan grants access.
+    if (
+        period is None
+        or balance.get("assistant_trial")
+        or (_is_free_tier(period.get("tier_id")) and (_decimal(period.get("credit_limit")) or 0) <= 0)
     ):
-        lines.append(
-            "The subscription has ended: no plan and no credits."
-            if stage == "cancelled"
-            else "No plan yet, so no credits."
+        trial = balance.get("assistant_trial") or {}
+        plan_offer = trial.get("plan") or {}
+        plan_line = (
+            f"the {plan_offer.get('name')} plan (${plan_offer.get('price_usd')}/month)"
+            if plan_offer.get("name") and plan_offer.get("price_usd") is not None
+            else "a plan"
         )
-        if offer.get("price_usd") is not None:
-            lines.append(f"The first month costs ${offer['price_usd']}.")
+        if trial.get("status") == "active":
+            ends = _day(trial.get("ends_at"))
+            lines.append(
+                "SellerClaw is on its free trial for AI assistants"
+                + (f" until {ends}" if ends else "")
+                + f", with no credits; after it, {plan_line} keeps it working here."
+            )
+        elif trial.get("status") == "ended":
+            lines.append(
+                f"The free trial for AI assistants is over, so SellerClaw is paused here until the "
+                f"owner subscribes to {plan_line}."
+            )
+        elif trial.get("status") == "available":
+            # The billing card reads without starting anything; the next request does.
+            days = trial.get("duration_days")
+            lines.append(
+                "No plan yet, so no credits. The free trial for AI assistants"
+                + (f" ({days} days, no card)" if days else "")
+                + f" starts with the next SellerClaw request; after it, {plan_line} keeps it "
+                "working here."
+            )
+        elif trial:
+            lines.append(
+                "The subscription has ended: no plan and no credits. "
+                if stage == "cancelled"
+                else "No plan yet, so no credits. "
+            )
+            lines[-1] += f"Using SellerClaw from an assistant takes {plan_line}."
+        else:
+            lines.append(
+                "The subscription has ended: no plan and no credits."
+                if stage == "cancelled"
+                else "No plan yet, so no credits."
+            )
+            if offer.get("price_usd") is not None:
+                lines.append(f"The first month costs ${offer['price_usd']}.")
     else:
         if _is_free_tier(period.get("tier_id")):
             plan = "a free trial"
@@ -1056,6 +1097,65 @@ def _result(payload: dict[str, Any], summary: str) -> Any:
     )
 
 
+#: The Agent API's refusals of an account that may not use SellerClaw from an assistant right now —
+#: its free trial ended, its subscription did, or its payment failed. They arrive as 402s with the
+#: owner-facing message, the button label and the page that fixes it.
+_PLAN_REFUSAL_CODES = frozenset(
+    {"assistant_trial_ended", "subscription_ended", "subscription_frozen", "plan_required"}
+)
+
+
+class _PausedForPlan(Exception):
+    """SellerClaw is paused for this account; carries what the card draws instead of its data.
+
+    Two texts: ``paywall`` is the card's, in the owner's words; ``relay`` is the server's message
+    for you to pass on, which speaks about the owner and says what not to try.
+    """
+
+    def __init__(self, paywall: dict[str, str]) -> None:
+        card = dict(paywall)
+        self.relay = card.pop("relay", "") or card["message"]
+        super().__init__(self.relay)
+        self.paywall = card
+
+
+def _paywall_from(exc: CliError) -> dict[str, str] | None:
+    """The paywall a refusal describes, or None when it is any other refusal."""
+    if exc.status != 402 or not isinstance(exc.details, dict):
+        return None
+    detail = exc.details.get("detail")
+    if not isinstance(detail, dict) or detail.get("code") not in _PLAN_REFUSAL_CODES:
+        return None
+    message = detail.get("message")
+    relay = message if isinstance(message, str) and message else exc.message
+    # The card is read by the owner: ``message`` speaks about them, to you.
+    owner_message = detail.get("owner_message")
+    return {
+        "code": str(detail["code"]),
+        "message": owner_message if isinstance(owner_message, str) and owner_message else relay,
+        "relay": relay,
+        "label": str(detail.get("action") or "Open billing"),
+        "url": str(detail.get("url") or ""),
+    }
+
+
+def _answer_paused(tool: Callable[..., Any]) -> Callable[..., Any]:
+    """Turn "SellerClaw is paused for this account" into an answer, not a failure.
+
+    The card then draws the pause with a button to the page that lifts it, and you get the server's
+    words to pass on — as an error it would read to the card as "could not be drawn".
+    """
+
+    @functools.wraps(tool)
+    def _tool(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return tool(*args, **kwargs)
+        except _PausedForPlan as paused:
+            return _result({"paywall": paused.paywall}, paused.relay)
+
+    return _tool
+
+
 @contextmanager
 def _refusals_in_their_own_words() -> Iterator[None]:
     """Let the Agent API's refusal reach the card instead of a generic failure.
@@ -1071,6 +1171,9 @@ def _refusals_in_their_own_words() -> Iterator[None]:
     try:
         yield
     except CliError as exc:
+        paywall = _paywall_from(exc)
+        if paywall is not None:
+            raise _PausedForPlan(paywall) from exc
         raise ToolError(str(exc)) from exc
 
 
@@ -1254,6 +1357,14 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
     from mcp.types import ToolAnnotations
 
     apps = Apps()
+
+    def card_tool(**options: Any) -> Callable[[Callable[..., Any]], Any]:
+        """``apps.tool`` for a card: a paused account answers with the paywall, not an error."""
+
+        def register(tool: Callable[..., Any]) -> Any:
+            return apps.tool(**options)(_answer_paused(tool))
+
+        return register
     csp = ResourceCsp(
         # The screens make no requests of their own: everything they need arrives from the host,
         # and everything they do goes back through it as a tool call. Stated as an empty list
@@ -1616,7 +1727,7 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
             payload["pending_count"] = len([item for item in items if item.get("id") != request_id])
         return payload
 
-    @apps.tool(
+    @card_tool(
         resource_uri=resource_uri("store-summary"),
         visibility=["model", "app"],
         name="sellerclaw_store_summary",
@@ -1631,7 +1742,7 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
             payload = _read_store_summary(client, store, period)
         return _result(payload, _summarize_store_summary(payload))
 
-    @apps.tool(
+    @card_tool(
         resource_uri=resource_uri("orders"),
         visibility=["model", "app"],
         name="sellerclaw_orders",
@@ -1657,7 +1768,7 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
             return _result(payload, _summarize_order(payload))
         return _result(payload, _summarize_orders(payload))
 
-    @apps.tool(
+    @card_tool(
         resource_uri=resource_uri("approval"),
         visibility=["model", "app"],
         name="sellerclaw_approval",
@@ -1670,7 +1781,7 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
             payload = _read_approval(client, request)
         return _result(payload, _summarize_approval(payload))
 
-    @apps.tool(
+    @card_tool(
         resource_uri=resource_uri("approval"),
         # Only the card may call this, and that is the whole point: the owner's answer has to come
         # from the owner pressing the button, never from a model deciding on their behalf. The
@@ -1694,7 +1805,7 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
             payload = _read_approval(client, request, known=answered)
         return _result(payload, _summarize_approval(payload))
 
-    @apps.tool(
+    @card_tool(
         resource_uri=resource_uri("attention"),
         visibility=["model", "app"],
         name="sellerclaw_attention",
@@ -1707,7 +1818,7 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
             payload = _read_attention(client)
         return _result(payload, _summarize_attention(payload))
 
-    @apps.tool(
+    @card_tool(
         resource_uri=resource_uri("listings"),
         visibility=["model", "app"],
         name="sellerclaw_listings",
@@ -1737,7 +1848,7 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
             )
         return _result(payload, _summarize_listings(payload))
 
-    @apps.tool(
+    @card_tool(
         resource_uri=resource_uri("products"),
         visibility=["model", "app"],
         name="sellerclaw_products",
@@ -1754,7 +1865,7 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
             )
         return _result(payload, _summarize_products(payload))
 
-    @apps.tool(
+    @card_tool(
         resource_uri=resource_uri("ads"),
         visibility=["model", "app"],
         name="sellerclaw_ads",
@@ -1767,7 +1878,7 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
             payload = _read_ads(client, days, account)
         return _result(payload, _summarize_ads(payload))
 
-    @apps.tool(
+    @card_tool(
         resource_uri=resource_uri("connections"),
         visibility=["model", "app"],
         name="sellerclaw_connections",
@@ -1780,7 +1891,7 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
             payload = _read_connections(client)
         return _result(payload, _summarize_connections(payload))
 
-    @apps.tool(
+    @card_tool(
         resource_uri=resource_uri("billing"),
         visibility=["model", "app"],
         name="sellerclaw_billing",
@@ -1896,7 +2007,7 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
             payload["recent_images"] = recent["files"]
         return payload
 
-    @apps.tool(
+    @card_tool(
         resource_uri=resource_uri("media"),
         visibility=["model", "app"],
         name="sellerclaw_media",
@@ -1923,7 +2034,7 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
                 payload = _read_media_library(client, category, _words(query), offset or 0)
         return _result(payload, _summarize_media(payload))
 
-    @apps.tool(
+    @card_tool(
         resource_uri=resource_uri("media-studio"),
         visibility=["model", "app"],
         name="sellerclaw_media_studio",
@@ -1950,7 +2061,7 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
             payload = _read_media_studio(client, draft)
         return _result(payload, _summarize_media_studio(payload))
 
-    @apps.tool(
+    @card_tool(
         resource_uri=resource_uri("media-studio"),
         # The owner's setting, set by the owner's press — never by a model choosing for them. The
         # cloud refuses it to our own unattended agent as well.
@@ -1970,7 +2081,7 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
         payload = {"models": models, "draft": {"task": chosen, "model": model}}
         return _result(payload, _summarize_media_studio(payload))
 
-    @apps.tool(
+    @card_tool(
         resource_uri=resource_uri("media-studio"),
         # The studio's own "Upload" press: a photo on the owner's device, which neither Claude nor
         # the card's frame can reach our API with any other way.
@@ -2048,7 +2159,7 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
         )
         return "/agent/media/video-jobs", video
 
-    @apps.tool(
+    @card_tool(
         resource_uri=resource_uri("media-studio"),
         # The studio's Generate: the owner's own press starts it and spends their credits, with the
         # description as they wrote it. Having Claude write a fuller prompt is the card's other
