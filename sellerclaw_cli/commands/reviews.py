@@ -6,10 +6,10 @@ from sellerclaw_cli._command_group import Cmd, build_group, flag
 
 NAME = "reviews"
 
-# Customer reviews READ from the SellerClaw mirror (warmed on connect + refreshed periodically);
-# pass --fresh to bypass the mirror and fetch live from the marketplace. Works for WooCommerce, Wix
-# and Etsy stores; an unsupported platform returns an empty list. eBay uses the 'ebay-feedback'
-# group. BigCommerce reviews are per-product, so they have their own subcommand.
+# Customer reviews READ from the SellerClaw mirror (warmed on connect + refreshed periodically).
+# Works for WooCommerce, Wix and Etsy stores; an unsupported platform returns an empty list. eBay
+# uses the 'ebay-feedback' group. BigCommerce reviews are per-product, so they have their own
+# subcommand.
 SPECS = (
     Cmd(
         "list",
@@ -27,11 +27,6 @@ SPECS = (
                 maximum=500,
                 default=100,
                 help="Max results.",
-            ),
-            flag(
-                "fresh",
-                type=bool,
-                help="Bypass the mirror and fetch live from the marketplace (slower).",
             ),
         ),
     ),

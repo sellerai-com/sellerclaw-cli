@@ -60,24 +60,21 @@ def test_reviews_list_gets_and_substitutes_store_id(
     assert result.exit_code == 0, result.stderr
     assert route.call_count == 1
     assert "limit" not in route.calls.last.request.url.params
-    assert "fresh" not in route.calls.last.request.url.params
     payload = json.loads(result.stdout)
     assert payload["data"]["total"] == 1
 
 
 @respx.mock
-def test_reviews_list_forwards_limit_and_fresh(
+def test_reviews_list_forwards_limit(
     env_pointing_at_fake_api: None,  # noqa: ARG001
     fake_api_url: str,
 ) -> None:
     route = respx.get(f"{fake_api_url}/agent/stores/{STORE_ID}/reviews").mock(
         return_value=httpx.Response(200, json=_REVIEWS_JSON)
     )
-    result = runner.invoke(app, ["reviews", "list", STORE_ID, "--limit", "50", "--fresh"])
+    result = runner.invoke(app, ["reviews", "list", STORE_ID, "--limit", "50"])
     assert result.exit_code == 0, result.stderr
-    params = route.calls.last.request.url.params
-    assert params["limit"] == "50"
-    assert params["fresh"] == "true"
+    assert dict(route.calls.last.request.url.params) == {"limit": "50"}
 
 
 @respx.mock

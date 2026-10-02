@@ -79,8 +79,20 @@ SPECS = (
                 ),
             ),
             flag("store_id", help="Restrict to one store (sales channel id, see `channels list`)."),
-            flag("sku", help="Exact SKU match (case-insensitive)."),
-            flag("remote_id", help="Exact marketplace id (Shopify gid, eBay item id, …)."),
+            flag("sku", repeatable=True, help="Exact SKU match (case-insensitive). Repeat for a batch."),
+            flag(
+                "remote_id",
+                repeatable=True,
+                help="Exact marketplace id (Shopify gid, eBay item id, …). Repeat for a batch.",
+            ),
+            flag(
+                "not_in_catalog",
+                type=bool,
+                help=(
+                    "Only listings linked to no catalog product (found on the store, not "
+                    "published from the catalog)."
+                ),
+            ),
             flag(
                 "platform",
                 help="Restrict to one channel.",

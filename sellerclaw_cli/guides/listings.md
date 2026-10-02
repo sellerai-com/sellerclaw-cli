@@ -9,6 +9,8 @@ for `sellerclaw_describe` only for a command not shown here, or when a call erro
 sellerclaw_run(group="channels", command="list")                       # store ids
 sellerclaw_run(group="listings", command="search", flags={"q": "wireless mouse"})   # find across all stores
 sellerclaw_run(group="listings", command="search", flags={"sale_state": ["out_of_stock", "not_selling"]})   # what shoppers cannot buy
+sellerclaw_run(group="listings", command="search", flags={"sku": ["WM-01", "WM-02"], "limit": 200})   # a batch of SKUs (or remote_id); a SKU is missing only once `total` fits the page
+sellerclaw_run(group="listings", command="search", flags={"store_id": STORE_ID, "not_in_catalog": True})   # found on the store, not in the catalog
 sellerclaw_run(group="shopify-listings", command="summary", positionals={"store_id": STORE_ID})
 ```
 

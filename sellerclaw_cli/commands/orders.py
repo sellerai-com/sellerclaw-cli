@@ -25,8 +25,13 @@ SPECS = (
         flags=(
             flag(
                 "status",
-                help="Filter by internal order status (not the marketplace fulfillment status).",
+                help=(
+                    "Filter by internal order status (not the marketplace fulfillment status); "
+                    "'open' = still owed something, 'closed' = fulfilled or cancelled."
+                ),
                 choices=(
+                    "open",
+                    "closed",
                     "new",
                     "pending_approval",
                     "approved",
@@ -40,6 +45,11 @@ SPECS = (
                 ),
             ),
             flag("sales_channel_id", help="Filter by sales channel id.", aliases=("--store-id",)),
+            flag(
+                "awaiting_shipment",
+                type=bool,
+                help="Only orders with no tracking number yet (the shipping queue).",
+            ),
             flag(
                 "product_id",
                 help=(
@@ -88,8 +98,10 @@ SPECS = (
             flag("q", required=True, help="Search text (order number, customer, or a line-item SKU/title)."),
             flag(
                 "status",
-                help="Also filter by internal order status.",
+                help="Also filter by internal order status; 'open' / 'closed' name the two halves.",
                 choices=(
+                    "open",
+                    "closed",
                     "new",
                     "pending_approval",
                     "approved",
