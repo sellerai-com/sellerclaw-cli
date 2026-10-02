@@ -12,6 +12,8 @@ reach for `sellerclaw_describe` only for a command not shown here, or when a cal
 
 ```text
 sellerclaw_run(group="channels", command="list")                                  # store ids
+sellerclaw_run(group="orders", command="list", flags={"awaiting_shipment": True})  # no tracking yet, every store
+sellerclaw_run(group="orders", command="list", flags={"status": "open"})          # not fulfilled or cancelled yet
 sellerclaw_run(group="shopify-orders", command="list", positionals={"store_id": STORE_ID})
 sellerclaw_run(group="shopify-orders", command="sync", positionals={"store_id": STORE_ID})  # pull fresh first
 ```

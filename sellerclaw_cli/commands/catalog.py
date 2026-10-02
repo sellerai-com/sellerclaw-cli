@@ -30,14 +30,35 @@ SPECS = (
             ),
             flag("supplier_provider", help="Filter by supplier provider code, e.g. 'cj'."),
             flag(
+                "supplier_id",
+                help="One supplier (the product's 'supplier_id'); tells price-list suppliers apart.",
+            ),
+            flag(
                 "supplier_product_id",
+                repeatable=True,
                 help=(
                     "Supplier-side product id: finds the catalog row sourced from that supplier "
                     "item. This is the 'do I already have this product?' check — run it before "
-                    "sourcing a product a second time. Pair with --supplier-provider."
+                    "sourcing a product a second time. Pair with --supplier-provider. Repeat to "
+                    "check a batch in one call; ids missing from the answer are not in the catalog."
                 ),
             ),
-            flag("sku", help="Exact SKU of any variation (finds the product it belongs to)."),
+            flag(
+                "sku",
+                repeatable=True,
+                help="Exact SKU of any variation (finds the product it belongs to). Repeat for a batch.",
+            ),
+            flag(
+                "published_in",
+                help="Store id or domain: only products on sale there (a live listing).",
+            ),
+            flag(
+                "not_published_in",
+                help=(
+                    "Store id or domain: only products not on sale there. Each row's "
+                    "'store_listing_status' is 'draft' or 'withdrawn' when such a listing exists there."
+                ),
+            ),
             flag("q", help="Free text: substring of the name or any variation SKU."),
             flag("limit", type=int, minimum=1, maximum=500, help="Max results (default: no cap)."),
             flag("offset", type=int, minimum=0, default=0, help="Results to skip (paging)."),

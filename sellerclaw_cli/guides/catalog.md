@@ -12,10 +12,18 @@ sellerclaw_run(group="catalog", command="overview")                             
 sellerclaw_run(group="catalog", command="search", flags={"q": "wireless mouse", "limit": 20})
 sellerclaw_run(group="catalog", command="get", positionals={"product_id": PRODUCT_ID})
 
-# Exact lookups (all criteria AND-combined)
+# Exact lookups (all criteria AND-combined). A list checks a batch in one call; the values
+# missing from the answer are not in the catalog.
 sellerclaw_run(group="catalog", command="list", flags={"sku": "WM-01"})
 sellerclaw_run(group="catalog", command="list",
-  flags={"supplier_provider": "cj", "supplier_product_id": SUPPLIER_PRODUCT_ID})
+  flags={"supplier_provider": "cj", "supplier_product_id": [SUPPLIER_PRODUCT_ID, OTHER_ID]})
+
+# Not on sale in one store (`published_in` is the opposite). A row's `store_listing_status` is
+# `draft` or `withdrawn` when such a listing exists there.
+sellerclaw_run(group="catalog", command="list", flags={"not_published_in": STORE_ID, "limit": 50})
+
+# One supplier: price-list suppliers all share the provider "offline", `supplier_id` tells them apart
+sellerclaw_run(group="catalog", command="list", flags={"supplier_id": SUPPLIER_ID})
 ```
 
 ## Add products

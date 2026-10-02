@@ -17,7 +17,12 @@ SPECS = (
             "first, newest first. Each row's `id` is what `hide` takes. Narrow with the filters."
         ),
         flags=(
-            flag("sales_channel_id", type=str, help="Only problems on this store (channel id)."),
+            flag(
+                "sales_channel_id",
+                type=str,
+                help="Only problems on this store (channel id).",
+                aliases=("--store-id",),
+            ),
             flag("product_id", type=str, help="Only problems about this product, across every store."),
             flag(
                 "severity",
@@ -41,7 +46,12 @@ SPECS = (
             "filters as `list`."
         ),
         flags=(
-            flag("sales_channel_id", type=str, help="Only hidden problems on this store (channel id)."),
+            flag(
+                "sales_channel_id",
+                type=str,
+                help="Only hidden problems on this store (channel id).",
+                aliases=("--store-id",),
+            ),
             flag("product_id", type=str, help="Only hidden problems about this product."),
             flag("severity", choices=("error", "warning"), help="Filter by severity: 'error' or 'warning'."),
             flag(
