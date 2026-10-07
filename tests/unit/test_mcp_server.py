@@ -557,6 +557,88 @@ def test_an_ordinary_response_is_not_dressed_up_as_a_queued_job(
     assert result == payload
 
 
+# --------------------------------------------------------------------------- approvals
+
+REQUEST_ID = "44444444-4444-4444-8444-444444444444"
+
+
+def _proposed_change(status: str) -> dict[str, Any]:
+    return {
+        "status": status,
+        "action_request_id": REQUEST_ID,
+        "change": {"markup_percent": "30"},
+        "message": "Sent to the owner for approval — nothing has changed yet.",
+    }
+
+
+@respx.mock
+def test_a_write_waiting_on_the_owner_points_at_the_approval_card(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """claude.ai drops server instructions, so the card rule has to arrive with the answer itself."""
+    payload = _proposed_change("pending_approval")
+    respx.patch(_url(fake_api_url, "channels", "set-markup", sales_channel_id=STORE_ID)).mock(
+        return_value=httpx.Response(202, json=payload)
+    )
+
+    result = run_command(
+        "channels",
+        "set-markup",
+        positionals={"sales_channel_id": STORE_ID},
+        body={"markup_percent": 30},
+    )
+
+    # The API's answer survives intact — the note is added, nothing is replaced.
+    assert {k: result[k] for k in payload} == payload
+    note = result["note"]
+    assert f'sellerclaw_approval(request="{REQUEST_ID}")' in note
+    # The fallback is a call the caller can make as written, with the request already in it.
+    assert 'sellerclaw_run(group="action-requests", command="confirm"' in note
+    assert f'positionals={{"request_id": "{REQUEST_ID}"}}' in note
+    assert '"quote"' in note
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    ("method", "group", "command", "status", "extra"),
+    [
+        pytest.param(
+            "PATCH", "channels", "set-markup", "approved_queued", {}, id="answered-by-their-setting"
+        ),
+        pytest.param(
+            "GET", "channels", "get", "pending_approval", {}, id="a-read-of-a-pending-ask"
+        ),
+        pytest.param(
+            "PATCH",
+            "channels",
+            "set-markup",
+            "pending_approval",
+            {"note": "Said by the API itself."},
+            id="the-api-already-left-a-note",
+        ),
+    ],
+)
+def test_no_approval_note_when_nothing_was_just_put_to_the_owner(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+    method: str,
+    group: str,
+    command: str,
+    status: str,
+    extra: dict[str, Any],
+) -> None:
+    payload = {**_proposed_change(status), **extra}
+    respx.route(
+        method=method, url=_url(fake_api_url, group, command, sales_channel_id=STORE_ID)
+    ).mock(return_value=httpx.Response(200, json=payload))
+
+    body = {"markup_percent": 30} if method == "PATCH" else None
+    result = run_command(group, command, positionals={"sales_channel_id": STORE_ID}, body=body)
+
+    assert result == payload
+
+
 def test_describe_says_which_commands_queue_work_and_how_long_a_call_may_take() -> None:
     """A caller with a deadline of its own, and one holding a job id, both read it here.
 

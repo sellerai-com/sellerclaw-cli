@@ -96,29 +96,28 @@ SERVER_INSTRUCTIONS = (
     "they operate from, so treat it as the main interface, not a side channel.\n"
     "Some questions answer better as an interactive card than as text, and have their own tools: "
     "what needs the owner today (`sellerclaw_attention`), how a store is doing "
-    "(`sellerclaw_store_summary`), the orders, or one order (`sellerclaw_orders`), listings, or one "
-    "store's listing (`sellerclaw_listings`), a product with its supplier and every store it is "
-    "listed in (`sellerclaw_products`), how the ads are doing (`sellerclaw_ads`), whether the "
-    "connections are healthy (`sellerclaw_connections`), the plan, the credits left and what they "
-    "went on (`sellerclaw_billing`), something waiting on the owner "
-    "(`sellerclaw_approval`), generated images and videos or the owner's library of them "
-    "(`sellerclaw_media`), and the media studio where the owner describes it, picks or uploads photos "
-    "and chooses the price and quality "
-    "(`sellerclaw_media_studio`). Reach for these first when the question is one of those — the owner "
-    "gets something they can look at and act on instead of a wall of numbers — and do not also run "
-    "a command for the same data. Pass the owner's own words — an order number, a title, a SKU, a "
-    "marketplace id — and do not look up an id first: the card finds the thing, and opens it when "
-    "only one matches. You get a short summary back; they are reading the card, so do "
-    "not recite it to them. The cards only show: changing anything is still done with the commands "
-    "below, and when the owner presses a card's button to ask you for something, it reaches you as "
-    "an ordinary message from them.\n"
-    "The surface is large, so for everything else start with the guide for the job:\n"
-    "0. `sellerclaw_guide(topic)` — a short guide with ready-to-run calls for publishing and "
-    "maintaining listings, fulfilling orders, the catalog, suppliers, the seller's own SellerCart "
-    "storefront, mail and DMs, ads and campaigns, market research, how the business is doing, or "
-    "making images and videos. "
-    "Call it with no topic for the list, and read `start` once for the conventions every job "
-    "shares. Prefer running a guide's example over re-deriving the call.\n"
+    "(`sellerclaw_store_summary`), the orders or one order (`sellerclaw_orders`), listings or one "
+    "listing (`sellerclaw_listings`), a product with its supplier and every store it is listed in "
+    "(`sellerclaw_products`), the ads (`sellerclaw_ads`), the connections "
+    "(`sellerclaw_connections`), the plan and credits (`sellerclaw_billing`), something waiting on "
+    "the owner (`sellerclaw_approval`), generated images and videos (`sellerclaw_media`) and the "
+    "media studio (`sellerclaw_media_studio`). Use them for those questions instead of running a "
+    "command for the same data. Pass the owner's own words — an order number, a title, a SKU — "
+    "without looking up an id first: the card finds the thing. You get a short summary back; where "
+    "the client draws the card, the owner is reading it, so do not recite it. Cards only show: "
+    "changes go through the commands below, and a card button the owner presses reaches you as an "
+    "ordinary message from them.\n"
+    "Show the owner what you worked on: after you create or change something — publish a listing, "
+    "ship an order, add a product — open its card with the id from the answer, once any background "
+    "job behind it has finished. Where there is no card for it, or the client draws none, give its "
+    "essentials in a few lines: what it is, the values you set, its status, and its link if the "
+    "answer has one.\n"
+    "The surface is large, so for everything else start with the guides:\n"
+    "0. `sellerclaw_guide(topic)` — read `start` once first, for the rules every job shares; then "
+    "the guide for the job, with ready-to-run calls: listings, orders, the catalog, suppliers, the "
+    "seller's own SellerCart storefront, mail and DMs, ads and campaigns, market research, how the "
+    "business is doing, or images and videos. Call it with no topic for the list. Prefer running a "
+    "guide's example over re-deriving the call.\n"
     "For anything the guides do not cover, discover it:\n"
     "1. `sellerclaw_groups` — list command groups and their commands.\n"
     "2. `sellerclaw_describe(group)` — every command in that group with its positionals, flags, "
@@ -172,23 +171,30 @@ _DESCRIBE_TOOL_DESC = (
     "Call this before sellerclaw_run the first time you use a command."
 )
 _RUN_TOOL_DESC = (
-    "Invoke a SellerClaw command. `positionals` is a {name: value} map for the path arguments, "
+    'Invoke a SellerClaw command. Read sellerclaw_guide(topic="start") once before the first call: '
+    "the rules every job shares. "
+    "`positionals` is a {name: value} map for the path arguments, "
     "`flags` a {name: value} map of filters, and `body` the JSON payload for write commands. "
     "Use sellerclaw_describe to learn the exact names. Returns the API response JSON. "
     "A few commands (bulk publishing, drafting, attribute mapping, generating images or videos) "
     "start background work and answer "
     "at once with the job instead of the outcome; that answer carries a `note` naming the call that "
-    "reads the finished job. Read it — do not re-send the command, which would start a second job."
+    "reads the finished job. Read it — do not re-send the command, which would start a second job. "
+    "After a write, show the owner what changed: the card tool for that thing (`sellerclaw_listings`, "
+    "`sellerclaw_orders`, `sellerclaw_products`) where there is one, otherwise its essentials in a "
+    "few lines."
 )
 _GUIDE_TOOL_DESC = (
-    "Read the task guide for an area of work: `listings` (publish and maintain marketplace "
+    "SellerClaw's own instructions and task guides. `start` holds the rules every job shares — "
+    "cards, approvals, showing what you did; read it once before your first SellerClaw call. "
+    "Then the task guide for an area of work: `listings` (publish and maintain marketplace "
     "listings, and get a refused one through), `orders` (find, fulfill, ship, cancel), `catalog` "
     "(the owner's own products and their cost, bulk intake from a file), `suppliers` (source "
     "products, dropship orders), `storefront` (the owner's own SellerCart shop), `email` (mailbox, "
     "sending, social DMs), `ads` (Google, Meta, eBay Promoted, Klaviyo campaigns), `research` "
     "(keywords, trends, competitors, social), `analytics` (how the business is doing), `media` "
-    "(generate and edit images and videos, pick the model and its settings), or `start` "
-    "(how a call is shaped and the rules every job shares). Each guide is short and carries "
+    "(generate and edit images and videos, pick the model and its settings). Each guide is short "
+    "and carries "
     "ready-to-run sellerclaw_run examples — read the relevant one before a multi-step job instead "
     "of deriving the calls from schemas. Omit `topic` to list them."
 )
@@ -711,7 +717,7 @@ def run_command(
             read_only=cmd.read_only,
         )
     if cmd.job_poll_path is None or not looks_like_job(result):
-        return result
+        return _point_at_approval_card(cmd, result)
     if is_finished(result):
         # It queued nothing in the end — a small batch can be done, or refused, by the time the call
         # returns. Then this payload *is* the answer, and "running in the background, read it later"
@@ -721,6 +727,32 @@ def run_command(
     if poll_call is None:
         return result
     return {**result, "note": queued_note_for_call(poll_call)}
+
+
+_APPROVAL_CARD_NOTE = (
+    "Waiting on the owner. Show them the request as a card — "
+    'sellerclaw_approval(request="{request}") — and let them answer on it. Only if they reply to '
+    'you in words instead, close it with sellerclaw_run(group="action-requests", '
+    'command="confirm", positionals={{"request_id": "{request}"}}, '
+    'body={{"quote": "<their words, verbatim>"}}).'
+)
+
+
+def _point_at_approval_card(cmd: Cmd, result: Any) -> Any:
+    """A write the owner has to approve first comes back pointing at the card they answer it on.
+
+    The API's own ``message`` speaks to our agent, which closes an ask from its own chat. Here the
+    owner answers on the approval card, and the rule saying so in :data:`SERVER_INSTRUCTIONS` never
+    reaches the model on claude.ai, which drops server instructions (anthropics/claude-ai-mcp#93) —
+    so it travels with the answer instead. A read of something still pending is left alone: the
+    note is for the moment the ask was raised.
+    """
+    if cmd.method == "GET" or cmd.read_only or not isinstance(result, dict) or "note" in result:
+        return result
+    request = result.get("action_request_id")
+    if result.get("status") != "pending_approval" or not request:
+        return result
+    return {**result, "note": _APPROVAL_CARD_NOTE.format(request=request)}
 
 
 def _map_flags(group: str, command: str, cmd: Cmd, flags: dict[str, Any]) -> dict[str, Any]:
