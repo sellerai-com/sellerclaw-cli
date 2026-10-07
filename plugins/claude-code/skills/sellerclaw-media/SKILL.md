@@ -136,8 +136,8 @@ sellerclaw_write(group="media", command="generate-image",
 ## Where a result goes next
 
 - A catalog product's photos: `catalog update` with the new URL in `images`.
-- A Shopify listing's video: `listings bulk-update` with the video's `result_url` in `videos`, then
-  publish (see the `listings` guide).
+- A listing's video on Shopify, Wix, SellerCart or eBay: `listings bulk-update` with the video's
+  `result_url` in `videos` (see the `listings` guide).
 - The owner's SellerCart storefront: `sellercart-media add` copies it in by URL (see the `storefront`
   guide).
 - Every generated file also stays in the owner's file library (`files list`, or the `sellerclaw_media`

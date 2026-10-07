@@ -47,25 +47,6 @@ sellerclaw_write(group="shopify-listings", command="sync-stock",
 Other Shopify commands (confirm fields with `sellerclaw_describe` if unsure): `update`, `publish`,
 `withdraw`, `delete`, `list-drafts`, `create-drafts`, `publish-drafts`.
 
-### Videos on a Shopify listing
-
-`videos` is the listing's whole list of videos, shown after the photos so the cover stays a photo.
-A generated video is its job's `result_url`; any public MP4, MOV or WEBM link up to 50 MB works.
-`[]` removes the videos SellerClaw put there; a video the seller uploaded in the Shopify admin is
-never touched. Other marketplaces refuse `videos` with the reason.
-
-```text
-sellerclaw_write(group="listings", command="bulk-update",
-  body={"items": [{"listing_id": LISTING_ID,
-                   "patch": {"videos": ["https://api.sellerclaw.ai/agent/files/FILE_ID/lamp.mp4"]}}]})
-# Uploading a video takes a while: publish in the background.
-sellerclaw_write(group="listings", command="bulk-publish", positionals={"store_id": STORE_ID},
-  body={"kind": "publish", "listing_ids": [LISTING_ID]})
-```
-
-A video that did not go up leaves the product live and shows as a `shopify_videos_rejected` problem
-(`listing-problems list`) naming the link and the reason.
-
 ## eBay
 
 ```text
@@ -115,6 +96,36 @@ call. TikTok Shop wants a category and its attributes up front — `tiktok-shop-
 rather than assuming the publish call's answer was the last word.
 
 The owner's own shop is not here: SellerCart has its own guide (`storefront`).
+
+## Videos on a listing
+
+`videos` is the listing's whole list of videos, shown after the photos so the cover stays a photo.
+Shopify, Wix, SellerCart and eBay take it; other marketplaces refuse it with the reason. A generated video
+is its job's `result_url`; any public MP4, MOV or WEBM link up to 50 MB works. `[]` removes the
+videos SellerClaw put there; a video the seller uploaded in the store's own admin is never touched.
+
+```text
+sellerclaw_write(group="listings", command="bulk-update",
+  body={"items": [{"listing_id": LISTING_ID,
+                   "patch": {"videos": ["https://api.sellerclaw.ai/agent/files/FILE_ID/lamp.mp4"]}}]})
+# Shopify, Wix and eBay: the next publish sends it, and that takes a while — publish in the background.
+sellerclaw_write(group="listings", command="bulk-publish", positionals={"store_id": STORE_ID},
+  body={"kind": "publish", "listing_ids": [LISTING_ID]})
+```
+
+- Wix processes a new video for about a minute after the publish before shoppers see it. A Wix site
+  on the old Stores catalog (V1) takes no videos: the publish files a `wix_videos_rejected` problem
+  saying so.
+- eBay: one MP4 or MOV per listing, only on a store on ebay.com or ebay.co.uk — anything else is
+  refused at the edit with the reason. eBay reviews a video for up to 48 hours before buyers see it.
+  A video the seller put on the listing in Seller Hub holds eBay's only slot: ours is then not sent,
+  and the publish files a problem saying so.
+- SellerCart: the file is copied into the shop's own storage when you set it and is on the product
+  page at once, with no publish. A link that can't be fetched as an MP4, MOV or WEBM up to 50 MB is
+  refused at the edit with the reason.
+- A video that did not go up leaves the product live and shows as a `shopify_videos_rejected`,
+  `wix_videos_rejected` or `ebay_video_rejected` problem (`listing-problems list`) naming the link and
+  the reason.
 
 ## When a marketplace refuses
 
