@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the SellerClaw Claude plugin variants from a single source tree.
+"""Build the SellerClaw plugin variants (Claude and ChatGPT) from a single source tree.
 
 Source of truth is ``plugin/``:
 
@@ -11,7 +11,13 @@ Source of truth is ``plugin/``:
 
 Each target is assembled by merging the layer component dirs (skills/, hooks/) and then overlaying
 the target's own files (``.claude-plugin/plugin.json``, ``.mcp.json``/``connector.json``, ...). The
-package version from ``pyproject.toml`` is stamped into the plugin/desktop manifest.
+version from ``plugin/VERSION`` is stamped into the target's manifest.
+
+``chatgpt`` takes none of the layers: the shared core skill teaches the shell CLI and how to wire
+Claude, which a ChatGPT user can do nothing with, and the directory refuses a plugin with lifecycle
+hooks. Its core skill is the ``start`` guide instead — the very text the MCP server already hands any
+client — and the owner's shortcuts stay out (Claude Code's ``$ARGUMENTS`` and
+``disable-model-invocation`` mean nothing there; the server offers them as MCP prompts).
 
 ``claude-code`` lands in the committed ``plugins/`` tree (the marketplace references it by path); the
 rest are throwaway artifacts under ``dist/``.
@@ -41,24 +47,46 @@ COMPONENT_DIRS = ("skills", "hooks")
 CLAUDE_LAYERS = ("shared", "claude")
 
 
+# Frontmatter description of the core skill a target compiles from the ``start`` guide.
+CHATGPT_CORE_SKILL = (
+    "Use when the user wants to run their SellerClaw e-commerce business — stores, orders, listings, "
+    "catalog, suppliers, ads, mailbox, storefront or product media — or asks how SellerClaw works, "
+    "what it can do, or why a SellerClaw call was refused."
+)
+
+
 class TargetSpec(NamedTuple):
     # Output location relative to the repo root. Committed targets sit in the repo so the marketplace
     # can point at them; the rest are build artifacts under the git-ignored dist/.
     out: str
-    # Component layers merged in. Plugins get the skills/hooks core; the Desktop .mcpb bundle ships
-    # only the MCP server (it has no skills concept), so its layers are empty.
+    # Component layers merged in. Claude plugins get the skills/hooks core; the Desktop .mcpb bundle
+    # ships only the MCP server, and ChatGPT gets its core skill from the `start` guide instead.
     layers: tuple[str, ...] = CLAUDE_LAYERS
+    # Compile the task guides into recipe skills. The Desktop .mcpb has no skills concept and reaches
+    # the same text through the `sellerclaw_guide` tool instead.
+    skills: bool = True
+    # Compile the owner's shortcuts into skills only they start (`/sellerclaw:<name>`).
+    shortcuts: bool = True
+    # When set, the `start` guide becomes the core `sellerclaw` skill with this description.
+    start_skill: str | None = None
+    # Folder the files sit under inside the --zip archive; None puts the manifest at its root.
+    zip_folder: str | None = "sellerclaw"
 
 
 TARGETS: dict[str, TargetSpec] = {
     "claude-code": TargetSpec("plugins/claude-code"),
-    "claude-desktop": TargetSpec("dist/plugins/claude-desktop", layers=()),
+    "claude-desktop": TargetSpec("dist/plugins/claude-desktop", layers=(), skills=False, shortcuts=False),
     "claude-web": TargetSpec("dist/plugins/claude-web"),
     "claude-cowork": TargetSpec("dist/plugins/claude-cowork"),
+    # The OpenAI dashboard takes a ZIP with plugin.json at the root of the archive.
+    "chatgpt": TargetSpec(
+        "dist/plugins/chatgpt", layers=(), shortcuts=False, start_skill=CHATGPT_CORE_SKILL, zip_folder=None
+    ),
 }
 
-# Manifests whose "version" field is stamped from pyproject (whichever is present in the output).
-MANIFESTS = (".claude-plugin/plugin.json", "manifest.json")
+# Manifests whose "version" field is stamped from plugin/VERSION (whichever is present in the output).
+MANIFESTS = (".claude-plugin/plugin.json", "manifest.json", "plugin.json")
+CORE_SKILL = "sellerclaw"
 
 
 def read_version(repo_root: Path) -> str:
@@ -89,6 +117,20 @@ def default_guides_src(plugin_src: Path) -> Path:
     return plugin_src.parent / "sellerclaw_cli" / "guides"
 
 
+def _skill_file(out: Path, name: str, description: str, body: str) -> None:
+    if '"' in description:
+        raise ValueError(f"skill {name!r}: description must not contain a double quote")
+    skill_file = out / "skills" / name / "SKILL.md"
+    skill_file.parent.mkdir(parents=True, exist_ok=True)
+    skill_file.write_text(f'---\nname: {name}\ndescription: "{description}"\n---\n\n{body}')
+
+
+def _write_start_skill(out: Path, guides_src: Path, description: str) -> None:
+    """Compile the ``start`` guide into the core ``sellerclaw`` skill, for a target without the shared core."""
+    topic = next(t for t in json.loads((guides_src / "topics.json").read_text()) if t["topic"] == "start")
+    _skill_file(out, CORE_SKILL, description, (guides_src / topic["file"]).read_text())
+
+
 def _write_guide_skills(out: Path, guides_src: Path) -> None:
     """Compile every task guide that has a skill counterpart into ``skills/<name>/SKILL.md``.
 
@@ -102,13 +144,7 @@ def _write_guide_skills(out: Path, guides_src: Path) -> None:
         skill = topic.get("skill")
         if not skill:
             continue  # MCP-only guide; the plugin's hand-written core skill covers that ground
-        description = topic["description"]
-        if '"' in description:
-            raise ValueError(f"guide {topic['topic']!r}: description must not contain a double quote")
-        body = (guides_src / topic["file"]).read_text()
-        skill_file = out / "skills" / skill / "SKILL.md"
-        skill_file.parent.mkdir(parents=True, exist_ok=True)
-        skill_file.write_text(f'---\nname: {skill}\ndescription: "{description}"\n---\n\n{body}')
+        _skill_file(out, skill, topic["description"], (guides_src / topic["file"]).read_text())
 
 
 def default_shortcuts_src(plugin_src: Path) -> Path:
@@ -158,20 +194,22 @@ def assemble(
     plugin_src: Path,
     out: Path,
     version: str,
-    layers: tuple[str, ...] = CLAUDE_LAYERS,
     guides_src: Path | None = None,
     shortcuts_src: Path | None = None,
 ) -> Path:
     """Build one target into ``out`` from ``plugin_src``. Pure in its paths (no repo-layout policy)."""
+    spec = TARGETS[target]
+    guides_src = guides_src or default_guides_src(plugin_src)
     if out.exists():
         shutil.rmtree(out)
     out.mkdir(parents=True)
-    for layer in layers:
+    for layer in spec.layers:
         _merge_components(plugin_src / layer, out)
-    if layers:
-        # Only skill-carrying targets get the compiled guides; the Desktop .mcpb has no skills
-        # concept and reaches the same text through the `sellerclaw_guide` tool instead.
-        _write_guide_skills(out, guides_src or default_guides_src(plugin_src))
+    if spec.start_skill:
+        _write_start_skill(out, guides_src, spec.start_skill)
+    if spec.skills:
+        _write_guide_skills(out, guides_src)
+    if spec.shortcuts:
         _write_shortcut_skills(out, shortcuts_src or default_shortcuts_src(plugin_src))
     shutil.copytree(plugin_src / "targets" / target, out, dirs_exist_ok=True)
     _stamp_version(out, version)
@@ -182,25 +220,30 @@ def build_target(name: str, repo_root: Path, version: str | None = None) -> Path
     spec = TARGETS[name]
     version = version or read_version(repo_root)
     out = repo_root / spec.out
-    return assemble(name, repo_root / "plugin", out, version, spec.layers)
+    return assemble(name, repo_root / "plugin", out, version)
 
 
-def pack_zip(out: Path, zip_path: Path, top_dir: str = "sellerclaw") -> Path:
-    """Pack an assembled plugin output into a single ``.zip`` whose files live under ``top_dir/``.
+def pack_zip(out: Path, zip_path: Path, top_dir: str | None = "sellerclaw") -> Path:
+    """Pack an assembled plugin output into a single ``.zip``.
 
-    Extracting the archive yields one tidy ``<top_dir>/`` folder ready to drop into claude.ai's
-    *Customize -> Personal plugins -> Upload plugin* dialog (the web path for users who would rather
-    upload by hand than add the marketplace).
+    With ``top_dir`` the files live under ``<top_dir>/``, so extracting the archive yields one tidy
+    folder ready to drop into claude.ai's *Customize -> Personal plugins -> Upload plugin* dialog (the
+    web path for users who would rather upload by hand than add the marketplace). With ``None`` they
+    sit at the archive root, which is where the OpenAI dashboard looks for ``plugin.json``.
     """
     zip_path = zip_path.with_suffix(".zip")
+    zip_path.parent.mkdir(parents=True, exist_ok=True)
+    if zip_path.exists():
+        zip_path.unlink()
+    base_name = str(zip_path.with_suffix(""))
+    if top_dir is None:
+        shutil.make_archive(base_name, "zip", root_dir=out)
+        return zip_path
     staging = zip_path.parent / f".{zip_path.stem}.stage"
     if staging.exists():
         shutil.rmtree(staging)
     shutil.copytree(out, staging / top_dir)
-    zip_path.parent.mkdir(parents=True, exist_ok=True)
-    if zip_path.exists():
-        zip_path.unlink()
-    shutil.make_archive(str(zip_path.with_suffix("")), "zip", root_dir=staging, base_dir=top_dir)
+    shutil.make_archive(base_name, "zip", root_dir=staging, base_dir=top_dir)
     shutil.rmtree(staging)
     return zip_path
 
@@ -241,7 +284,7 @@ def check_target(name: str, repo_root: Path, version: str | None = None) -> list
     spec = TARGETS[name]
     version = version or read_version(repo_root)
     with tempfile.TemporaryDirectory() as tmp:
-        fresh = assemble(name, repo_root / "plugin", Path(tmp) / name, version, spec.layers)
+        fresh = assemble(name, repo_root / "plugin", Path(tmp) / name, version)
         want = _snapshot(fresh)
     committed = repo_root / spec.out
     have = _snapshot(committed) if committed.is_dir() else {}
@@ -258,7 +301,7 @@ def check_target(name: str, repo_root: Path, version: str | None = None) -> list
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Build SellerClaw Claude plugin variants from plugin/.")
+    parser = argparse.ArgumentParser(description="Build SellerClaw plugin variants from plugin/.")
     parser.add_argument("--target", choices=sorted(TARGETS), help="Build one target (default: all available).")
     parser.add_argument(
         "--repo-root",
@@ -273,8 +316,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--zip",
         type=Path,
-        help="After building, pack the target's output into this .zip (one folder, for manual upload "
-        "to claude.ai's Upload plugin dialog). Requires --target.",
+        help="After building, pack the target's output into this .zip (for claude-web one folder, for "
+        "claude.ai's Upload plugin dialog; for chatgpt plugin.json at the root, for the OpenAI "
+        "dashboard). Requires --target.",
     )
     parser.add_argument(
         "--check",
@@ -317,7 +361,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"built {name} -> {out.relative_to(repo_root)} (v{version})")
         if args.zip:
             zip_path = args.zip if args.zip.is_absolute() else repo_root / args.zip
-            archive = pack_zip(out, zip_path)
+            archive = pack_zip(out, zip_path, TARGETS[name].zip_folder)
             print(f"packed {name} -> {archive.relative_to(repo_root)}")
     return 0
 

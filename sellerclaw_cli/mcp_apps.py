@@ -873,7 +873,10 @@ def _summarize_billing(payload: dict[str, Any]) -> str:
     balance = billing.get("balance") or {}
     stage = balance.get("subscription_state")
     period = balance.get("active_period")
-    offer = balance.get("intro_offer") or {}
+    # Inside ChatGPT the server says ``in_app_offers: false``: OpenAI's rules forbid naming plans,
+    # prices or a way to buy there, so the summary carries no price and the model is told why.
+    offers = billing.get("in_app_offers") is not False
+    offer = (balance.get("intro_offer") or {}) if offers else {}
     lines: list[str] = []
 
     # A free period with no allowance is an account without a plan, not an empty plan: the web
@@ -887,11 +890,12 @@ def _summarize_billing(payload: dict[str, Any]) -> str:
     ):
         trial = balance.get("assistant_trial") or {}
         plan_offer = trial.get("plan") or {}
-        plan_line = (
-            f"the {plan_offer.get('name')} plan (${plan_offer.get('price_usd')}/month)"
-            if plan_offer.get("name") and plan_offer.get("price_usd") is not None
-            else "a plan"
-        )
+        if not offers:
+            plan_line = "a SellerClaw plan"
+        elif plan_offer.get("name") and plan_offer.get("price_usd") is not None:
+            plan_line = f"the {plan_offer.get('name')} plan (${plan_offer.get('price_usd')}/month)"
+        else:
+            plan_line = "a plan"
         if trial.get("status") == "active":
             ends = _day(trial.get("ends_at"))
             lines.append(
@@ -933,7 +937,7 @@ def _summarize_billing(payload: dict[str, Any]) -> str:
             plan = "a free trial"
         else:
             plan = f"the {_plan_name(period.get('tier_name'), period.get('tier_id'))} plan"
-            if period.get("tier_price_usd") is not None:
+            if offers and period.get("tier_price_usd") is not None:
                 plan += f" (${period['tier_price_usd']}/month)"
         state = {
             "frozen": "paused because the last payment failed; paying brings it back",
@@ -978,9 +982,10 @@ def _summarize_billing(payload: dict[str, Any]) -> str:
             strategy = preferences.get("exhaustion_strategy")
             pack = billing.get("auto_top_up_pack")
             if strategy == "auto_top_up" and pack:
+                price = f" for ${pack.get('price_usd')}" if offers else ""
                 lines.append(
-                    f"When credits run out, {_credits(pack.get('credits'))} more are bought for "
-                    f"${pack.get('price_usd')}, up to {preferences.get('auto_top_up_max_per_period')} times a period."
+                    f"When credits run out, {_credits(pack.get('credits'))} more are bought{price}, "
+                    f"up to {preferences.get('auto_top_up_max_per_period')} times a period."
                 )
             elif strategy in _WHEN_OUT:
                 lines.append(_WHEN_OUT[strategy])
@@ -989,6 +994,9 @@ def _summarize_billing(payload: dict[str, Any]) -> str:
     lines.append(
         "Buying credits, changing the plan or settling a payment happens on the SellerClaw website; "
         "the card links there."
+        if offers
+        else "The plan and credits are managed on the SellerClaw website, not sold in this app; the "
+        "card links there. Don't quote prices or suggest a plan."
     )
     lines.append(_SHOWN_TO_THE_OWNER)
     return " ".join(lines)
@@ -1317,7 +1325,7 @@ The media studio as an interactive card: the owner describes an image or a video
 from their files or upload new ones to work from (up to 6 for an image, 1 to start a video),
 chooses the shape, the size and a price-and-quality tier — each with its price in credits — and
 presses one of two buttons. Generate starts it from the card with their description as written —
-you are told what started, and its link when it finishes. Ask Claude reaches you as an ordinary
+you are told what started, and its link when it finishes. Ask in chat reaches you as an ordinary
 message from them with the idea, the model and the settings: write the full prompt and run it. The
 full view lists every model, their
 rarer settings, and lets the owner make a model their default.

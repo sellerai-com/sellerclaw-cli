@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import shutil
@@ -10,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from scripts.build_plugin import (
+    CHATGPT_CORE_SKILL,
     TARGETS,
     assemble,
     available_targets,
@@ -101,12 +103,12 @@ def test_read_version_reads_plugin_version_file() -> None:
 @pytest.mark.parametrize("target", available_targets(REPO_ROOT))
 def test_every_available_target_assembles(target: str, tmp_path: Path) -> None:
     spec = TARGETS[target]
-    out = assemble(target, PLUGIN_SRC, tmp_path / target, version="0.0.0", layers=spec.layers)
+    out = assemble(target, PLUGIN_SRC, tmp_path / target, version="0.0.0")
     # Every target carries at least one stampable manifest.
-    has_manifest = (out / ".claude-plugin" / "plugin.json").is_file() or (out / "manifest.json").is_file()
-    assert has_manifest, target
-    # Plugin targets (non-empty layers) ship the shared skills core; the Desktop .mcpb bundle does not.
-    if spec.layers:
+    manifests = (".claude-plugin/plugin.json", "manifest.json", "plugin.json")
+    assert any((out / rel).is_file() for rel in manifests), target
+    # Plugin targets ship a core skill; the Desktop .mcpb bundle has no skills concept.
+    if spec.skills:
         assert (out / "skills" / CORE_SKILL / "SKILL.md").is_file(), target
     else:
         assert not (out / "skills").exists(), target
@@ -115,8 +117,8 @@ def test_every_available_target_assembles(target: str, tmp_path: Path) -> None:
 def test_pack_zip_wraps_output_in_a_single_folder(tmp_path: Path) -> None:
     # The web upload bundle must extract to one tidy folder so users can drop it straight into
     # claude.ai's Upload plugin dialog.
-    out = assemble("claude-web", PLUGIN_SRC, tmp_path / "out", version="0.0.0", layers=TARGETS["claude-web"].layers)
-    archive = pack_zip(out, tmp_path / "sellerclaw-claude-web.zip")
+    out = assemble("claude-web", PLUGIN_SRC, tmp_path / "out", version="0.0.0")
+    archive = pack_zip(out, tmp_path / "sellerclaw-claude-web.zip", TARGETS["claude-web"].zip_folder)
 
     assert archive.is_file()
     with zipfile.ZipFile(archive) as zf:
@@ -135,6 +137,7 @@ def test_target_out_policy() -> None:
     assert all(spec.out.startswith("dist/") for name, spec in TARGETS.items() if name != "claude-code")
     # The Desktop .mcpb bundle ships the MCP server only — no skills/hooks layers.
     assert TARGETS["claude-desktop"].layers == ()
+    assert TARGETS["claude-desktop"].skills is False
     # Only the committed target is checkable for drift — dist/ is git-ignored and rebuilt every time.
     assert committed_targets(REPO_ROOT) == ["claude-code"]
 
@@ -259,3 +262,123 @@ def test_the_desktop_extension_and_the_server_ship_the_same_logo() -> None:
     assert extension_icon.read_bytes() == served_icon.read_bytes(), (
         "icon.png differs between plugin/targets/claude-desktop and sellerclaw_cli/assets"
     )
+
+
+# --- ChatGPT ---------------------------------------------------------------------------------------
+
+CHATGPT_MANIFEST = PLUGIN_SRC / "targets" / "chatgpt" / "plugin.json"
+
+
+@pytest.fixture
+def chatgpt(tmp_path: Path) -> Path:
+    return assemble("chatgpt", PLUGIN_SRC, tmp_path / "chatgpt", version="9.9.9")
+
+
+def _openai(manifest: dict[str, object]) -> dict[str, object]:
+    extensions = manifest["extensions"]
+    assert isinstance(extensions, dict)
+    return extensions["com.openai"]
+
+
+def test_chatgpt_ships_the_manifest_and_server_at_its_root(chatgpt: Path) -> None:
+    manifest = json.loads((chatgpt / "plugin.json").read_text())
+    servers = json.loads((chatgpt / "mcp.json").read_text())["mcpServers"]
+
+    assert manifest["name"] == "sellerclaw"
+    assert manifest["version"] == "9.9.9"
+    # One server: the dashboard connects exactly one per plugin.
+    assert servers == {"sellerclaw": {"type": "streamable-http", "url": "https://mcp.sellerclaw.ai/mcp"}}
+    assert not (chatgpt / ".claude-plugin").exists()
+    assert not (chatgpt / ".mcp.json").exists()
+
+
+def test_chatgpt_leaves_out_what_the_directory_refuses_or_cannot_use(chatgpt: Path) -> None:
+    # Lifecycle hooks make a plugin ineligible for the public directory; the owner's shortcuts lean on
+    # Claude Code's own frontmatter and $ARGUMENTS.
+    assert not (chatgpt / "hooks").exists()
+    listed = json.loads((default_shortcuts_src(PLUGIN_SRC) / "shortcuts.json").read_text())
+    shortcuts = {item["name"] for item in listed}
+    shipped = {p.name for p in (chatgpt / "skills").iterdir()}
+    assert shipped.isdisjoint(shortcuts)
+    assert set(TASK_RECIPES) <= shipped
+
+
+def test_chatgpt_core_skill_is_the_start_guide(chatgpt: Path) -> None:
+    start = (default_guides_src(PLUGIN_SRC) / "start.md").read_text()
+
+    skill = (chatgpt / "skills" / CORE_SKILL / "SKILL.md").read_text()
+
+    assert skill == f'---\nname: {CORE_SKILL}\ndescription: "{CHATGPT_CORE_SKILL}"\n---\n\n{start}'
+    # The shell CLI and Claude setup notes of the shared core mean nothing in ChatGPT.
+    assert not (chatgpt / "skills" / CORE_SKILL / "references").exists()
+
+
+def test_chatgpt_package_never_names_claude(chatgpt: Path) -> None:
+    # Everything in it is read inside ChatGPT — by the owner in the Skills tab, by the reviewer — so a
+    # guide edited for Claude must say "a coding agent" or "the chat", not name another product.
+    named = sorted(
+        p.relative_to(chatgpt).as_posix()
+        for p in chatgpt.rglob("*")
+        if p.is_file() and p.suffix in {".md", ".json"} and "claude" in p.read_text().lower()
+    )
+
+    assert not named, named
+
+def test_chatgpt_every_path_the_manifest_names_ships(chatgpt: Path) -> None:
+    openai = _openai(json.loads((chatgpt / "plugin.json").read_text()))
+    interface = openai["interface"]
+    assert isinstance(interface, dict)
+
+    paths = [interface["logo"], interface["composerIcon"], openai["onboardingSkill"]]
+
+    assert all(isinstance(p, str) and p.startswith("./") and (chatgpt / p).is_file() for p in paths), paths
+
+
+def test_chatgpt_listing_fits_the_dashboard_limits() -> None:
+    interface = _openai(json.loads(CHATGPT_MANIFEST.read_text()))["interface"]
+    assert isinstance(interface, dict)
+
+    assert len(interface["displayName"]) <= 30
+    assert len(interface["shortDescription"]) <= 30
+    assert len(interface["longDescription"]) <= 4000
+    assert len(interface["developerName"]) <= 80
+    assert 0 < len(interface["capabilities"]) <= 20
+    assert all(len(c) <= 120 for c in interface["capabilities"])
+    assert 0 < len(interface["defaultPrompt"]) <= 3
+    assert all(len(p) <= 128 and "@" not in p for p in interface["defaultPrompt"])
+    urls = ("websiteURL", "supportURL", "privacyPolicyURL", "termsOfServiceURL")
+    assert all(interface[key].startswith("https://") for key in urls)
+
+
+def test_chatgpt_review_cases_name_tools_the_model_can_call() -> None:
+    from sellerclaw_cli.mcp_server import build_server
+
+    review = _openai(json.loads(CHATGPT_MANIFEST.read_text()))["review"]
+    assert isinstance(review, dict)
+    cases = review["test_cases"]
+    # A card's own buttons call some tools the model never sees; a review case cannot expect those.
+    callable_tools = {
+        tool.name
+        for tool in asyncio.run(build_server().list_tools())
+        if "model" in ((tool.meta or {}).get("ui") or {}).get("visibility", ["model"])
+    }
+
+    # The dashboard demands exactly five of each kind it scores against, and three it must refuse.
+    assert len(cases["positive"]) == 5
+    assert len(cases["negative"]) == 3
+    assert all(case["prompt"] and case["expected_behavior"] for case in cases["positive"])
+    named = {name.strip() for case in cases["positive"] for name in case["tools_triggered"].split(",")}
+    assert named <= callable_tools, sorted(named - callable_tools)
+    # Credentials go through the dashboard's own form, never into the package.
+    assert "test_credentials" not in review
+    assert "reviewer_instructions" not in review
+
+
+def test_pack_zip_puts_the_chatgpt_manifest_at_the_archive_root(chatgpt: Path, tmp_path: Path) -> None:
+    archive = pack_zip(chatgpt, tmp_path / "sellerclaw-chatgpt.zip", TARGETS["chatgpt"].zip_folder)
+
+    with zipfile.ZipFile(archive) as zf:
+        names = set(zf.namelist())
+
+    assert {"plugin.json", "mcp.json", "assets/logo.png", f"skills/{CORE_SKILL}/SKILL.md"} <= names
+    assert not any(name.startswith("sellerclaw/") for name in names)

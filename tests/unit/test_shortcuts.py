@@ -17,7 +17,7 @@ import pytest
 from mcp.types import TextContent
 
 import sellerclaw_cli.cli  # noqa: F401 — importing registers every command group into the REGISTRY
-from scripts.build_plugin import TARGETS, assemble, default_shortcuts_src
+from scripts.build_plugin import assemble, default_shortcuts_src
 from sellerclaw_cli import guides, mcp_apps, shortcuts
 from sellerclaw_cli._errors import UserInputError
 from sellerclaw_cli.mcp_server import _resolve, build_server
@@ -270,9 +270,7 @@ def test_a_shortcut_that_would_break_the_plugin_fails_the_build(
 def test_desktop_bundle_carries_no_skills_but_the_package_ships_the_shortcuts(tmp_path: Path) -> None:
     # The .mcpb reaches the shortcuts as prompts from the hosted server, so the data must travel
     # with the wheel rather than with the bundle.
-    out = assemble(
-        "claude-desktop", PLUGIN_SRC, tmp_path / "out", version="0.0.0", layers=TARGETS["claude-desktop"].layers
-    )
+    out = assemble("claude-desktop", PLUGIN_SRC, tmp_path / "out", version="0.0.0")
 
     assert not (out / "skills").exists()
     packaged = default_shortcuts_src(PLUGIN_SRC)

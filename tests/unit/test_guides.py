@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 import sellerclaw_cli.cli  # noqa: F401 — importing registers every command group into the REGISTRY
-from scripts.build_plugin import TARGETS, assemble, default_guides_src
+from scripts.build_plugin import assemble, default_guides_src
 from sellerclaw_cli import guides
 from sellerclaw_cli._errors import UserInputError
 from sellerclaw_cli.mcp_server import _resolve, _tool_for, show_guide
@@ -175,9 +175,7 @@ def test_editing_a_guide_changes_the_skill_that_ships(tmp_path: Path) -> None:
 def test_desktop_bundle_carries_no_skills_but_the_package_ships_the_guides(tmp_path: Path) -> None:
     # The .mcpb has no skills concept — its client reaches the same text through sellerclaw_guide,
     # which is served by the package data, so that data must travel with the wheel.
-    out = assemble(
-        "claude-desktop", PLUGIN_SRC, tmp_path / "out", version="0.0.0", layers=TARGETS["claude-desktop"].layers
-    )
+    out = assemble("claude-desktop", PLUGIN_SRC, tmp_path / "out", version="0.0.0")
 
     assert not (out / "skills").exists()
     packaged = default_guides_src(PLUGIN_SRC)

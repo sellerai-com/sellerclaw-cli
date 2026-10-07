@@ -118,7 +118,7 @@ SPECS = (
         summary=(
             "Close a request with the owner's own answer instead of sending them to the app to "
             "press a button. Two forms, exactly one per call: `quote` — what they just said to "
-            "you, when you are talking to them somewhere SellerClaw cannot read (Claude, a "
+            "you, when you are talking to them somewhere SellerClaw cannot read (an AI app, a "
             "terminal); or `chat_id` + `message_id`, when they answered in SellerClaw's own chat. "
             "Quote them verbatim and only once they have actually answered: the cloud judges those "
             "words against the action that would really run, and anything short of a plain yes or "
