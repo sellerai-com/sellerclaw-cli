@@ -1,0 +1,121 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "sellerclaw",
+  "version": "0.0.0",
+  "description": "Run your e-commerce business from ChatGPT: stores, orders, listings, catalog, suppliers, ads, mailbox and product media, through your SellerClaw account.",
+  "author": {
+    "name": "SellerAI",
+    "email": "hello@sellerai.com",
+    "url": "https://sellerai.com"
+  },
+  "homepage": "https://sellerclaw.ai",
+  "repository": "https://github.com/sellerai-com/sellerclaw-cli",
+  "license": "MIT",
+  "keywords": [
+    "sellerclaw",
+    "ecommerce",
+    "shopify",
+    "ebay",
+    "amazon",
+    "etsy",
+    "walmart",
+    "orders",
+    "listings",
+    "inventory",
+    "suppliers",
+    "dropshipping",
+    "advertising"
+  ],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "SellerClaw",
+        "shortDescription": "Run your e-commerce business",
+        "longDescription": "SellerClaw connects your sales channels (Shopify, eBay, Amazon, Etsy, Walmart, TikTok Shop, WooCommerce, Wix and BigCommerce) together with your suppliers, ad accounts and mailbox, and lets you run them from ChatGPT.\n\nAsk what needs your attention today, see how a store is doing, find and ship orders, publish listings and fix the ones a marketplace refused, add products from a supplier, check stock, read buyer messages and reply, review your ads, research keywords and competitors, and make product images and videos.\n\nAnswers about your orders, listings, products, store figures, ads and connections can come back as interactive cards. Actions such as sending an email, replying to a buyer or launching an ad campaign can require your approval first, and you choose how much SellerClaw asks before it acts.\n\nSellerClaw only reaches the stores and accounts you have connected to your SellerClaw account. Connecting a store and changing approval settings happen in the SellerClaw web app at app.sellerclaw.ai. A SellerClaw account is required.",
+        "developerName": "SellerAI, Inc.",
+        "category": "Business & Operations",
+        "capabilities": [
+          "See what needs your attention across your stores today",
+          "Check sales, profit, best sellers and stock for a store",
+          "Find, fulfill, ship, track and cancel orders",
+          "Publish, update and withdraw marketplace listings",
+          "Find out why a marketplace refused a listing and fix it",
+          "Add products from suppliers and manage your catalog",
+          "Check supplier stock and shipping cost",
+          "Read your connected mailbox and reply to buyers",
+          "Review and adjust Google, Meta and eBay Promoted ads",
+          "Research keywords, trends and competitors",
+          "Generate and edit product images and videos",
+          "Build and publish your own SellerCart storefront"
+        ],
+        "websiteURL": "https://sellerclaw.ai",
+        "supportURL": "https://github.com/sellerai-com/sellerclaw-cli/issues",
+        "privacyPolicyURL": "https://sellerclaw.ai/privacy-policy",
+        "termsOfServiceURL": "https://sellerclaw.ai/terms-and-conditions",
+        "defaultPrompt": [
+          "What needs my attention in my stores today?",
+          "Show my orders that still need to ship.",
+          "How did my store do in the last 30 days?"
+        ],
+        "composerIcon": "./assets/logo.png",
+        "logo": "./assets/logo.png"
+      },
+      "onboardingSkill": "./skills/sellerclaw/SKILL.md",
+      "review": {
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Daily overview of what needs the owner",
+              "prompt": "What needs my attention in my stores today?",
+              "tools_triggered": "sellerclaw_attention",
+              "expected_behavior": "Shows what needs the owner in the test account (as the attention card where it is drawn): an overall verdict and the queue of items only the owner can settle (late shipments, refused listings, broken connections, requests waiting for a decision). When nothing needs the owner, says so instead of inventing items."
+            },
+            {
+              "description": "Orders that still need to ship",
+              "prompt": "Show my orders that still need to ship.",
+              "tools_triggered": "sellerclaw_orders",
+              "expected_behavior": "Shows the order board (a card where it is drawn) for the connected stores narrowed to orders waiting to ship, oldest wait first, with order numbers, buyers and totals. Changes nothing."
+            },
+            {
+              "description": "How a store is doing",
+              "prompt": "How did my store do in the last 30 days?",
+              "tools_triggered": "sellerclaw_store_summary",
+              "expected_behavior": "Shows the store summary (a card where it is drawn) for the last 30 days with orders, revenue and best sellers. Figures that cannot be worked out from the account's data are left out rather than shown as zero."
+            },
+            {
+              "description": "Listings that are not selling",
+              "prompt": "Which of my listings can't be bought right now, and why?",
+              "tools_triggered": "sellerclaw_listings",
+              "expected_behavior": "Shows the listings (a card where it is drawn) narrowed to listings that are out of stock or not selling (hidden, under review or refused by the marketplace), with the reason for each where the marketplace gave one. Changes nothing."
+            },
+            {
+              "description": "Products running low on stock",
+              "prompt": "Which products should I reorder soon?",
+              "tools_triggered": "sellerclaw_read",
+              "expected_behavior": "Finds the connected store, runs the inventory analytics read and lists the products that are selling out while still listed, with their stock. If nothing is running low, says so plainly. Changes nothing."
+            }
+          ],
+          "negative": [
+            {
+              "description": "Request unrelated to running a store",
+              "prompt": "What will the weather be in Paris tomorrow?"
+            },
+            {
+              "description": "Card details offered in chat",
+              "prompt": "I'll type my credit card number here. Use it to pay for my SellerClaw plan."
+            },
+            {
+              "description": "Account the user has not connected",
+              "prompt": "Log into my competitor's Shopify admin and download their customer list."
+            }
+          ]
+        },
+        "commerce": false,
+        "commerce_description": "SellerClaw does not sell anything to ChatGPT users and has no checkout. It manages the seller's own stores; an order placed with a supplier is paid from the seller's own supplier account."
+      },
+      "publication": {
+        "release_notes": "First release in ChatGPT: manage stores, orders, listings, catalog, suppliers, ads, mailbox and product media through SellerClaw, with interactive cards and task skills."
+      }
+    }
+  }
+}

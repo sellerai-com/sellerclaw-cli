@@ -11,6 +11,7 @@
 #   make plugin-check   Verify the committed plugins/ tree still matches plugin/ (writes nothing)
 #   make mcpb           Build the Claude Desktop extension bundle (dist/sellerclaw.mcpb)
 #   make web-zip        Pack the claude-web plugin for manual upload to claude.ai (dist/sellerclaw-claude-web.zip)
+#   make chatgpt-zip    Pack the ChatGPT plugin for the OpenAI dashboard (dist/sellerclaw-chatgpt.zip)
 #   make plugin-bump    Bump plugin/VERSION + rebuild committed plugin (publish on push, no CLI release)
 #   make release-check  Report whether a new release is needed
 #   make release        Bump version, tag vX.Y.Z, push -> CI publishes to PyPI (runs `check` first)
@@ -40,7 +41,7 @@ PART ?= minor
 # release is warranted — test/CI/docs-only churn doesn't require one.
 SHIPPED_PATHS = sellerclaw_cli pyproject.toml README.md
 
-.PHONY: install lint test lock-check check build plugin plugin-check mcpb web-zip plugin-bump release-check release-preflight release release-latest release-beta
+.PHONY: install lint test lock-check check build plugin plugin-check mcpb web-zip chatgpt-zip plugin-bump release-check release-preflight release release-latest release-beta
 
 install:
 	$(UV) sync --group dev
@@ -91,6 +92,11 @@ mcpb:
 # (Customize -> Personal plugins -> Upload plugin) instead of adding the marketplace.
 web-zip:
 	$(UV) run python scripts/build_plugin.py --target claude-web --zip dist/sellerclaw-claude-web.zip
+
+# Pack the ChatGPT plugin (skills + remote MCP declaration + listing and review metadata) for the
+# OpenAI Platform dashboard's Plugins page: plugin.json sits at the root of the archive, as it wants.
+chatgpt-zip:
+	$(UV) run python scripts/build_plugin.py --target chatgpt --zip dist/sellerclaw-chatgpt.zip
 
 # Bump the independent plugin version (plugin/VERSION) and rebuild the committed marketplace plugin.
 # Commit the result and push to main: ci.yml verifies the tree and publish-plugin.yml builds the

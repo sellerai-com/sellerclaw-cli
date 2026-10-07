@@ -126,7 +126,7 @@ costs a lot of credits, such as a video.
 An account without a plan runs from an assistant on a free trial of a few days, with no credits:
 image and video generation, market research and web search answer that they need a plan. When the
 trial, the subscription or a payment lapses, every call answers that SellerClaw is paused, with the
-price and the page that fixes it. Tell the owner that in your own words and give them the link — do
+page that fixes it. Tell the owner that in your own words and give them the link — do
 not retry other tools, and do not suggest reconnecting: the connection is fine, and paying brings it
 back as it was.
 

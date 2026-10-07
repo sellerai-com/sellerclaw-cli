@@ -15,7 +15,7 @@ below is `sellerclaw_read`, `sellerclaw_write` or a card tool; run the examples 
   card tool `sellerclaw_media_studio`, carrying over what they already said (`task`, `prompt`,
   `model`, `reference` — one photo link or a list). There they can also pick photos from their files
   or upload new ones. Their Generate press starts the generation from the card itself — you are told
-  what started and, when it finishes, its link. Their "Ask Claude" press comes back as a message from
+  what started and, when it finishes, its link. Their "Ask in chat" press comes back as a message from
   them with the idea, the model id, the settings, the photo links and how many to make: write the
   prompt as below and run it with exactly those.
 - The picture has to show the owner's own product → start from real photos of it (`edit-image` takes
@@ -84,7 +84,7 @@ finishes, and its link reaches you with the owner's next message:
 sellerclaw_media(job=[JOB_ID])
 ```
 
-In a client without cards (Claude Code, a terminal), wait for the result yourself; each call holds up
+In a client without cards (a coding agent, a terminal), wait for the result yourself; each call holds up
 to 25 seconds:
 
 ```text
