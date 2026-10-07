@@ -5,7 +5,7 @@ plugin:
 
 * **Any MCP client** (Claude Desktop's extension, Cursor, the hosted connector) reaches them through
   the ``sellerclaw_guide`` tool. Those clients have no notion of skills — without this they would
-  only ever see three tool descriptions and would have to re-derive every workflow by hand.
+  only ever see the tool descriptions and would have to re-derive every workflow by hand.
 * **The Claude plugin** compiles each guide into a skill (``scripts/build_plugin.py`` adds the
   frontmatter from ``topics.json``), so Claude Code and claude.ai load the same text automatically.
 

@@ -301,6 +301,7 @@ SPECS = (
                 help="Geo target resource names (e.g. ['geoTargetConstants/2840']).",
             ),
         ),
+        read_only=True,
     ),
     # Asset groups (PMax)
     Cmd(

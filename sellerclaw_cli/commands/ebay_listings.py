@@ -335,6 +335,7 @@ SPECS = (
         timeout=LONG_TIMEOUT_SECONDS,
         summary="Preview what drafting products would set (category + item specifics) — creates nothing.",
         body=_LAZY_DRAFT_BODY,
+        read_only=True,
     ),
     Cmd(
         "set-policies",

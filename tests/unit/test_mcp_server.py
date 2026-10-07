@@ -23,6 +23,8 @@ from sellerclaw_cli.mcp_server import (
     MCP_HIDDEN_COMMANDS,
     MCP_VISIBLE_GROUPS,
     SERVER_WEBSITE_URL,
+    _visible_commands,
+    _visible_groups,
     build_server,
     describe_command,
     list_groups,
@@ -197,7 +199,8 @@ def test_describe_command_returns_full_schema_for_a_write_command() -> None:
     assert detail["positionals"] == ["order_id"]
     assert detail["takes_body"] is True
     assert detail["body_fields"], "a write command should advertise its body fields"
-    # The call_example is a ready-made sellerclaw_run argument object.
+    # A change runs through the write tool, and the call_example is its ready-made argument object.
+    assert detail["tool"] == "sellerclaw_write"
     example = detail["call_example"]
     assert example["group"] == "orders"
     assert example["command"] == "update"
@@ -450,7 +453,7 @@ def test_a_refused_call_reaches_the_caller_in_its_own_words(
     fake_api_url: str,
 ) -> None:
     """The SDK replaces any exception but its own ``ToolError`` with "Error executing tool
-    sellerclaw_run". Seen live on staging: every refusal — a missing field, the categories to pick
+    sellerclaw_read". Seen live on staging: every refusal — a missing field, the categories to pick
     from — reached Claude as that one line, with nothing in it to correct. The tool hands back the
     CLI's own error JSON instead, details and all."""
     respx.get(f"{fake_api_url}/agent/listings/{LISTING_ID}").mock(
@@ -458,7 +461,7 @@ def test_a_refused_call_reaches_the_caller_in_its_own_words(
     )
 
     with pytest.raises(ToolError) as excinfo:
-        asyncio.run(build_server().call_tool("sellerclaw_run", arguments))
+        asyncio.run(build_server().call_tool("sellerclaw_read", arguments))
 
     text = str(excinfo.value)
     error = json.loads(text[text.index("{") :])["error"]
@@ -498,7 +501,8 @@ def test_a_queued_job_comes_back_with_the_call_that_reads_it(
     # The job itself survives intact — the note is added, nothing is replaced.
     assert {k: result[k] for k in job} == job
     note = result["note"]
-    assert 'sellerclaw_run(group="listings", command="bulk-job"' in note
+    # Reading a job changes nothing, so the call goes through the read tool.
+    assert 'sellerclaw_read(group="listings", command="bulk-job"' in note
     assert f'"store_id": "{STORE_ID}"' in note
     assert f'"job_id": "{JOB_ID}"' in note
     # Advice a caller here cannot take, and the one thing it must not do instead.
@@ -594,7 +598,7 @@ def test_a_write_waiting_on_the_owner_points_at_the_approval_card(
     note = result["note"]
     assert f'sellerclaw_approval(request="{REQUEST_ID}")' in note
     # The fallback is a call the caller can make as written, with the request already in it.
-    assert 'sellerclaw_run(group="action-requests", command="confirm"' in note
+    assert 'sellerclaw_write(group="action-requests", command="confirm"' in note
     assert f'positionals={{"request_id": "{REQUEST_ID}"}}' in note
     assert '"quote"' in note
 
@@ -639,6 +643,122 @@ def test_no_approval_note_when_nothing_was_just_put_to_the_owner(
     assert result == payload
 
 
+# --------------------------------------------------------------------------- read or write
+
+#: Groups whose every command is a paid lookup with nothing to change (``provider_reads``).
+_LOOKUP_GROUPS = frozenset({"research-catalog", "research-seo", "research-social", "store-audit"})
+#: Every other command that is not a GET yet runs through ``sellerclaw_read`` — which a client runs
+#: without asking the owner. Each was checked against its endpoint: it saves nothing the owner's
+#: business depends on. Adding one here is that same decision, made on purpose.
+_POST_READS = frozenset(
+    {
+        ("amazon-listings", "find-asin"),
+        ("attributes", "schema"),
+        ("attributes", "values"),
+        ("catalog-file", "check"),
+        ("catalog-file", "preview"),
+        ("categories", "suggest"),
+        ("ebay-listings", "preview-drafts"),
+        ("google-ads", "keyword-ideas"),
+        ("listings", "check"),
+        ("listings", "readiness"),
+        ("price-list", "check"),
+        ("price-list", "preview"),
+        ("sellercart", "preview"),
+        ("sellercart", "screenshot"),
+        ("suppliers", "calculate-shipping"),
+        ("suppliers", "check-stock-batch"),
+        ("suppliers", "inspect-batch"),
+        ("suppliers", "quote-shipping"),
+        ("suppliers", "search-batch"),
+    }
+)
+
+
+def test_only_the_reads_listed_here_run_unasked_without_being_a_get() -> None:
+    marked = {
+        (group.name, cmd.name)
+        for group in _visible_groups()
+        for cmd in _visible_commands(group)
+        if cmd.method != "GET" and cmd.read_only
+    }
+
+    assert {pair for pair in marked if pair[0] not in _LOOKUP_GROUPS} == _POST_READS
+
+
+@pytest.mark.parametrize(
+    ("group", "command", "tool"),
+    [
+        pytest.param("orders", "list", "sellerclaw_read", id="a-get"),
+        pytest.param("research-seo", "keyword-volume", "sellerclaw_read", id="a-paid-lookup"),
+        pytest.param("suppliers", "quote-shipping", "sellerclaw_read", id="a-post-that-only-reads"),
+        pytest.param("orders", "set-shipped", "sellerclaw_write", id="a-change"),
+        pytest.param("ebay", "request", "sellerclaw_write", id="a-raw-marketplace-call-whatever-it-does"),
+    ],
+)
+def test_describe_names_the_tool_that_runs_the_command(group: str, command: str, tool: str) -> None:
+    assert describe_command(group, command)["tool"] == tool
+
+
+@pytest.mark.parametrize(
+    ("tool", "arguments", "other"),
+    [
+        pytest.param(
+            "sellerclaw_read",
+            {"group": "orders", "command": "set-shipped", "positionals": {"order_id": ORDER_ID}},
+            "sellerclaw_write",
+            id="a-change-sent-to-the-read-tool",
+        ),
+        pytest.param(
+            "sellerclaw_write",
+            {"group": "orders", "command": "list"},
+            "sellerclaw_read",
+            id="a-read-sent-to-the-write-tool",
+        ),
+    ],
+)
+def test_a_command_of_the_other_kind_is_refused_with_the_tool_that_runs_it(
+    tool: str, arguments: dict[str, Any], other: str
+) -> None:
+    """Never routed silently: a read tool that ran a change would be the change nobody was asked about."""
+    with respx.mock(assert_all_called=False) as api:
+        anything = api.route().mock(return_value=httpx.Response(200, json={}))
+        with pytest.raises(ToolError) as excinfo:
+            asyncio.run(build_server().call_tool(tool, arguments))
+
+    assert anything.call_count == 0
+    text = str(excinfo.value)
+    error = json.loads(text[text.index("{") :])["error"]
+    assert error["code"] == "user_error"
+    assert error["message"].endswith(f"call {other} with the same arguments.")
+
+
+@respx.mock
+def test_the_write_tool_runs_a_change(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    payload = _proposed_change("approved_queued")
+    route = respx.patch(_url(fake_api_url, "channels", "set-markup", sales_channel_id=STORE_ID)).mock(
+        return_value=httpx.Response(200, json=payload)
+    )
+
+    asyncio.run(
+        build_server().call_tool(
+            "sellerclaw_write",
+            {
+                "group": "channels",
+                "command": "set-markup",
+                "positionals": {"sales_channel_id": STORE_ID},
+                "body": {"markup_percent": 30},
+            },
+        )
+    )
+
+    assert route.call_count == 1
+    assert json.loads(route.calls[0].request.content) == {"markup_percent": 30}
+
+
 def test_describe_says_which_commands_queue_work_and_how_long_a_call_may_take() -> None:
     """A caller with a deadline of its own, and one holding a job id, both read it here.
 
@@ -669,7 +789,7 @@ def test_describe_says_which_commands_queue_work_and_how_long_a_call_may_take() 
 
 
 def test_build_server_registers_the_proxy_tools_and_the_screens() -> None:
-    """The whole surface, pinned: four discovery/proxy tools plus one per screen action.
+    """The whole surface, pinned: five discovery/proxy tools plus one per screen action.
 
     An exact set rather than a containment check, because every addition here is a line item in
     every client's tool list — it should not be possible to add one without saying so.
@@ -681,7 +801,8 @@ def test_build_server_registers_the_proxy_tools_and_the_screens() -> None:
         "sellerclaw_guide",
         "sellerclaw_groups",
         "sellerclaw_describe",
-        "sellerclaw_run",
+        "sellerclaw_read",
+        "sellerclaw_write",
         "sellerclaw_store_summary",
         "sellerclaw_orders",
         "sellerclaw_approval",
@@ -698,22 +819,24 @@ def test_build_server_registers_the_proxy_tools_and_the_screens() -> None:
         "sellerclaw_media_upload_image",
         "sellerclaw_media_generate",
     }
-    run_props = set(by_name["sellerclaw_run"].input_schema["properties"])
-    assert {"group", "command", "positionals", "flags", "body"} <= run_props
+    for runner in ("sellerclaw_read", "sellerclaw_write"):
+        run_props = set(by_name[runner].input_schema["properties"])
+        assert {"group", "command", "positionals", "flags", "body"} <= run_props, runner
     describe_props = set(by_name["sellerclaw_describe"].input_schema["properties"])
     assert {"group", "command"} <= describe_props
     assert "topic" in by_name["sellerclaw_guide"].input_schema["properties"]
 
 
 def test_every_tool_carries_a_human_title() -> None:
-    """A permission dialog shows the title, and "Sellerclaw run" tells nobody what it does."""
+    """A permission dialog shows the title, and "Sellerclaw write" tells nobody what it does."""
     tools = asyncio.run(build_server().list_tools())
 
     assert {t.name: t.title for t in tools} == {
         "sellerclaw_guide": "Read a SellerClaw guide",
         "sellerclaw_groups": "List SellerClaw commands",
         "sellerclaw_describe": "Describe a SellerClaw command",
-        "sellerclaw_run": "Run a SellerClaw command",
+        "sellerclaw_read": "Read from SellerClaw",
+        "sellerclaw_write": "Make a change in SellerClaw",
         "sellerclaw_store_summary": "Show the store summary",
         "sellerclaw_orders": "Show the order board",
         "sellerclaw_approval": "Show a request waiting on the owner",
@@ -737,7 +860,8 @@ def test_discovery_is_advertised_as_reading_and_the_acting_tools_as_writing() ->
 
     A client renders these hints in the dialog where someone decides whether to allow the call, so
     a warning on everything is a warning on nothing. Discovery reads this process's own registry
-    and never leaves it; the screens and ``sellerclaw_run`` touch the account.
+    and never leaves it; the screens and the two runners touch the account. Only the write tool
+    says it can change things: that is what lets a client run reads without asking each time.
     """
     by_name = {t.name: t.annotations for t in asyncio.run(build_server().list_tools())}
 
@@ -749,12 +873,19 @@ def test_discovery_is_advertised_as_reading_and_the_acting_tools_as_writing() ->
         assert annotations.idempotent_hint is True, name
         assert annotations.open_world_hint is False, name
 
-    run = by_name["sellerclaw_run"]
-    assert run is not None
-    assert run.read_only_hint is False
-    assert run.destructive_hint is True
-    assert run.idempotent_hint is False
-    assert run.open_world_hint is True
+    read = by_name["sellerclaw_read"]
+    assert read is not None
+    assert read.read_only_hint is True
+    assert read.destructive_hint is False
+    assert read.idempotent_hint is True
+    assert read.open_world_hint is True
+
+    write = by_name["sellerclaw_write"]
+    assert write is not None
+    assert write.read_only_hint is False
+    assert write.destructive_hint is True
+    assert write.idempotent_hint is False
+    assert write.open_world_hint is True
 
 
 def test_the_handshake_carries_our_branding_and_our_version() -> None:

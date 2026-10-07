@@ -11,15 +11,15 @@ recipes carry ready-to-run examples. Run them directly.
 
 ## Pick how to call it
 
-- **SellerClaw MCP tools available** (`sellerclaw_groups` / `sellerclaw_describe` / `sellerclaw_run`)
+- **SellerClaw MCP tools available** (`sellerclaw_groups` / `sellerclaw_describe` / `sellerclaw_read` / `sellerclaw_write`)
   → use them. Preferred. **Examples in these skills use this form.**
 - **No MCP tools, but the `sellerclaw` CLI is installed** (check: `sellerclaw guide`) → call it
   through the shell.
 - **Neither** → set it up: [references/setup.md](references/setup.md).
 
-`sellerclaw_run` takes the group, the command, `positionals` as a `{name: value}` map for path
-arguments, `flags` as a `{name: value}` map of filters, and `body` as the JSON payload. Every call
-maps to the same shell form — `sellerclaw <group> <command> <positionals…> [--flag v] -b '<json>'`.
+`sellerclaw_read` runs a command that changes nothing, `sellerclaw_write` one that changes something;
+both take the group, the command, `positionals` as a `{name: value}` map for path arguments, `flags`
+as a `{name: value}` map of filters, and `body` as the JSON payload. Every call maps to the same shell form — `sellerclaw <group> <command> <positionals…> [--flag v] -b '<json>'`.
 
 **The CLI carries more groups than this skill lists, and the extras are not yours to drive.** The
 same binary serves the user's own SellerClaw agent, so it also holds that agent's machinery: its
@@ -47,7 +47,7 @@ The group map (what exists and where) is in [references/capabilities.md](referen
 - **Everything is JSON.** Responses and errors are JSON — read them, don't reformat blindly. Errors
   name the exact problem and fix.
 - **Store id comes first.** Channel groups (`shopify-*`, `ebay-*`, `amazon-*`) need a store id in
-  `positionals` — get it from `sellerclaw_run(group="channels", command="list")` or the `integrations`
+  `positionals` — get it from `sellerclaw_read(group="channels", command="list")` or the `integrations`
   overview.
 - **Find by name, don't dump.** Most groups offer `search` and/or `summary` — prefer them to listing
   everything.

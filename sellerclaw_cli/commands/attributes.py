@@ -61,6 +61,7 @@ SPECS = (
                 help="Marketplace category id (the `external_id` from `categories suggest`/`search`).",
             ),
         ),
+        read_only=True,
     ),
     Cmd(
         "values",
@@ -85,6 +86,7 @@ SPECS = (
             ),
             body_field("limit", type=int, help="How many values to return (1-200, default 50)."),
         ),
+        read_only=True,
     ),
 )
 

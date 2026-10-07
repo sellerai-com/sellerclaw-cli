@@ -44,6 +44,7 @@ SPECS = (
                 example={"Артикул": "SKU", "Наименование": "Name", "Остаток": "Quantity"},
             ),
         ),
+        read_only=True,
     ),
     Cmd(
         "preview",
@@ -59,6 +60,7 @@ SPECS = (
             body_field("file_id", required=True, help="Uploaded file to read."),
             body_field("columns", type=dict, help="File heading -> template column, if needed."),
         ),
+        read_only=True,
     ),
     Cmd(
         "apply",

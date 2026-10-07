@@ -5,9 +5,9 @@ Until this existed even that was invisible: a guide read, a card opened and the 
 client makes all looked the same from the API's side — a token check and nothing else.
 
 So after every ``tools/call`` and ``prompts/get`` the server reports, with the caller's own token:
-which tool or prompt (and, for ``sellerclaw_run``, which command), whether it worked — and when it
-did not, the refusal's code and HTTP status, never its message — how long it took, and the name the
-client gave itself when the protocol carried one. **Never the arguments** —
+which tool or prompt (and, for ``sellerclaw_read``/``sellerclaw_write``, which command), whether it
+worked — and when it did not, the refusal's code and HTTP status, never its message — how long it
+took, and the name the client gave itself when the protocol carried one. **Never the arguments** —
 they carry the owner's own words, and so does any name that is not shaped like one of ours. The cloud
 decides which app it was: from the connection the token belongs to, and only failing that from the
 name the client gave.
@@ -37,8 +37,9 @@ USAGE_TIMEOUT_SECONDS: Final[float] = 5.0
 #: The MCP methods that are a use of SellerClaw, and the kind each is reported as. Listing tools,
 #: reading a card's document and the handshake are the client's housekeeping, not the owner's use.
 RECORDED_METHODS: Final[Mapping[str, str]] = {"tools/call": "tool", "prompts/get": "prompt"}
-#: The one tool that fronts every command: its report names the command too.
-COMMAND_RUNNER: Final[str] = "sellerclaw_run"
+#: The two tools that front every command — one for reads, one for changes: their reports name the
+#: command too.
+COMMAND_RUNNERS: Final[frozenset[str]] = frozenset({"sellerclaw_read", "sellerclaw_write"})
 _CLIENT_INFO_META_KEY: Final[str] = "io.modelcontextprotocol/clientInfo"
 _MAX_COMMAND_CHARS: Final[int] = 128
 #: What a tool, prompt, group or command name looks like. The model writes these fields, so anything
@@ -170,12 +171,12 @@ def _is_error(result: Any) -> bool:
 
 
 def command_of(name: str, arguments: Any) -> str | None:
-    """``"<group> <command>"`` for the command runner — its names only, never its payload.
+    """``"<group> <command>"`` for a command runner — its names only, never its payload.
 
     A group that is not shaped like a name drops the whole command; a command that is not keeps the
     group alone.
     """
-    if name != COMMAND_RUNNER or not isinstance(arguments, Mapping):
+    if name not in COMMAND_RUNNERS or not isinstance(arguments, Mapping):
         return None
     group, command = (_shaped_name(arguments.get(key)) for key in ("group", "command"))
     if group is None:

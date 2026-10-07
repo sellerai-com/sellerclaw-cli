@@ -9,14 +9,16 @@ memorize it or inspect it command by command: the task guides carry ready-to-run
 
 ## How a call is shaped
 
-`sellerclaw_run` takes the `group`, the `command`, `positionals` as a `{name: value}` map for the path
-arguments, `flags` as a `{name: value}` map of filters, and `body` as the JSON payload for writes.
-Names come from `sellerclaw_describe` — or, for the common jobs, from the guides.
+Two tools run commands, with the same arguments: `sellerclaw_read` for a command that changes nothing,
+`sellerclaw_write` for one that changes something. Each takes the `group`, the `command`,
+`positionals` as a `{name: value}` map for the path arguments, `flags` as a `{name: value}` map of
+filters, and `body` as the JSON payload. Names, and the tool for each command, come from
+`sellerclaw_describe` — or, for the common jobs, from the guides.
 
 ```text
-sellerclaw_run(group="channels", command="list")                                   # connected stores
-sellerclaw_run(group="orders", command="list", flags={"limit": 20})                # a filtered read
-sellerclaw_run(group="shopify-listings", command="sync-stock",
+sellerclaw_read(group="channels", command="list")                                  # connected stores
+sellerclaw_read(group="orders", command="list", flags={"limit": 20})               # a filtered read
+sellerclaw_write(group="shopify-listings", command="sync-stock",
   positionals={"store_id": STORE_ID}, body={"items": [{"sku": "WM-01", "quantity": 42}]})
 ```
 
@@ -36,13 +38,13 @@ is worth it only when:
   and its fix.
 - **Store id comes first.** Channel groups (`shopify-*`, `ebay-*`, `amazon-*`, `etsy-*`, `walmart-*`,
   `tiktok-shop-*`, `wix-*`, `woocommerce-*`, `bigcommerce-*`) need a store id in `positionals` — take
-  it from `sellerclaw_run(group="channels", command="list")`.
+  it from `sellerclaw_read(group="channels", command="list")`.
 - **Find by name, don't dump.** Most groups offer `search` and/or `summary` — prefer them to listing
   everything and filtering by hand.
 - **An empty result is not an error.** No rows means none matched, not a failure.
 - **Raw fallbacks exist.** The `shopify` / `ebay` / `amazon` / `etsy` / `walmart` / `wix` /
   `woocommerce` / `bigcommerce` groups pass raw marketplace API calls through when no curated command
-  fits. Check the curated groups first — they resolve our ids, apply the owner's pricing and check a
+  fits, always with `sellerclaw_write`, even for a call that only reads. Check the curated groups first — they resolve our ids, apply the owner's pricing and check a
   listing before it goes out, and none of that happens on a raw call.
 
 ## Cards: show the owner the thing
@@ -63,7 +65,7 @@ media studio (`sellerclaw_media_studio`).
   a product, open its card with the id from the answer, once any background job behind it has
   finished. Where there is no card for it, or the client draws none, give its essentials in a few
   lines: what it is, the values you set, its status, and its link if the answer has one.
-- **Cards only show.** Changes go through `sellerclaw_run`, and a card button the owner presses
+- **Cards only show.** Changes go through `sellerclaw_write`, and a card button the owner presses
   reaches you as an ordinary message from them.
 
 ## Approvals: you can usually just act, and you can always answer for them
@@ -84,8 +86,8 @@ answer, and it needs nothing more from you. Only if they answer you in words ins
 those words:
 
 ```text
-sellerclaw_run(group="action-requests", command="list", flags={"status": "pending"})
-sellerclaw_run(group="action-requests", command="confirm",
+sellerclaw_read(group="action-requests", command="list", flags={"status": "pending"})
+sellerclaw_write(group="action-requests", command="confirm",
   positionals={"request_id": REQUEST_ID}, body={"quote": "yes, send it"})
 ```
 

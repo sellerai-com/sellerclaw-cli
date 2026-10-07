@@ -48,7 +48,7 @@ HOSTED_INSTRUCTIONS = "Hosted SellerClaw instructions."
 HOSTED_TOOLS: list[dict[str, Any]] = [
     {"name": "sellerclaw_groups", "description": "groups", "inputSchema": {"type": "object"}},
     {"name": "sellerclaw_describe", "description": "describe", "inputSchema": {"type": "object"}},
-    {"name": "sellerclaw_run", "description": "run", "inputSchema": {"type": "object"}},
+    {"name": "sellerclaw_write", "description": "run", "inputSchema": {"type": "object"}},
 ]
 HOSTED_PROMPTS: list[dict[str, Any]] = [
     {"name": "today", "title": "What needs me today", "arguments": []},
@@ -372,7 +372,7 @@ def test_unauthenticated_client_is_offered_sign_in_only(start_bridge: Callable[.
 
     assert [tool["name"] for tool in listed["result"]["tools"]] == ["sellerclaw_login"]
 
-    called = bridge.call("tools/call", {"name": "sellerclaw_run", "arguments": {}})
+    called = bridge.call("tools/call", {"name": "sellerclaw_write", "arguments": {}})
 
     assert called["result"]["isError"] is True
     assert "sellerclaw_login" in called["result"]["content"][0]["text"]
@@ -399,7 +399,7 @@ def test_signed_in_client_gets_the_hosted_surface(
     assert [tool["name"] for tool in listed["result"]["tools"]] == [
         "sellerclaw_groups",
         "sellerclaw_describe",
-        "sellerclaw_run",
+        "sellerclaw_write",
         "sellerclaw_login",
     ]
     assert hosted.mcp_authorizations == [f"Bearer {VALID_TOKEN}"] * 2
@@ -427,11 +427,11 @@ def test_tool_call_is_forwarded_verbatim_and_its_result_returned(
     bridge = start_bridge(token=VALID_TOKEN)
     arguments = {"group": "orders", "command": "list", "flags": {"limit": 5}}
 
-    response = bridge.call("tools/call", {"name": "sellerclaw_run", "arguments": arguments})
+    response = bridge.call("tools/call", {"name": "sellerclaw_write", "arguments": arguments})
 
     forwarded = [r for r in hosted.mcp_requests if r.get("method") == "tools/call"]
     assert len(forwarded) == 1
-    assert forwarded[0]["params"] == {"name": "sellerclaw_run", "arguments": arguments}
+    assert forwarded[0]["params"] == {"name": "sellerclaw_write", "arguments": arguments}
     echoed = json.loads(response["result"]["content"][0]["text"])
     assert echoed["echo"]["arguments"] == arguments
     assert response["result"]["isError"] is False
@@ -444,7 +444,7 @@ def test_rejected_token_reports_how_to_fix_it(start_bridge: Callable[..., Bridge
     bridge = start_bridge(token="sca_expired")
 
     listed = bridge.call("tools/list")
-    called = bridge.call("tools/call", {"name": "sellerclaw_run", "arguments": {}})
+    called = bridge.call("tools/call", {"name": "sellerclaw_write", "arguments": {}})
     prompts = bridge.call("prompts/list")
 
     assert [tool["name"] for tool in listed["result"]["tools"]] == ["sellerclaw_login"]
@@ -470,7 +470,7 @@ def test_sign_in_completes_in_chat_and_unlocks_the_hosted_tools(
     assert {"notifications/tools/list_changed", "notifications/prompts/list_changed"} <= methods
 
     listed = bridge.call("tools/list")
-    assert "sellerclaw_run" in {tool["name"] for tool in listed["result"]["tools"]}
+    assert "sellerclaw_write" in {tool["name"] for tool in listed["result"]["tools"]}
     assert bridge.call("prompts/list")["result"]["prompts"] == HOSTED_PROMPTS
 
 
@@ -512,7 +512,7 @@ def test_unreachable_hosted_server_is_reported_not_crashed(start_bridge: Callabl
     bridge = start_bridge(token=VALID_TOKEN, SELLERCLAW_MCP_URL="http://127.0.0.1:9/mcp")
 
     handshake = bridge.call("initialize", {"protocolVersion": "2025-06-18"}, timeout=30)
-    called = bridge.call("tools/call", {"name": "sellerclaw_run", "arguments": {}}, timeout=30)
+    called = bridge.call("tools/call", {"name": "sellerclaw_write", "arguments": {}}, timeout=30)
 
     assert handshake["result"]["serverInfo"]["name"] == "sellerclaw"  # local fallback answer
     assert called["result"]["isError"] is True
@@ -532,7 +532,7 @@ def test_saved_sign_in_survives_an_unsubstituted_token_field(
 
     listed = bridge.call("tools/list")
 
-    assert "sellerclaw_run" in {tool["name"] for tool in listed["result"]["tools"]}
+    assert "sellerclaw_write" in {tool["name"] for tool in listed["result"]["tools"]}
 
 
 @requires_node
@@ -546,7 +546,7 @@ def test_cancelled_call_gets_no_late_response(
         "jsonrpc": "2.0",
         "id": 4242,
         "method": "tools/call",
-        "params": {"name": "sellerclaw_run", "arguments": {}},
+        "params": {"name": "sellerclaw_write", "arguments": {}},
     }))
     bridge.send_raw(json.dumps({
         "jsonrpc": "2.0",

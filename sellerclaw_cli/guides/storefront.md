@@ -1,21 +1,21 @@
 # SellerClaw — storefront (SellerCart)
 
 The owner's own shop: the one storefront that is ours end to end, at `<slug>.sellercart.shop` or a
-domain they own. One shop per seller. Everything below is `sellerclaw_run`; run the examples
-directly.
+domain they own. One shop per seller. Everything below is `sellerclaw_read` or
+`sellerclaw_write`; run the examples directly.
 
 Always start by reading what already exists — a shop, a draft, or nothing at all:
 
 ```text
-sellerclaw_run(group="sellercart", command="status")
+sellerclaw_read(group="sellercart", command="status")
 ```
 
 ## Creating one
 
 ```text
-sellerclaw_run(group="sellercart", command="options")                                  # suffix, currencies, languages
-sellerclaw_run(group="sellercart", command="check-slug", flags={"slug": "acme-tools"})  # free?
-sellerclaw_run(group="sellercart", command="create",
+sellerclaw_read(group="sellercart", command="options")                                  # suffix, currencies, languages
+sellerclaw_read(group="sellercart", command="check-slug", flags={"slug": "acme-tools"})  # free?
+sellerclaw_write(group="sellercart", command="create",
   body={"name": "Acme Tools", "slug": "acme-tools", "currency": "USD", "language": "en"})
 ```
 
@@ -30,9 +30,9 @@ On a live shop **every edit waits in the draft** until it is published — buyer
 version. That is a feature: build the whole change, look at it, then publish once.
 
 ```text
-sellerclaw_run(group="sellercart", command="changes")      # what the draft would change, item by item
-sellerclaw_run(group="sellercart", command="preview")      # secret link for the owner to look
-sellerclaw_run(group="sellercart", command="screenshot", body={"page": "home"})   # look at it yourself
+sellerclaw_read(group="sellercart", command="changes")      # what the draft would change, item by item
+sellerclaw_read(group="sellercart", command="preview")      # secret link for the owner to look
+sellerclaw_read(group="sellercart", command="screenshot", body={"page": "home"})   # look at it yourself
 ```
 
 Take the screenshot before telling the owner it looks good. `discard` throws the draft away and
@@ -41,9 +41,9 @@ cannot be undone — only ever when they ask for it in so many words.
 ## Look and feel
 
 ```text
-sellerclaw_run(group="sellercart", command="presets")                      # ready-made looks
-sellerclaw_run(group="sellercart", command="apply-preset", body={"preset": PRESET_ID})
-sellerclaw_run(group="sellercart", command="theme", body={"accent": "#0f7b6c"})
+sellerclaw_read(group="sellercart", command="presets")                      # ready-made looks
+sellerclaw_write(group="sellercart", command="apply-preset", body={"preset": PRESET_ID})
+sellerclaw_write(group="sellercart", command="theme", body={"accent": "#0f7b6c"})
 ```
 
 `apply-preset` overwrites every style token (the logo and favicon survive); `theme` patches
@@ -53,11 +53,11 @@ permanent link, which is what a block or a theme field should point at, never so
 ## Pages, blocks and navigation
 
 ```text
-sellerclaw_run(group="sellercart", command="blocks")                       # every block type + its props
-sellerclaw_run(group="sellercart-pages", command="get", positionals={"slug": "home"})
-sellerclaw_run(group="sellercart-pages", command="update",
+sellerclaw_read(group="sellercart", command="blocks")                       # every block type + its props
+sellerclaw_read(group="sellercart-pages", command="get", positionals={"slug": "home"})
+sellerclaw_write(group="sellercart-pages", command="update",
   positionals={"slug": "home"}, body={"layout": [ ... ]})
-sellerclaw_run(group="sellercart-menus", command="update",
+sellerclaw_write(group="sellercart-menus", command="update",
   positionals={"location": "header"}, body={"items": [{"label": "Catalog", "href": "/catalog"}]})
 ```
 
@@ -67,9 +67,9 @@ Read `blocks` before writing a page: a block type that is not in that list canno
 ## Products on the shelf
 
 ```text
-sellerclaw_run(group="sellercart-products", command="add", body={"product_ids": [PRODUCT_ID]})
-sellerclaw_run(group="sellercart-products", command="list")
-sellerclaw_run(group="sellercart-products", command="seo",
+sellerclaw_write(group="sellercart-products", command="add", body={"product_ids": [PRODUCT_ID]})
+sellerclaw_read(group="sellercart-products", command="list")
+sellerclaw_write(group="sellercart-products", command="seo",
   positionals={"reference": PRODUCT_REF}, body={"title": "...", "description": "..."})
 ```
 
@@ -84,10 +84,10 @@ and it takes the listing's id too: the whole product goes.
 ## Getting paid — check this before promising a working shop
 
 ```text
-sellerclaw_run(group="sellercart-payouts", command="status")
-sellerclaw_run(group="sellercart-payouts", command="connect")    # Stripe link for the owner
-sellerclaw_run(group="sellercart-payouts", command="refresh")    # after they say they finished
-sellerclaw_run(group="sellercart-payouts", command="delivery",
+sellerclaw_read(group="sellercart-payouts", command="status")
+sellerclaw_write(group="sellercart-payouts", command="connect")    # Stripe link for the owner
+sellerclaw_write(group="sellercart-payouts", command="refresh")    # after they say they finished
+sellerclaw_write(group="sellercart-payouts", command="delivery",
   body={"shipping_amount": 4.90, "shipping_countries": ["US", "CA"]})
 ```
 
@@ -98,7 +98,7 @@ unanswered delivery price is not the same as free shipping.
 ## Going live
 
 ```text
-sellerclaw_run(group="sellercart", command="publish", body={"summary": "New home page and 12 products"})
+sellerclaw_write(group="sellercart", command="publish", body={"summary": "New home page and 12 products"})
 ```
 
 Publishing is gated: it answers `pending_approval` or, on a connection the owner has set to not ask,
@@ -109,8 +109,8 @@ way.
 ## A domain they own
 
 ```text
-sellerclaw_run(group="sellercart-domain", command="connect", body={"hostname": "shop.acme.com"})
-sellerclaw_run(group="sellercart-domain", command="check")     # after they added the DNS record
+sellerclaw_write(group="sellercart-domain", command="connect", body={"hostname": "shop.acme.com"})
+sellerclaw_write(group="sellercart-domain", command="check")     # after they added the DNS record
 ```
 
 Read the returned `dns_records` out **verbatim** — name, type and value. DNS takes minutes to hours,

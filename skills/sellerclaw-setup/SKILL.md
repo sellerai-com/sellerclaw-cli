@@ -57,8 +57,8 @@ published version:
 ## Verify it worked
 
 - `sellerclaw auth whoami` — prints whether a token is present and the config path in use.
-- In the assistant, the `sellerclaw_groups` / `sellerclaw_describe` / `sellerclaw_run` tools should now
-  be available. If only the CLI is installed (no MCP), `sellerclaw guide` confirms the CLI works.
+- In the assistant, the `sellerclaw_groups` / `sellerclaw_describe` / `sellerclaw_read` / `sellerclaw_write`
+  tools should now be available. If only the CLI is installed (no MCP), `sellerclaw guide` confirms the CLI works.
 
 ## How sign-in works
 

@@ -114,6 +114,7 @@ SPECS = (
             ),
             body_field("limit", type=int, help="Max candidates to return (1-20, default 10)."),
         ),
+        read_only=True,
     ),
     Cmd(
         "draft",

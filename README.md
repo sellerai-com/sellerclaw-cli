@@ -478,16 +478,20 @@ fi
 
 Beyond running as a subprocess, the CLI can expose itself over the [Model Context Protocol](https://modelcontextprotocol.io) so **any MCP client — Claude Desktop, Claude Code, the Agent SDK, Cursor, …** — can drive SellerClaw natively.
 
-Rather than emit ~250 tools (one per command), the server mirrors the CLI's own discovery model with **four thin tools** the client composes at runtime:
+Rather than emit ~250 tools (one per command), the server mirrors the CLI's own discovery model with **five thin tools** the client composes at runtime:
 
 - `sellerclaw_guide(topic)` — a short task guide with ready-to-run calls (`listings`, `orders`, `ads`, `research`, `analytics`, `media`, plus `start` for the shared conventions);
 - `sellerclaw_groups` — list command groups and their commands;
 - `sellerclaw_describe(group, command)` — full schema: positionals, flags, body fields, plus a ready `call_example`;
-- `sellerclaw_run(group, command, positionals, flags, body)` — invoke a command.
+- `sellerclaw_read(group, command, positionals, flags, body)` — invoke a command that changes nothing;
+- `sellerclaw_write(group, command, positionals, flags, body)` — invoke a command that changes something.
+
+Invoking is split in two so a client can run reads without asking the owner each time and keep asking
+for changes; each tool refuses the other kind and names the right one.
 
 New CLI commands appear automatically — there is nothing per-command to maintain.
 
-Alongside those four, a client that supports [MCP Apps](https://modelcontextprotocol.io) gets
+Alongside those five, a client that supports [MCP Apps](https://modelcontextprotocol.io) gets
 **interactive cards** for the questions a seller asks most — what needs them today
 (`sellerclaw_attention`), how a store is doing (`sellerclaw_store_summary`), the orders or one
 order (`sellerclaw_orders`), listings or one listing (`sellerclaw_listings`), a catalog product
@@ -498,7 +502,7 @@ them (`sellerclaw_media`), and the media studio for picking a model and its sett
 (`sellerclaw_media_studio`). The order, listing and product cards find what
 the owner names in their own words — an order number, a title, a SKU — and open it when only one
 matches. The cards show;
-changing anything still goes through `sellerclaw_run`. A client without cards gets the same answers as a short text summary plus
+changing anything still goes through `sellerclaw_write`. A client without cards gets the same answers as a short text summary plus
 the full structured result.
 
 The guides live in the package ([`sellerclaw_cli/guides/`](sellerclaw_cli/guides/)) and are the same

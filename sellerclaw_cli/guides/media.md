@@ -1,7 +1,7 @@
 # SellerClaw — images and video
 
 Product photos, banners, ad creatives and short clips, made with the `media` command group. Everything
-below is `sellerclaw_run` or a card tool; run the examples directly.
+below is `sellerclaw_read`, `sellerclaw_write` or a card tool; run the examples directly.
 
 ## Pick the path
 
@@ -21,16 +21,16 @@ below is `sellerclaw_run` or a card tool; run the examples directly.
 ## Generate
 
 ```text
-sellerclaw_run(group="media", command="generate-image",
+sellerclaw_write(group="media", command="generate-image",
   body={"prompt": "Ceramic mug on a walnut desk, soft morning light", "aspect_ratio": "4:5"})
-sellerclaw_run(group="media", command="edit-image",
+sellerclaw_write(group="media", command="edit-image",
   body={"prompt": "The same mug on a white marble table", "reference_urls": [PHOTO_URL]})
-sellerclaw_run(group="media", command="edit-image",
+sellerclaw_write(group="media", command="edit-image",
   body={"prompt": "The mug from the first photo on the shelf from the second",
         "reference_urls": [MUG_URL, SHELF_URL]})
-sellerclaw_run(group="media", command="generate-images",
+sellerclaw_write(group="media", command="generate-images",
   body={"images": [{"prompt": "Front view on white"}, {"prompt": "Side view on white"}]})
-sellerclaw_run(group="media", command="generate-video",
+sellerclaw_write(group="media", command="generate-video",
   body={"prompt": "Slow dolly-in on the mug, steam rising", "aspect_ratio": "9:16"})
 ```
 
@@ -45,9 +45,9 @@ When the owner wants to choose from a few, make up to 4 images or 3 videos of on
 call — each is its own job and is billed on its own:
 
 ```text
-sellerclaw_run(group="media", command="generate-images",
+sellerclaw_write(group="media", command="generate-images",
   body={"images": [{"prompt": PROMPT}, {"prompt": PROMPT}, {"prompt": PROMPT}]})
-sellerclaw_run(group="media", command="generate-video", body={"prompt": PROMPT, "count": 2})
+sellerclaw_write(group="media", command="generate-video", body={"prompt": PROMPT, "count": 2})
 ```
 
 - The same prompt gives versions that differ as the model varies them. To compare one thing — the
@@ -83,9 +83,9 @@ In a client without cards (Claude Code, a terminal), wait for the result yoursel
 to 25 seconds:
 
 ```text
-sellerclaw_run(group="media", command="job-status",
+sellerclaw_read(group="media", command="job-status",
   positionals={"job_id": JOB_ID}, flags={"wait_seconds": 25})
-sellerclaw_run(group="media", command="jobs", flags={"id": [JOB_A, JOB_B]})
+sellerclaw_read(group="media", command="jobs", flags={"id": [JOB_A, JOB_B]})
 ```
 
 The owner's earlier images and videos: `sellerclaw_media(category="video")`, with `query` for part of a
@@ -94,8 +94,8 @@ file name.
 ## Choose the model and its settings
 
 ```text
-sellerclaw_run(group="media", command="models")
-sellerclaw_run(group="media", command="generate-image",
+sellerclaw_read(group="media", command="models")
+sellerclaw_write(group="media", command="generate-image",
   body={"prompt": "...", "model": MODEL_ID, "params": {"aspect_ratio": "16:9", "resolution": "2K"}})
 ```
 

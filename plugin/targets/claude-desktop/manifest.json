@@ -71,8 +71,12 @@
       "description": "Show one command's full schema: arguments, filters and body fields."
     },
     {
-      "name": "sellerclaw_run",
-      "description": "Run a SellerClaw command and return the API response."
+      "name": "sellerclaw_read",
+      "description": "Run a SellerClaw command that changes nothing and return the API response."
+    },
+    {
+      "name": "sellerclaw_write",
+      "description": "Run a SellerClaw command that changes something and return the API response."
     },
     {
       "name": "sellerclaw_store_summary",

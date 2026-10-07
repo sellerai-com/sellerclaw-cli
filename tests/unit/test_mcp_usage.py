@@ -67,7 +67,7 @@ def test_a_command_run_is_reported_with_its_command_and_the_clients_name(fake_ap
 
     result = _drive(
         lambda c: c.call_tool(
-            "sellerclaw_run",
+            "sellerclaw_read",
             {"group": "orders", "command": "list", "flags": {"status": "owner-typed-filter"}},
         )
     )
@@ -77,7 +77,7 @@ def test_a_command_run_is_reported_with_its_command_and_the_clients_name(fake_ap
     assert report.pop("duration_ms") >= 0
     assert report == {
         "kind": "tool",
-        "name": "sellerclaw_run",
+        "name": "sellerclaw_read",
         "ok": True,
         "command": "orders list",
         "client_name": "claude-code",
@@ -91,10 +91,16 @@ def test_a_command_run_is_reported_with_its_command_and_the_clients_name(fake_ap
     ("tool", "arguments", "expected"),
     [
         pytest.param(
-            "sellerclaw_run",
+            "sellerclaw_read",
             {"group": "no-such-group", "command": "list"},
-            {"name": "sellerclaw_run", "ok": False, "command": "no-such-group list", "error_code": "user_error"},
+            {"name": "sellerclaw_read", "ok": False, "command": "no-such-group list", "error_code": "user_error"},
             id="refused-command-is-a-failure",
+        ),
+        pytest.param(
+            "sellerclaw_read",
+            {"group": "orders", "command": "set-shipped", "positionals": {"order_id": ORDER_ID}},
+            {"name": "sellerclaw_read", "ok": False, "command": "orders set-shipped", "error_code": "user_error"},
+            id="a-change-sent-to-the-read-tool-is-a-refusal",
         ),
         pytest.param("sellerclaw_groups", {}, {"name": "sellerclaw_groups", "ok": True}, id="discovery-tool"),
         pytest.param(
@@ -129,7 +135,7 @@ def test_a_refusal_is_reported_with_the_apis_own_code_and_status_but_not_its_mes
 
     result = _drive(
         lambda c: c.call_tool(
-            "sellerclaw_run", {"group": "orders", "command": "get", "positionals": {"order_id": ORDER_ID}}
+            "sellerclaw_read", {"group": "orders", "command": "get", "positionals": {"order_id": ORDER_ID}}
         )
     )
 
@@ -248,18 +254,22 @@ def test_the_hosted_server_reports_under_the_requests_own_bearer() -> None:
 @pytest.mark.parametrize(
     ("name", "arguments", "expected"),
     [
-        pytest.param("sellerclaw_run", {"group": " orders ", "command": "list"}, "orders list", id="runner"),
-        pytest.param("sellerclaw_run", {"group": "orders"}, "orders", id="runner-without-command"),
-        pytest.param("sellerclaw_run", {"group": "x" * 200, "command": "y"}, None, id="overlong-group-is-not-a-name"),
-        pytest.param("sellerclaw_run", {"group": 5, "command": None}, None, id="garbage-dropped"),
+        pytest.param("sellerclaw_read", {"group": " orders ", "command": "list"}, "orders list", id="read-runner"),
         pytest.param(
-            "sellerclaw_run",
+            "sellerclaw_write", {"group": "orders", "command": "set-shipped"}, "orders set-shipped", id="write-runner"
+        ),
+        pytest.param("sellerclaw_read", {"group": "orders"}, "orders", id="runner-without-command"),
+        pytest.param("sellerclaw_read", {"group": "x" * 200, "command": "y"}, None, id="overlong-group-is-not-a-name"),
+        pytest.param("sellerclaw_read", {"group": 5, "command": None}, None, id="garbage-dropped"),
+        pytest.param("sellerclaw_run", {"group": "orders", "command": "list"}, None, id="retired-runner-is-not-one"),
+        pytest.param(
+            "sellerclaw_read",
             {"group": "orders", "command": "find order for Jane Doe, 12 Main St"},
             "orders",
             id="model-text-in-command-never-sent",
         ),
         pytest.param(
-            "sellerclaw_run",
+            "sellerclaw_write",
             {"group": "orders for jane@example.com", "command": "list"},
             None,
             id="model-text-in-group-drops-the-command",
@@ -308,7 +318,7 @@ def test_client_name_of(ctx: Any, expected: str | None) -> None:
                 "content": [
                     {
                         "type": "text",
-                        "text": 'Error executing tool sellerclaw_run: {"error":{"code":"api_error","message":"x",'
+                        "text": 'Error executing tool sellerclaw_read: {"error":{"code":"api_error","message":"x",'
                         '"status":409,"details":{"detail":{"code":"listing_locked","message":"busy"}}}}',
                     }
                 ],

@@ -349,6 +349,7 @@ SPECS = (
             "before going live. Append the token to any page as '?preview=<token>'. Asking again "
             "returns the same token, so a preview tab they left open keeps working."
         ),
+        read_only=True,
     ),
     Cmd(
         "screenshot",
@@ -397,6 +398,7 @@ SPECS = (
         # A render is a page load in somebody else's browser: the default budget refuses a call
         # that is still working.
         timeout=LONG_TIMEOUT_SECONDS,
+        read_only=True,
     ),
     Cmd(
         "blocks",
