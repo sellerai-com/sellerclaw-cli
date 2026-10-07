@@ -18,7 +18,7 @@ import sellerclaw_cli.cli  # noqa: F401 — importing registers every command gr
 from scripts.build_plugin import TARGETS, assemble, default_guides_src
 from sellerclaw_cli import guides
 from sellerclaw_cli._errors import UserInputError
-from sellerclaw_cli.mcp_server import _resolve, show_guide
+from sellerclaw_cli.mcp_server import _resolve, _tool_for, show_guide
 
 pytestmark = pytest.mark.unit
 
@@ -55,7 +55,7 @@ def test_task_guides_carry_runnable_examples(topic: str) -> None:
     # A guide's whole point is that the agent can copy a call instead of deriving it from schemas.
     body = guides.read(topic)
 
-    assert 'sellerclaw_run(group="' in body
+    assert re.search(r'sellerclaw_(read|write)\(group="', body)
 
 
 @pytest.mark.parametrize("topic", guides.topic_names())
@@ -66,6 +66,34 @@ def test_every_example_call_names_a_command_that_exists(topic: str) -> None:
     assert examples or topic == "start", f"{topic}: no runnable example at all"
     for group, command in examples:
         _resolve(group, command)  # raises UserInputError if the pair is unknown or not MCP-visible
+
+
+#: Every text a model reads its calls from: the guides, the ready-made commands, the plugin's own
+#: skills, and the setup skill and README a person copies from.
+_TEXTS_WITH_CALLS = sorted(
+    [
+        *(REPO_ROOT / "sellerclaw_cli" / "guides").glob("*.md"),
+        *(REPO_ROOT / "sellerclaw_cli" / "shortcuts").glob("*.md"),
+        *(PLUGIN_SRC / "shared").rglob("*.md"),
+        *(REPO_ROOT / "skills").rglob("*.md"),
+        REPO_ROOT / "README.md",
+    ]
+)
+_TOOL_CALL = re.compile(r'(sellerclaw_[a-z_]+)\(group="([^"]+)",\s*command="([^"]+)"')
+
+
+@pytest.mark.parametrize("path", _TEXTS_WITH_CALLS, ids=lambda p: str(p.relative_to(REPO_ROOT)))
+def test_every_example_runs_through_the_tool_of_its_kind(path: Path) -> None:
+    # A read sent to sellerclaw_write — or a change to sellerclaw_read — is refused, so an example
+    # under the wrong tool costs the model a turn every time it is copied.
+    text = path.read_text()
+
+    assert "sellerclaw_run" not in text
+    for tool, group, command in _TOOL_CALL.findall(text):
+        if tool == "sellerclaw_describe":
+            continue
+        _, cmd = _resolve(group, command)
+        assert tool == _tool_for(cmd), f"{group} {command} runs through {_tool_for(cmd)}, not {tool}"
 
 
 def test_start_guide_covers_the_rules_a_bare_mcp_client_has_nowhere_else_to_learn() -> None:

@@ -95,7 +95,8 @@ def test_the_owners_words_have_a_place_exactly_when_the_shortcut_takes_them(name
 
 @pytest.mark.parametrize("name", shortcuts.names())
 def test_every_card_a_shortcut_opens_is_one_claude_can_call(name: str) -> None:
-    cards = set(_CARD_CALL.findall(shortcuts.read(name))) - {"sellerclaw_run", "sellerclaw_guide"}
+    runners = {"sellerclaw_read", "sellerclaw_write", "sellerclaw_guide"}
+    cards = set(_CARD_CALL.findall(shortcuts.read(name))) - runners
 
     assert cards <= _model_visible_cards(), name
 

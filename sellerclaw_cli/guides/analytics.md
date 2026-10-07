@@ -34,10 +34,10 @@ do not. Three caveats on an aggregate:
 ## Sales, profit, best sellers
 
 ```text
-sellerclaw_run(group="channels", command="list")                       # store ids
-sellerclaw_run(group="analytics", command="metrics",
+sellerclaw_read(group="channels", command="list")                       # store ids
+sellerclaw_read(group="analytics", command="metrics",
   positionals={"store_id": STORE_ID}, flags={"month": 0, "top": 5})    # last month, top 5
-sellerclaw_run(group="analytics", command="metrics",
+sellerclaw_read(group="analytics", command="metrics",
   positionals={"store_id": "all"}, flags={"period": "this_year"})      # whole business, YTD
 ```
 
@@ -53,12 +53,12 @@ rather than exact.
 ## Trends, stock, geography, tied-up cash
 
 ```text
-sellerclaw_run(group="analytics", command="timeseries",
+sellerclaw_read(group="analytics", command="timeseries",
   positionals={"store_id": STORE_ID}, flags={"granularity": "month", "buckets": 12})
-sellerclaw_run(group="analytics", command="inventory", positionals={"store_id": STORE_ID})
-sellerclaw_run(group="analytics", command="geography", positionals={"store_id": "all"})
-sellerclaw_run(group="analytics", command="capital", positionals={"store_id": STORE_ID})
-sellerclaw_run(group="analytics", command="operations-digest", positionals={"store_id": STORE_ID})
+sellerclaw_read(group="analytics", command="inventory", positionals={"store_id": STORE_ID})
+sellerclaw_read(group="analytics", command="geography", positionals={"store_id": "all"})
+sellerclaw_read(group="analytics", command="capital", positionals={"store_id": STORE_ID})
+sellerclaw_read(group="analytics", command="operations-digest", positionals={"store_id": STORE_ID})
 ```
 
 - **timeseries** — revenue/orders per bucket. The period says *which span*, `granularity` how finely

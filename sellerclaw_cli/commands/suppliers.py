@@ -283,6 +283,7 @@ SPECS = (
             body_field("sort", help="Provider sort key (e.g. listings, price, newest)."),
             body_field("order_by", help="Sort direction (asc / desc)."),
         ),
+        read_only=True,
     ),
     Cmd(
         "get-product",
@@ -367,6 +368,7 @@ SPECS = (
                 ),
             ),
         ),
+        read_only=True,
     ),
     Cmd(
         "check-stock",
@@ -391,6 +393,7 @@ SPECS = (
                 help="Supplier variant ids to check (1-200).",
             ),
         ),
+        read_only=True,
     ),
     Cmd(
         "check-stock-by-product",
@@ -428,6 +431,7 @@ SPECS = (
                 example={"country_code": "US", "zip_code": "10001"},
             ),
         ),
+        read_only=True,
     ),
     Cmd(
         "calculate-shipping",
@@ -463,6 +467,7 @@ SPECS = (
                 ),
             ),
         ),
+        read_only=True,
     ),
     Cmd(
         "get-balance",

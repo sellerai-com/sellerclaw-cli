@@ -5,48 +5,49 @@ description: "Use when the user wants market, keyword, trend, competitor, or soc
 
 # SellerClaw — research
 
-Gathering market signal to inform listings, pricing, and content via `sellerclaw_run`. Run the examples
-directly; reach for `sellerclaw_describe` only for a command not shown here, or when a call errors.
+Gathering market signal to inform listings, pricing, and content via `sellerclaw_read` (and
+`sellerclaw_write` for a competitor watch list). Run the examples directly; reach for
+`sellerclaw_describe` only for a command not shown here, or when a call errors.
 
 ## Common calls
 
 ```text
 # Google Trends interest over time. keywords is comma-separated; timeframe / geo optional.
-sellerclaw_run(group="research-trends", command="interest-over-time",
+sellerclaw_read(group="research-trends", command="interest-over-time",
   flags={"keywords": "wireless mouse, bluetooth mouse", "timeframe": "today 12-m", "geo": "US"})
-sellerclaw_run(group="research-trends", command="related-queries", flags={"keywords": "wireless mouse"})
+sellerclaw_read(group="research-trends", command="related-queries", flags={"keywords": "wireless mouse"})
 
 # SEO / keyword research (body-driven)
-sellerclaw_run(group="research-seo", command="keyword-ideas",    body={"keyword": "wireless mouse"})
-sellerclaw_run(group="research-seo", command="serp-competitors", body={"keywords": ["wireless mouse", "bluetooth mouse"]})
+sellerclaw_read(group="research-seo", command="keyword-ideas",    body={"keyword": "wireless mouse"})
+sellerclaw_read(group="research-seo", command="serp-competitors", body={"keywords": ["wireless mouse", "bluetooth mouse"]})
 
 # What the marketplace itself already lists (query, gtin, or a competitor's storefront)
-sellerclaw_run(group="research-catalog", command="ebay-search",
+sellerclaw_read(group="research-catalog", command="ebay-search",
   body={"query": "wireless mouse", "marketplace_id": "EBAY_US", "limit": 20})
-sellerclaw_run(group="research-catalog", command="ebay-search",
+sellerclaw_read(group="research-catalog", command="ebay-search",
   body={"sellers": ["rival_store"], "limit": 50})
 
 # Somebody else's listing, read as data rather than scraped off the page
-sellerclaw_run(group="research-catalog", command="listing-get",
+sellerclaw_read(group="research-catalog", command="listing-get",
   body={"url": "https://www.amazon.com/dp/B09B8V1LZ3"})
-sellerclaw_run(group="research-catalog", command="listing-search",
+sellerclaw_read(group="research-catalog", command="listing-search",
   body={"marketplace": "amazon", "query": "wireless mouse", "limit": 10})
-sellerclaw_run(group="research-catalog", command="listing-prices",
+sellerclaw_read(group="research-catalog", command="listing-prices",
   body={"marketplace": "amazon", "listing_ids": ["B09B8V1LZ3", "B07QK2SPP7"]})
 
 # Every Shopify store at once — which stores sell it, at what price — or one store's whole catalogue
-sellerclaw_run(group="research-catalog", command="listing-search",
+sellerclaw_read(group="research-catalog", command="listing-search",
   body={"marketplace": "shopify", "query": "insulated water bottle", "country": "US", "limit": 20})
-sellerclaw_run(group="research-catalog", command="listing-search",
+sellerclaw_read(group="research-catalog", command="listing-search",
   body={"marketplace": "shopify", "store": "www.rival-store.com", "limit": 50})
 
 # A competitor's social presence: the account, then what it publishes
-sellerclaw_run(group="research-social", command="instagram-profile", body={"handle": "rivalbrand"})
-sellerclaw_run(group="research-social", command="tiktok-profile-videos",
+sellerclaw_read(group="research-social", command="instagram-profile", body={"handle": "rivalbrand"})
+sellerclaw_read(group="research-social", command="tiktok-profile-videos",
   body={"handle": "rivalbrand", "sort_by": "popular"})
 
 # One specific page, read as text — for pages no command above covers
-sellerclaw_run(group="web", command="scrape", flags={"url": "https://rival.example.com/product/123"})
+sellerclaw_read(group="web", command="scrape", flags={"url": "https://rival.example.com/product/123"})
 ```
 
 ## A listing on a marketplace is data, not a page
@@ -103,9 +104,9 @@ One-off research answers "what do they charge today". `competitors` answers "did
 us", by polling tracked listings and keeping snapshots.
 
 ```text
-sellerclaw_run(group="competitors", command="add-watch", positionals={"store_id": STORE_ID},
+sellerclaw_write(group="competitors", command="add-watch", positionals={"store_id": STORE_ID},
   body={"url": "https://www.amazon.com/dp/B0XXXXXXX", "our_sku": "WM-01"})
-sellerclaw_run(group="competitors", command="report", positionals={"store_id": STORE_ID})
+sellerclaw_read(group="competitors", command="report", positionals={"store_id": STORE_ID})
 ```
 
 A background job polls every few hours, so `report` usually has fresh numbers without a `poll` of

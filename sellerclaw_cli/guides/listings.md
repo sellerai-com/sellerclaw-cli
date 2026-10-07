@@ -1,17 +1,17 @@
 # SellerClaw — listings
 
-Publishing and maintaining marketplace listings via `sellerclaw_run`. Run the examples directly; reach
-for `sellerclaw_describe` only for a command not shown here, or when a call errors on a field.
+Publishing and maintaining marketplace listings via `sellerclaw_read` and `sellerclaw_write`. Run the
+examples directly; reach for `sellerclaw_describe` only for a command not shown here, or when a call errors on a field.
 
 ## Find the store and product
 
 ```text
-sellerclaw_run(group="channels", command="list")                       # store ids
-sellerclaw_run(group="listings", command="search", flags={"q": "wireless mouse"})   # find across all stores
-sellerclaw_run(group="listings", command="search", flags={"sale_state": ["out_of_stock", "not_selling"]})   # what shoppers cannot buy
-sellerclaw_run(group="listings", command="search", flags={"sku": ["WM-01", "WM-02"], "limit": 200})   # a batch of SKUs (or remote_id); a SKU is missing only once `total` fits the page
-sellerclaw_run(group="listings", command="search", flags={"store_id": STORE_ID, "not_in_catalog": True})   # found on the store, not in the catalog
-sellerclaw_run(group="shopify-listings", command="summary", positionals={"store_id": STORE_ID})
+sellerclaw_read(group="channels", command="list")                       # store ids
+sellerclaw_read(group="listings", command="search", flags={"q": "wireless mouse"})   # find across all stores
+sellerclaw_read(group="listings", command="search", flags={"sale_state": ["out_of_stock", "not_selling"]})   # what shoppers cannot buy
+sellerclaw_read(group="listings", command="search", flags={"sku": ["WM-01", "WM-02"], "limit": 200})   # a batch of SKUs (or remote_id); a SKU is missing only once `total` fits the page
+sellerclaw_read(group="listings", command="search", flags={"store_id": STORE_ID, "not_in_catalog": True})   # found on the store, not in the catalog
+sellerclaw_read(group="shopify-listings", command="summary", positionals={"store_id": STORE_ID})
 ```
 
 ## Listing ids: one per listing
@@ -31,7 +31,7 @@ Amazon offer alone is `amazon-listings update` with its `variation_id`, or `with
 ```text
 # Publish products as listings. Each item: title (required), plus optional body_html, vendor,
 # product_type, tags[], status, images[] (URLs), variants[{sku, title, barcode, price, compare_at_price}].
-sellerclaw_run(group="shopify-listings", command="create",
+sellerclaw_write(group="shopify-listings", command="create",
   positionals={"store_id": STORE_ID},
   body={"items": [{"title": "Wireless Mouse", "vendor": "Acme",
                    "images": ["https://cdn.example.com/mouse.jpg"],
@@ -39,7 +39,7 @@ sellerclaw_run(group="shopify-listings", command="create",
 
 # Update stock (and optionally price). Each item: sku (required), quantity (required), remote_id?,
 # price?, compare_at_price?.
-sellerclaw_run(group="shopify-listings", command="sync-stock",
+sellerclaw_write(group="shopify-listings", command="sync-stock",
   positionals={"store_id": STORE_ID},
   body={"items": [{"sku": "WM-01", "quantity": 42}]})
 ```
@@ -55,11 +55,11 @@ A generated video is its job's `result_url`; any public MP4, MOV or WEBM link up
 never touched. Other marketplaces refuse `videos` with the reason.
 
 ```text
-sellerclaw_run(group="listings", command="bulk-update",
+sellerclaw_write(group="listings", command="bulk-update",
   body={"items": [{"listing_id": LISTING_ID,
                    "patch": {"videos": ["https://api.sellerclaw.ai/agent/files/FILE_ID/lamp.mp4"]}}]})
 # Uploading a video takes a while: publish in the background.
-sellerclaw_run(group="listings", command="bulk-publish", positionals={"store_id": STORE_ID},
+sellerclaw_write(group="listings", command="bulk-publish", positionals={"store_id": STORE_ID},
   body={"kind": "publish", "listing_ids": [LISTING_ID]})
 ```
 
@@ -69,11 +69,11 @@ A video that did not go up leaves the product live and shows as a `shopify_video
 ## eBay
 
 ```text
-sellerclaw_run(group="ebay-listings", command="publish",
+sellerclaw_write(group="ebay-listings", command="publish",
   positionals={"store_id": STORE_ID}, body={"listing_ids": ["1234567890"]})
-sellerclaw_run(group="ebay-listings", command="withdraw",
+sellerclaw_write(group="ebay-listings", command="withdraw",
   positionals={"store_id": STORE_ID}, body={"listing_ids": ["1234567890"]})
-sellerclaw_run(group="ebay-listings", command="sync-stock",
+sellerclaw_write(group="ebay-listings", command="sync-stock",
   positionals={"store_id": STORE_ID}, body={"items": [{"sku": "WM-01", "quantity": 42}]})
 ```
 
@@ -93,9 +93,9 @@ argument). `sellerclaw_describe` the exact command before the first call.
 ## Etsy
 
 ```text
-sellerclaw_run(group="etsy-listings", command="draft",
+sellerclaw_write(group="etsy-listings", command="draft",
   positionals={"store_id": STORE_ID}, body={"product_ids": [PRODUCT_ID]})
-sellerclaw_run(group="etsy-listings", command="publish",
+sellerclaw_write(group="etsy-listings", command="publish",
   positionals={"store_id": STORE_ID}, body={"listing_ids": [LISTING_ID]})
 ```
 
@@ -124,19 +124,19 @@ value.
 
 ```text
 # 1. Where does this product belong on this store?  Pick from the shortlist, then remember it.
-sellerclaw_run(group="categories", command="suggest",
+sellerclaw_read(group="categories", command="suggest",
   body={"store_id": STORE_ID, "product_id": PRODUCT_ID})
-sellerclaw_run(group="categories", command="confirm",
+sellerclaw_write(group="categories", command="confirm",
   body={"store_id": STORE_ID, "product_id": PRODUCT_ID, "category_id": CATEGORY_ID})
 
 # 2. What does that category demand, and what values are allowed?
-sellerclaw_run(group="attributes", command="schema",
+sellerclaw_read(group="attributes", command="schema",
   body={"store_id": STORE_ID, "category_external_id": CATEGORY_EXTERNAL_ID})
-sellerclaw_run(group="attributes", command="values",
+sellerclaw_read(group="attributes", command="values",
   body={"store_id": STORE_ID, "category_external_id": CATEGORY_EXTERNAL_ID, "attribute": "Brand", "q": "acme"})
 
 # 3. Fill the specifics of drafts that already exist, from each product's own attributes.
-sellerclaw_run(group="attributes", command="map",
+sellerclaw_write(group="attributes", command="map",
   positionals={"store_id": STORE_ID}, body={"product_ids": [PRODUCT_ID]})
 ```
 

@@ -8,22 +8,22 @@ a field.
 ## Find a product
 
 ```text
-sellerclaw_run(group="catalog", command="overview")                                  # counts by status, out of stock
-sellerclaw_run(group="catalog", command="search", flags={"q": "wireless mouse", "limit": 20})
-sellerclaw_run(group="catalog", command="get", positionals={"product_id": PRODUCT_ID})
+sellerclaw_read(group="catalog", command="overview")                                  # counts by status, out of stock
+sellerclaw_read(group="catalog", command="search", flags={"q": "wireless mouse", "limit": 20})
+sellerclaw_read(group="catalog", command="get", positionals={"product_id": PRODUCT_ID})
 
 # Exact lookups (all criteria AND-combined). A list checks a batch in one call; the values
 # missing from the answer are not in the catalog.
-sellerclaw_run(group="catalog", command="list", flags={"sku": "WM-01"})
-sellerclaw_run(group="catalog", command="list",
+sellerclaw_read(group="catalog", command="list", flags={"sku": "WM-01"})
+sellerclaw_read(group="catalog", command="list",
   flags={"supplier_provider": "cj", "supplier_product_id": [SUPPLIER_PRODUCT_ID, OTHER_ID]})
 
 # Not on sale in one store (`published_in` is the opposite). A row's `store_listing_status` is
 # `draft` or `withdrawn` when such a listing exists there.
-sellerclaw_run(group="catalog", command="list", flags={"not_published_in": STORE_ID, "limit": 50})
+sellerclaw_read(group="catalog", command="list", flags={"not_published_in": STORE_ID, "limit": 50})
 
 # One supplier: price-list suppliers all share the provider "offline", `supplier_id` tells them apart
-sellerclaw_run(group="catalog", command="list", flags={"supplier_id": SUPPLIER_ID})
+sellerclaw_read(group="catalog", command="list", flags={"supplier_id": SUPPLIER_ID})
 ```
 
 ## Add products
@@ -31,12 +31,12 @@ sellerclaw_run(group="catalog", command="list", flags={"supplier_id": SUPPLIER_I
 ```text
 # From a supplier item — the normal path for dropshipping. Pulls the product and its variants in one
 # call; `destination` decides which warehouse's availability and cost are used.
-sellerclaw_run(group="catalog", command="source-from-supplier",
+sellerclaw_write(group="catalog", command="source-from-supplier",
   body={"supplier_provider": "cj", "supplier_product_id": SUPPLIER_PRODUCT_ID,
         "destination": {"country_code": "US", "zip_code": "10001"}})
 
 # The owner's own goods — batch create.
-sellerclaw_run(group="catalog", command="create",
+sellerclaw_write(group="catalog", command="create",
   body={"items": [{"name": "Wireless Mouse", "description": "2.4 GHz, silent click",
                    "category": "Electronics",
                    "variations": [{"sku": "WM-01", "purchase_price": 9.5}]}]})
@@ -48,12 +48,12 @@ When the owner has their goods in a file rather than at a supplier with an API, 
 retype it into `create` row by row.
 
 ```text
-sellerclaw_run(group="catalog-file", command="template")                 # blank file + column notes
-sellerclaw_run(group="files", command="list", flags={"limit": 10})       # what they have uploaded
-sellerclaw_run(group="files", command="from-url", body={"url": "https://..."})    # or pull one in
-sellerclaw_run(group="catalog-file", command="check",   body={"file_id": FILE_ID})
-sellerclaw_run(group="catalog-file", command="preview", body={"file_id": FILE_ID})
-sellerclaw_run(group="catalog-file", command="apply",   body={"file_id": FILE_ID})
+sellerclaw_read(group="catalog-file", command="template")                 # blank file + column notes
+sellerclaw_read(group="files", command="list", flags={"limit": 10})       # what they have uploaded
+sellerclaw_write(group="files", command="from-url", body={"url": "https://..."})    # or pull one in
+sellerclaw_read(group="catalog-file", command="check",   body={"file_id": FILE_ID})
+sellerclaw_read(group="catalog-file", command="preview", body={"file_id": FILE_ID})
+sellerclaw_write(group="catalog-file", command="apply",   body={"file_id": FILE_ID})
 ```
 
 Every step takes a `file_id`, so the file has to reach SellerClaw first: either the owner uploads it
@@ -70,23 +70,23 @@ supplier's own price list (no API, prices that move) is the same shape under `pr
 ## Maintain
 
 ```text
-sellerclaw_run(group="catalog", command="update", positionals={"product_id": PRODUCT_ID},
+sellerclaw_write(group="catalog", command="update", positionals={"product_id": PRODUCT_ID},
   body={"name": "Wireless Mouse (2026)", "status": "active"})
 
 # Many products at once — same patch fields, up to 200 per call. One bad id is reported on its own
 # line and the rest still apply, so the reply is {items: [{product_id, ok, error, product}]}.
-sellerclaw_run(group="catalog", command="bulk-update",
+sellerclaw_write(group="catalog", command="bulk-update",
   body={"items": [{"product_id": PRODUCT_ID, "patch": {"name": "Wireless Mouse (2026)"}},
                   {"product_id": OTHER_PRODUCT_ID, "patch": {"brand": "ACME"}}]})
 
 # Supplier cost, not the buyer-facing price. One value for every variation…
-sellerclaw_run(group="catalog", command="set-prices", positionals={"product_id": PRODUCT_ID},
+sellerclaw_write(group="catalog", command="set-prices", positionals={"product_id": PRODUCT_ID},
   body={"purchase_price": 9.5})
 # …or per variation.
-sellerclaw_run(group="catalog", command="set-prices", positionals={"product_id": PRODUCT_ID},
+sellerclaw_write(group="catalog", command="set-prices", positionals={"product_id": PRODUCT_ID},
   body={"variations": [{"supplier_variant_id": VARIANT_ID, "purchase_price": 9.5}]})
 
-sellerclaw_run(group="catalog", command="delete", positionals={"product_id": PRODUCT_ID})
+sellerclaw_write(group="catalog", command="delete", positionals={"product_id": PRODUCT_ID})
 ```
 
 ## Watch for

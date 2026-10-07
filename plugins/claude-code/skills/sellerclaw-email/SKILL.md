@@ -5,17 +5,17 @@ description: "Use when the user wants to read their connected mailbox or send a 
 
 # SellerClaw — email
 
-Reading the owner's mailbox and sending mail via `sellerclaw_run`. Run the examples directly; reach
-for `sellerclaw_describe` only for a command not shown here, or when a call errors on a field.
+Reading the owner's mailbox and sending mail via `sellerclaw_read` and `sellerclaw_write`. Run the
+examples directly; reach for `sellerclaw_describe` only for a command not shown here, or when a call errors on a field.
 
 ## Read
 
 ```text
-sellerclaw_run(group="email", command="mailboxes")                                  # ids + addresses
-sellerclaw_run(group="email", command="list", flags={"mailbox": MAILBOX_ID, "limit": 20})
-sellerclaw_run(group="email", command="list", flags={"search": "refund", "limit": 20})
-sellerclaw_run(group="email", command="read", positionals={"email_id": EMAIL_ID})
-sellerclaw_run(group="email", command="thread", positionals={"thread_id": THREAD_ID})  # whole conversation
+sellerclaw_read(group="email", command="mailboxes")                                  # ids + addresses
+sellerclaw_read(group="email", command="list", flags={"mailbox": MAILBOX_ID, "limit": 20})
+sellerclaw_read(group="email", command="list", flags={"search": "refund", "limit": 20})
+sellerclaw_read(group="email", command="read", positionals={"email_id": EMAIL_ID})
+sellerclaw_read(group="email", command="thread", positionals={"thread_id": THREAD_ID})  # whole conversation
 ```
 
 ## Send — draft first, the owner approves, then deliver
@@ -23,7 +23,7 @@ sellerclaw_run(group="email", command="thread", positionals={"thread_id": THREAD
 ```text
 # 1. Write the draft. This does NOT send: it raises an approval request to the owner and returns
 #    the draft id plus the linked action_request_id.
-sellerclaw_run(group="email", command="draft",
+sellerclaw_write(group="email", command="draft",
   body={"mailbox_id": MAILBOX_ID, "to": ["buyer@example.com"],
         "subject": "Your order has shipped",
         "body_text": "Hi Jane,\n\nYour order is on its way — tracking: 1Z999AA10123456784.",
@@ -31,7 +31,7 @@ sellerclaw_run(group="email", command="draft",
         "attachments": [FILE_ID]})               # optional: file ids, never inline data
 
 # 2. After the owner approves, deliver it.
-sellerclaw_run(group="email", command="send", positionals={"email_id": DRAFT_ID})
+sellerclaw_write(group="email", command="send", positionals={"email_id": DRAFT_ID})
 ```
 
 The draft's response says which of the two happened. `approved_queued` — the owner's setting
@@ -45,12 +45,12 @@ confirm` example).
 Instagram and WhatsApp conversations work the same way, under `social`:
 
 ```text
-sellerclaw_run(group="social", command="accounts")                                   # connected accounts
-sellerclaw_run(group="social", command="conversations", flags={"limit": 20})
-sellerclaw_run(group="social", command="thread", positionals={"chat_id": CHAT_ID})
-sellerclaw_run(group="social", command="draft",                                      # same gate as email
+sellerclaw_read(group="social", command="accounts")                                   # connected accounts
+sellerclaw_read(group="social", command="conversations", flags={"limit": 20})
+sellerclaw_read(group="social", command="thread", positionals={"chat_id": CHAT_ID})
+sellerclaw_write(group="social", command="draft",                                      # same gate as email
   body={"social_account_id": ACCOUNT_ID, "chat_id": CHAT_ID, "body_text": "..."})
-sellerclaw_run(group="social", command="send", positionals={"message_id": DRAFT_ID})
+sellerclaw_write(group="social", command="send", positionals={"message_id": DRAFT_ID})
 ```
 
 ## Watch for

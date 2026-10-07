@@ -5,6 +5,6 @@ Open the media studio: call `sellerclaw_media_studio` with what the owner said.
 - Photo links → `reference`.
 - No words → no arguments.
 
-The owner starts it from the card — do not generate it yourself. In a client without cards (Claude Code, a terminal), show the models and their prices from `sellerclaw_run(group="media", command="models")` instead, let the owner choose, and make it as the media guide says (`sellerclaw_guide(topic="media")`).
+The owner starts it from the card — do not generate it yourself. In a client without cards (Claude Code, a terminal), show the models and their prices from `sellerclaw_read(group="media", command="models")` instead, let the owner choose, and make it as the media guide says (`sellerclaw_guide(topic="media")`).
 
 Owner's words: $ARGUMENTS

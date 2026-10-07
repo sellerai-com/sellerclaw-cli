@@ -5,17 +5,17 @@ description: "Use when the user wants to view, fulfill, ship, track, or cancel o
 
 # SellerClaw — orders
 
-Finding orders and moving them through fulfillment via `sellerclaw_run`. Run the examples directly;
-reach for `sellerclaw_describe` only for a command not shown here, or when a call errors on a field.
+Finding orders and moving them through fulfillment via `sellerclaw_read` and `sellerclaw_write`. Run
+the examples directly; reach for `sellerclaw_describe` only for a command not shown here, or when a call errors on a field.
 
 ## Find the order
 
 ```text
-sellerclaw_run(group="channels", command="list")                                  # store ids
-sellerclaw_run(group="orders", command="list", flags={"awaiting_shipment": True})  # no tracking yet, every store
-sellerclaw_run(group="orders", command="list", flags={"status": "open"})          # not fulfilled or cancelled yet
-sellerclaw_run(group="shopify-orders", command="list", positionals={"store_id": STORE_ID})
-sellerclaw_run(group="shopify-orders", command="sync", positionals={"store_id": STORE_ID})  # pull fresh first
+sellerclaw_read(group="channels", command="list")                                  # store ids
+sellerclaw_read(group="orders", command="list", flags={"awaiting_shipment": True})  # no tracking yet, every store
+sellerclaw_read(group="orders", command="list", flags={"status": "open"})          # not fulfilled or cancelled yet
+sellerclaw_read(group="shopify-orders", command="list", positionals={"store_id": STORE_ID})
+sellerclaw_write(group="shopify-orders", command="sync", positionals={"store_id": STORE_ID})  # pull fresh first
 ```
 
 ## Fulfill & ship (Shopify)
@@ -23,17 +23,17 @@ sellerclaw_run(group="shopify-orders", command="sync", positionals={"store_id": 
 ```text
 # Create a fulfillment. tracking: {number (required), company, url}. line_items: each
 # {remote_line_item_id (required), quantity} — omit line_items to fulfill the whole order.
-sellerclaw_run(group="shopify-orders", command="create-fulfillment",
+sellerclaw_write(group="shopify-orders", command="create-fulfillment",
   positionals={"store_id": STORE_ID, "order_id": ORDER_ID},
   body={"tracking": {"number": "1Z999AA10123456784", "company": "UPS"}})
 
 # Update tracking on an existing fulfillment (second path arg is the fulfillment id).
-sellerclaw_run(group="shopify-orders", command="update-tracking",
+sellerclaw_write(group="shopify-orders", command="update-tracking",
   positionals={"store_id": STORE_ID, "fulfillment_id": FULFILLMENT_ID},
   body={"tracking": {"number": "1Z999AA10123456784", "company": "UPS"}})
 
 # Cancel an order
-sellerclaw_run(group="shopify-orders", command="cancel",
+sellerclaw_write(group="shopify-orders", command="cancel",
   positionals={"store_id": STORE_ID, "order_id": ORDER_ID})
 ```
 
@@ -44,7 +44,7 @@ separately — do it right after, or the order stays in the seller's open work:
 
 ```text
 # ORDER_ID: the SellerClaw order id, or the order number the owner quotes (#1001).
-sellerclaw_run(group="orders", command="set-shipped", positionals={"order_id": ORDER_ID},
+sellerclaw_write(group="orders", command="set-shipped", positionals={"order_id": ORDER_ID},
   body={"tracking_number": "1Z999AA10123456784", "tracking_carrier": "UPS"})
 ```
 
@@ -55,8 +55,8 @@ status where it was.
 ## eBay & Amazon
 
 ```text
-sellerclaw_run(group="ebay-orders",   command="list", positionals={"store_id": STORE_ID})
-sellerclaw_run(group="amazon-orders", command="list", positionals={"store_id": STORE_ID})
+sellerclaw_read(group="ebay-orders",   command="list", positionals={"store_id": STORE_ID})
+sellerclaw_read(group="amazon-orders", command="list", positionals={"store_id": STORE_ID})
 ```
 
 `ebay-orders` and `amazon-orders` mirror the same flow (fulfill / confirm shipment) — Amazon

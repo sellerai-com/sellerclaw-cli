@@ -9,14 +9,16 @@ memorize it or inspect it command by command: the task guides carry ready-to-run
 
 ## How a call is shaped
 
-`sellerclaw_run` takes the `group`, the `command`, `positionals` as a `{name: value}` map for the path
-arguments, `flags` as a `{name: value}` map of filters, and `body` as the JSON payload for writes.
-Names come from `sellerclaw_describe` — or, for the common jobs, from the guides.
+Two tools run commands, with the same arguments: `sellerclaw_read` for a command that changes nothing,
+`sellerclaw_write` for one that changes something. Each takes the `group`, the `command`,
+`positionals` as a `{name: value}` map for the path arguments, `flags` as a `{name: value}` map of
+filters, and `body` as the JSON payload. Names, and the tool for each command, come from
+`sellerclaw_describe` — or, for the common jobs, from the guides.
 
 ```text
-sellerclaw_run(group="channels", command="list")                                   # connected stores
-sellerclaw_run(group="orders", command="list", flags={"limit": 20})                # a filtered read
-sellerclaw_run(group="shopify-listings", command="sync-stock",
+sellerclaw_read(group="channels", command="list")                                  # connected stores
+sellerclaw_read(group="orders", command="list", flags={"limit": 20})               # a filtered read
+sellerclaw_write(group="shopify-listings", command="sync-stock",
   positionals={"store_id": STORE_ID}, body={"items": [{"sku": "WM-01", "quantity": 42}]})
 ```
 
@@ -36,14 +38,35 @@ is worth it only when:
   and its fix.
 - **Store id comes first.** Channel groups (`shopify-*`, `ebay-*`, `amazon-*`, `etsy-*`, `walmart-*`,
   `tiktok-shop-*`, `wix-*`, `woocommerce-*`, `bigcommerce-*`) need a store id in `positionals` — take
-  it from `sellerclaw_run(group="channels", command="list")`.
+  it from `sellerclaw_read(group="channels", command="list")`.
 - **Find by name, don't dump.** Most groups offer `search` and/or `summary` — prefer them to listing
   everything and filtering by hand.
 - **An empty result is not an error.** No rows means none matched, not a failure.
 - **Raw fallbacks exist.** The `shopify` / `ebay` / `amazon` / `etsy` / `walmart` / `wix` /
   `woocommerce` / `bigcommerce` groups pass raw marketplace API calls through when no curated command
-  fits. Check the curated groups first — they resolve our ids, apply the owner's pricing and check a
+  fits, always with `sellerclaw_write`, even for a call that only reads. Check the curated groups first — they resolve our ids, apply the owner's pricing and check a
   listing before it goes out, and none of that happens on a raw call.
+
+## Cards: show the owner the thing
+
+Some answers have their own tools that draw an interactive card the owner can look at and act on:
+what needs them today (`sellerclaw_attention`), how a store is doing (`sellerclaw_store_summary`), the
+orders or one order (`sellerclaw_orders`), listings or one listing (`sellerclaw_listings`), a product
+with its supplier and every store it is listed in (`sellerclaw_products`), the ads (`sellerclaw_ads`),
+the connections (`sellerclaw_connections`), the plan and credits (`sellerclaw_billing`), a request
+waiting on them (`sellerclaw_approval`), generated images and videos (`sellerclaw_media`) and the
+media studio (`sellerclaw_media_studio`).
+
+- **For those questions, open the card** instead of running a command for the same data. Pass the
+  owner's own words — an order number, a title, a SKU — without looking up an id first: the card
+  finds the thing. You get a short summary back; where the client draws the card, the owner is
+  reading it, so don't recite it.
+- **Show the owner what you worked on.** After you publish a listing, ship an order, or add or change
+  a product, open its card with the id from the answer, once any background job behind it has
+  finished. Where there is no card for it, or the client draws none, give its essentials in a few
+  lines: what it is, the values you set, its status, and its link if the answer has one.
+- **Cards only show.** Changes go through `sellerclaw_write`, and a card button the owner presses
+  reaches you as an ordinary message from them.
 
 ## Approvals: you can usually just act, and you can always answer for them
 
@@ -57,12 +80,14 @@ the response says what became of it:
   what you did, not a confirmation nobody was asked for.
 - `pending_approval` — it is waiting for them.
 
-When you do get `pending_approval`, don't send the owner to the website. Ask them here, and close it
-with their own words once they have answered:
+When you do get `pending_approval`, don't send the owner to the website. Show them the request as a
+card — `sellerclaw_approval(request=REQUEST_ID)` — and let them press the button on it: that is their
+answer, and it needs nothing more from you. Only if they answer you in words instead, close it with
+those words:
 
 ```text
-sellerclaw_run(group="action-requests", command="list", flags={"status": "pending"})
-sellerclaw_run(group="action-requests", command="confirm",
+sellerclaw_read(group="action-requests", command="list", flags={"status": "pending"})
+sellerclaw_write(group="action-requests", command="confirm",
   positionals={"request_id": REQUEST_ID}, body={"quote": "yes, send it"})
 ```
 

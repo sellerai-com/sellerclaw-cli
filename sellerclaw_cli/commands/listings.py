@@ -297,6 +297,7 @@ SPECS = (
                 ),
             ),
         ),
+        read_only=True,
     ),
     Cmd(
         "check",
@@ -326,6 +327,7 @@ SPECS = (
                 help="Compare each listing only against others in its marketplace category.",
             ),
         ),
+        read_only=True,
     ),
     Cmd(
         "bulk-update",

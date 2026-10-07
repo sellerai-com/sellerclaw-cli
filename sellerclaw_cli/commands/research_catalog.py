@@ -158,7 +158,7 @@ SPECS = (
     ),
 )
 
-app = build_group(NAME, "Marketplace catalog research.", SPECS)
+app = build_group(NAME, "Marketplace catalog research.", SPECS, provider_reads=True)
 
 
 def register(parent: typer.Typer) -> None:

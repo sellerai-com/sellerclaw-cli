@@ -299,10 +299,13 @@ class Cmd:
     # model call, publishing then waits on the marketplace) — there, the default refuses a call that
     # is still working. ``describe`` reports the effective value so the caller can size its own wait.
     timeout: float | None = None
-    # A POST that only *reads*: the body carries the query, and the call changes nothing on our side
-    # or the marketplace's. It matters when the wait runs out — a write that timed out may already
-    # have been applied, so the caller is told to check state before resending, while for one of
-    # these there is nothing to check and the same call can simply be made again.
+    # A POST that only *reads*: the body carries the query, and the call changes nothing in the
+    # owner's business — it may cost credits, remember how a file's columns map, or hand out a preview
+    # link, but no store, listing, order or message changes. It decides two things. Over MCP the
+    # command is served by ``sellerclaw_read``, which a client runs without asking the owner each
+    # time, so marking a command that changes anything is a real harm. And when the wait runs out,
+    # a write that timed out may already have been applied, so the caller is told to check state
+    # before resending, while for one of these the same call can simply be made again.
     read_only: bool = False
     # A command that sends a file rather than JSON: it takes the local path as its first argument
     # and posts the bytes as multipart/form-data. Declared here rather than hand-written as a
@@ -966,7 +969,9 @@ def build_group(
 
     ``provider_reads`` marks a group whose every command is a lookup served by an outside data
     provider — research and site audits. Those get :data:`LONG_TIMEOUT_SECONDS` and are marked
-    ``read_only``; both entries say why the shared default is wrong for them.
+    ``read_only``; both entries say why the shared default is wrong for them. Being ``read_only``,
+    every command of such a group runs over MCP without the owner being asked, so a command that
+    changes anything belongs in another group.
     """
     resolved = tuple(_with_search_aliases(cmd) for cmd in commands)
     if provider_reads:

@@ -1203,7 +1203,9 @@ supplier's order and the tracking): the number they quote (#1001), the marketpla
 (14-15000-75039) or the SellerClaw id. A number two stores share shows both to choose from.
 `query` narrows the board to orders matching the buyer's name or email, a SKU or item title, or
 part of a number — and opens the order itself when only one matches. `status` opens on one
-status; omit everything for the whole board.\
+status; omit everything for the whole board.
+
+Open it also right after you ship, cancel or change an order: `order` with its id or number.\
 """
 
 _ATTENTION_DESC = """\
@@ -1231,6 +1233,9 @@ several. "Which listings aren't selling?" is `["out_of_stock", "not_selling"]`: 
 nobody can buy still has the status `active`, so `status` cannot answer it. `listing` opens one
 listing by the id a list row carries.
 
+Open it also right after you publish or change a listing: `listing` with the `listing_id` from that
+answer, or `query` with its title or SKU.
+
 For a product rather than one store's listing of it — what it is, who supplies it, where it is
 listed — use `sellerclaw_products`. The card changes nothing; to change a listing, use the
 listings commands.\
@@ -1245,6 +1250,7 @@ Prefer this for "tell me about X", "where is X listed", "who supplies X" or "how
 my stores". Pass the owner's own words as `query` — part of the name, or a SKU — and do not look
 the product up first: one match opens the product, several show a list to choose from. `product`
 opens one by the id a list row carries. With nothing passed, the newest products in the catalog.
+Open it also right after you add or change a product: `product` with its id.
 
 A listing imported from a store is not always in the catalog; when nothing matches, search the
 listings (`sellerclaw_listings`). The card changes nothing; to change a product, use the catalog
@@ -1284,7 +1290,7 @@ Show one thing waiting on the owner as an interactive card: what will happen, th
 and the buttons to approve or decline.
 
 The owner answers on the card. Do not decide for them, and do not ask them to type the answer to you
-instead — you have no way to close the request yourself.\
+instead.\
 """
 
 _APPROVAL_DECIDE_DESC = """\

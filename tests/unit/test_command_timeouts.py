@@ -35,9 +35,8 @@ JOB_ID = "3f6a5b3c-1b4a-4a2f-9d1e-2c8c2a5f9a11"
 
 #: Every command that drafts onto a marketplace or pushes to it. Each is a request the server spends
 #: minutes inside, so each must declare the long budget rather than inherit the default.
-_SLOW_COMMANDS = (
+_SLOW_WRITES = (
     pytest.param("ebay-listings", "create-drafts", id="ebay-create-drafts"),
-    pytest.param("ebay-listings", "preview-drafts", id="ebay-preview-drafts"),
     pytest.param("ebay-listings", "publish", id="ebay-publish"),
     pytest.param("shopify-listings", "create-drafts", id="shopify-create-drafts"),
     pytest.param("shopify-listings", "publish", id="shopify-publish"),
@@ -58,6 +57,10 @@ _SLOW_COMMANDS = (
     pytest.param("files", "upload", id="files-upload"),
     pytest.param("files", "from-url", id="files-from-url"),
 )
+#: Slow for the same reason, but nothing is saved: drafting a preview runs the same model calls and
+#: hands the drafts back instead of storing them.
+_SLOW_READS = (pytest.param("ebay-listings", "preview-drafts", id="ebay-preview-drafts"),)
+_SLOW_COMMANDS = _SLOW_WRITES + _SLOW_READS
 
 #: Research and site-audit lookups. These wait on someone else's queue rather than on us: the
 #: research providers are allowed 120s for a single call, and the marketplace-product endpoints poll
@@ -138,14 +141,20 @@ class TestDeclaredBudgets:
     ) -> None:
         assert _spec(group, command).read_only is True
 
-    @pytest.mark.parametrize(("group", "command"), _SLOW_COMMANDS)
+    @pytest.mark.parametrize(("group", "command"), _SLOW_WRITES)
     def test_marketplace_work_is_never_marked_read_only(self, group: str, command: str) -> None:
         """The flag decides what a timed-out caller is told, so a publish must not carry it."""
         assert _spec(group, command).read_only is False
 
+    @pytest.mark.parametrize(("group", "command"), _SLOW_READS)
+    def test_slow_work_that_saves_nothing_is_marked_read_only(
+        self, group: str, command: str
+    ) -> None:
+        assert _spec(group, command).read_only is True
+
     def test_whole_group_is_covered_not_just_the_commands_listed_here(self) -> None:
         """The budget is declared per group, so a command added later inherits it."""
-        for group in ("research-seo", "research-social", "store-audit"):
+        for group in ("research-catalog", "research-seo", "research-social", "store-audit"):
             spec = next(g for g in REGISTRY if g.name == group)
             assert spec.commands, f"{group} has no commands"
             assert all(c.effective_timeout == LONG_TIMEOUT_SECONDS for c in spec.commands)

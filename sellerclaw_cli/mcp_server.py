@@ -4,12 +4,20 @@ Why a *proxy*, not one tool per command
 ---------------------------------------
 The CLI carries ~600 commands across ~90 groups. Emitting one MCP tool per command would
 swamp any client (huge tool list, poor selection, wasted context). Instead this mirrors the
-CLI's own agent-first discovery model with **four thin tools**:
+CLI's own agent-first discovery model with **five thin tools**:
 
 * ``sellerclaw_groups``   — list command groups and the commands inside each;
 * ``sellerclaw_describe`` — full schema for one command (positionals, flags, body fields);
-* ``sellerclaw_run``      — invoke a command;
+* ``sellerclaw_read``     — invoke a command that changes nothing;
+* ``sellerclaw_write``    — invoke a command that changes something;
 * ``sellerclaw_guide``    — a task guide with ready-to-run examples for a whole area of work.
+
+Invoking is two tools rather than one because a client decides how much to ask the owner per tool,
+from its annotations: a read-only tool runs freely, one that can change things asks every time.
+Behind a single runner every lookup asked, and Anthropic's connector review rejects a tool that
+both reads and writes outright. Which tool serves a command is :func:`_reads` — a GET, or a POST
+marked ``read_only`` — and each tool refuses the other kind by name rather than running it, so the
+read tool can never be talked into a write.
 
 A client (e.g. Claude) discovers commands at runtime exactly as the OpenClaw agent does via
 ``sellerclaw groups`` -> ``describe`` -> invoke. New CLI commands appear automatically with no
@@ -24,7 +32,7 @@ It serves :mod:`sellerclaw_cli.guides` — the same files the plugin's skills ar
 
 The screens
 -----------
-Alongside those four, :mod:`sellerclaw_cli.mcp_apps` contributes a small set of tools that answer
+Alongside those five, :mod:`sellerclaw_cli.mcp_apps` contributes a small set of tools that answer
 with an *interactive card* instead of JSON — what needs the owner, the store summary, orders,
 listings, catalog products, ads, connections, the plan and credits, and the approval request. They are a deliberate
 exception to the proxy design above, because a card is bound to one named tool and cannot be
@@ -96,34 +104,35 @@ SERVER_INSTRUCTIONS = (
     "they operate from, so treat it as the main interface, not a side channel.\n"
     "Some questions answer better as an interactive card than as text, and have their own tools: "
     "what needs the owner today (`sellerclaw_attention`), how a store is doing "
-    "(`sellerclaw_store_summary`), the orders, or one order (`sellerclaw_orders`), listings, or one "
-    "store's listing (`sellerclaw_listings`), a product with its supplier and every store it is "
-    "listed in (`sellerclaw_products`), how the ads are doing (`sellerclaw_ads`), whether the "
-    "connections are healthy (`sellerclaw_connections`), the plan, the credits left and what they "
-    "went on (`sellerclaw_billing`), something waiting on the owner "
-    "(`sellerclaw_approval`), generated images and videos or the owner's library of them "
-    "(`sellerclaw_media`), and the media studio where the owner describes it, picks or uploads photos "
-    "and chooses the price and quality "
-    "(`sellerclaw_media_studio`). Reach for these first when the question is one of those — the owner "
-    "gets something they can look at and act on instead of a wall of numbers — and do not also run "
-    "a command for the same data. Pass the owner's own words — an order number, a title, a SKU, a "
-    "marketplace id — and do not look up an id first: the card finds the thing, and opens it when "
-    "only one matches. You get a short summary back; they are reading the card, so do "
-    "not recite it to them. The cards only show: changing anything is still done with the commands "
-    "below, and when the owner presses a card's button to ask you for something, it reaches you as "
-    "an ordinary message from them.\n"
-    "The surface is large, so for everything else start with the guide for the job:\n"
-    "0. `sellerclaw_guide(topic)` — a short guide with ready-to-run calls for publishing and "
-    "maintaining listings, fulfilling orders, the catalog, suppliers, the seller's own SellerCart "
-    "storefront, mail and DMs, ads and campaigns, market research, how the business is doing, or "
-    "making images and videos. "
-    "Call it with no topic for the list, and read `start` once for the conventions every job "
-    "shares. Prefer running a guide's example over re-deriving the call.\n"
+    "(`sellerclaw_store_summary`), the orders or one order (`sellerclaw_orders`), listings or one "
+    "listing (`sellerclaw_listings`), a product with its supplier and every store it is listed in "
+    "(`sellerclaw_products`), the ads (`sellerclaw_ads`), the connections "
+    "(`sellerclaw_connections`), the plan and credits (`sellerclaw_billing`), something waiting on "
+    "the owner (`sellerclaw_approval`), generated images and videos (`sellerclaw_media`) and the "
+    "media studio (`sellerclaw_media_studio`). Use them for those questions instead of running a "
+    "command for the same data. Pass the owner's own words — an order number, a title, a SKU — "
+    "without looking up an id first: the card finds the thing. You get a short summary back; where "
+    "the client draws the card, the owner is reading it, so do not recite it. Cards only show: "
+    "changes go through the commands below, and a card button the owner presses reaches you as an "
+    "ordinary message from them.\n"
+    "Show the owner what you worked on: after you create or change something — publish a listing, "
+    "ship an order, add a product — open its card with the id from the answer, once any background "
+    "job behind it has finished. Where there is no card for it, or the client draws none, give its "
+    "essentials in a few lines: what it is, the values you set, its status, and its link if the "
+    "answer has one.\n"
+    "The surface is large, so for everything else start with the guides:\n"
+    "0. `sellerclaw_guide(topic)` — read `start` once first, for the rules every job shares; then "
+    "the guide for the job, with ready-to-run calls: listings, orders, the catalog, suppliers, the "
+    "seller's own SellerCart storefront, mail and DMs, ads and campaigns, market research, how the "
+    "business is doing, or images and videos. Call it with no topic for the list. Prefer running a "
+    "guide's example over re-deriving the call.\n"
     "For anything the guides do not cover, discover it:\n"
     "1. `sellerclaw_groups` — list command groups and their commands.\n"
     "2. `sellerclaw_describe(group)` — every command in that group with its positionals, flags, "
     "JSON body fields and a ready `call_example`. Pass `command` too for just one of them.\n"
-    "3. `sellerclaw_run(group, command, positionals, flags, body)` — invoke it.\n"
+    "3. `sellerclaw_read(group, command, positionals, flags, body)` runs a command that changes "
+    "nothing; `sellerclaw_write` with the same arguments runs one that changes something. "
+    "`sellerclaw_describe` names the tool for each command.\n"
     "Describe a command before running it the first time unless a guide already shows the call.\n"
     "Approvals: some actions (sending mail, launching campaigns or ad spend, paying for "
     "fulfilment, setting a store's markup, publishing the storefront) raise an approval request "
@@ -167,29 +176,53 @@ _GROUPS_TOOL_DESC = (
 )
 _DESCRIBE_TOOL_DESC = (
     "Full schema — HTTP method, positional arguments (in order), query flags (with "
-    "types/choices/ranges), JSON body fields, and a ready-to-use call_example for sellerclaw_run. "
+    "types/choices/ranges), JSON body fields, a ready-to-use call_example, and the `tool` that runs "
+    "it (sellerclaw_read or sellerclaw_write). "
     "Pass only `group` to get every command in it in one call; add `command` for a single one. "
-    "Call this before sellerclaw_run the first time you use a command."
+    "Call this before running a command the first time."
 )
-_RUN_TOOL_DESC = (
-    "Invoke a SellerClaw command. `positionals` is a {name: value} map for the path arguments, "
-    "`flags` a {name: value} map of filters, and `body` the JSON payload for write commands. "
-    "Use sellerclaw_describe to learn the exact names. Returns the API response JSON. "
+_CALL_SHAPE = (
+    "`positionals` is a {name: value} map for the path arguments, `flags` a {name: value} map of "
+    "filters, and `body` the JSON payload. Use sellerclaw_describe to learn the exact names. Returns "
+    "the API response JSON."
+)
+_READ_TOOL_DESC = (
+    "Read anything in SellerClaw without changing it — stores, orders, listings, the catalog, "
+    "suppliers, ads, mail, research and numbers. "
+    'Read sellerclaw_guide(topic="start") once before your first SellerClaw call: the rules every '
+    f"job shares. {_CALL_SHAPE} "
+    "Some lookups (market research, web search, site audits) cost credits. A command that changes "
+    "something is refused here with the tool that runs it: sellerclaw_write."
+)
+_WRITE_TOOL_DESC = (
+    "Make a change in SellerClaw — publish, update, ship, send, launch, pay or delete. "
+    'Read sellerclaw_guide(topic="start") once before your first SellerClaw call: the rules every '
+    f"job shares. {_CALL_SHAPE} "
+    "A command that only reads is refused here with the tool that runs it: sellerclaw_read. "
     "A few commands (bulk publishing, drafting, attribute mapping, generating images or videos) "
     "start background work and answer "
     "at once with the job instead of the outcome; that answer carries a `note` naming the call that "
-    "reads the finished job. Read it — do not re-send the command, which would start a second job."
+    "reads the finished job. Read it — do not re-send the command, which would start a second job. "
+    "After a write, show the owner what changed: the card tool for that thing (`sellerclaw_listings`, "
+    "`sellerclaw_orders`, `sellerclaw_products`) where there is one, otherwise its essentials in a "
+    "few lines. "
+    "When no SellerClaw command fits, the `shopify`, `ebay`, `amazon`, `etsy`, `walmart`, `wix`, "
+    "`woocommerce` and `bigcommerce` groups pass a raw call to that marketplace's own API — Shopify "
+    "Admin GraphQL, eBay REST and Trading, Amazon SP-API, Etsy Open API v3, Walmart Marketplace, "
+    "Wix, WooCommerce and BigCommerce REST — and always run here, even when the call only reads."
 )
 _GUIDE_TOOL_DESC = (
-    "Read the task guide for an area of work: `listings` (publish and maintain marketplace "
+    "SellerClaw's own instructions and task guides. `start` holds the rules every job shares — "
+    "cards, approvals, showing what you did; read it once before your first SellerClaw call. "
+    "Then the task guide for an area of work: `listings` (publish and maintain marketplace "
     "listings, and get a refused one through), `orders` (find, fulfill, ship, cancel), `catalog` "
     "(the owner's own products and their cost, bulk intake from a file), `suppliers` (source "
     "products, dropship orders), `storefront` (the owner's own SellerCart shop), `email` (mailbox, "
     "sending, social DMs), `ads` (Google, Meta, eBay Promoted, Klaviyo campaigns), `research` "
     "(keywords, trends, competitors, social), `analytics` (how the business is doing), `media` "
-    "(generate and edit images and videos, pick the model and its settings), or `start` "
-    "(how a call is shaped and the rules every job shares). Each guide is short and carries "
-    "ready-to-run sellerclaw_run examples — read the relevant one before a multi-step job instead "
+    "(generate and edit images and videos, pick the model and its settings). Each guide is short "
+    "and carries "
+    "ready-to-run examples — read the relevant one before a multi-step job instead "
     "of deriving the calls from schemas. Omit `topic` to list them."
 )
 
@@ -205,7 +238,7 @@ _GUIDE_TOOL_DESC = (
 #
 # So the MCP face is an allowlist: only the surface below is discoverable and callable. Everything
 # else stays in the CLI but is invisible to `sellerclaw_groups` / `sellerclaw_describe` /
-# `sellerclaw_run`. An allowlist (not a denylist) means a new agent-internal group added later
+# `sellerclaw_read` / `sellerclaw_write`. An allowlist (not a denylist) means a new agent-internal group added later
 # never leaks to users by default.
 #
 # The rule for what belongs here: **everything the owner runs their business with is visible; only
@@ -408,8 +441,22 @@ def _resolve(group: str, command: str) -> tuple[GroupSpec, Cmd]:
     return matched, cmd
 
 
+READ_TOOL = "sellerclaw_read"
+WRITE_TOOL = "sellerclaw_write"
+
+
+def _reads(cmd: Cmd) -> bool:
+    """Whether a command changes nothing — a GET, or a POST that carries a query (``read_only``)."""
+    return cmd.method == "GET" or cmd.read_only
+
+
+def _tool_for(cmd: Cmd) -> str:
+    """The tool that runs this command: :data:`READ_TOOL` for a read, :data:`WRITE_TOOL` otherwise."""
+    return READ_TOOL if _reads(cmd) else WRITE_TOOL
+
+
 def _flag_schema(f: Flag) -> dict[str, Any]:
-    """One flag rendered as a `sellerclaw_run` input key (snake_case ``name``), with constraints."""
+    """One flag rendered as a run tool's input key (snake_case ``name``), with constraints."""
     item: dict[str, Any] = {
         "name": f.name,
         "type": f.type.__name__,
@@ -433,7 +480,7 @@ def _flag_schema(f: Flag) -> dict[str, Any]:
 
 
 def _body_schema(b: Any) -> dict[str, Any]:
-    """One declared body field rendered as a `sellerclaw_run` ``body`` key."""
+    """One declared body field rendered as a run tool's ``body`` key."""
     item: dict[str, Any] = {
         "name": b.name,
         "type": b.type.__name__,
@@ -455,7 +502,7 @@ def _body_schema(b: Any) -> dict[str, Any]:
 
 
 def _call_example(group: str, cmd: Cmd) -> dict[str, Any]:
-    """A concrete `sellerclaw_run` argument object teaching the exact call shape."""
+    """A concrete run-tool argument object teaching the exact call shape."""
     example: dict[str, Any] = {"group": group, "command": cmd.name}
     positionals = positionals_of(cmd.path)
     if positionals:
@@ -552,7 +599,7 @@ def _background_job_schema(cmd: Cmd) -> dict[str, Any]:
 
 
 def _poll_call(cmd: Cmd, positionals: dict[str, Any], job: dict[str, Any]) -> str | None:
-    """The exact ``sellerclaw_run`` call that reads this job, ids filled in.
+    """The exact call that reads this job, ids filled in.
 
     A job id with no call to read it is a dead end, and the two ways out of a dead end are both bad:
     re-sending the write (two publishes where one was wanted) or reporting "started it" as the
@@ -569,14 +616,16 @@ def _poll_call(cmd: Cmd, positionals: dict[str, Any], job: dict[str, Any]) -> st
             return None
         args[name] = str(value)
     rendered = ", ".join(f'"{name}": "{value}"' for name, value in args.items())
-    return f'sellerclaw_run(group="{group}", command="{candidate.name}", positionals={{{rendered}}})'
+    tool = _tool_for(candidate)
+    return f'{tool}(group="{group}", command="{candidate.name}", positionals={{{rendered}}})'
 
 
 def _command_schema(group: str, cmd: Cmd) -> dict[str, Any]:
-    """Everything needed to build a valid `sellerclaw_run` for one command."""
+    """Everything needed to build a valid call of one command, and which tool makes it."""
     return {
         "group": group,
         "command": cmd.name,
+        "tool": _tool_for(cmd),
         "method": cmd.method,
         "path": cmd.path,
         "summary": cmd.summary,
@@ -711,7 +760,7 @@ def run_command(
             read_only=cmd.read_only,
         )
     if cmd.job_poll_path is None or not looks_like_job(result):
-        return result
+        return _point_at_approval_card(cmd, result)
     if is_finished(result):
         # It queued nothing in the end — a small batch can be done, or refused, by the time the call
         # returns. Then this payload *is* the answer, and "running in the background, read it later"
@@ -721,6 +770,77 @@ def run_command(
     if poll_call is None:
         return result
     return {**result, "note": queued_note_for_call(poll_call)}
+
+
+def read_command(
+    group: str,
+    command: str,
+    positionals: dict[str, Any] | None = None,
+    flags: dict[str, Any] | None = None,
+    body: dict[str, Any] | None = None,
+) -> Any:
+    """The ``sellerclaw_read`` tool: :func:`run_command` for a command that changes nothing."""
+    _require_kind(group, command, reads=True)
+    return run_command(group, command, positionals, flags, body)
+
+
+def write_command(
+    group: str,
+    command: str,
+    positionals: dict[str, Any] | None = None,
+    flags: dict[str, Any] | None = None,
+    body: dict[str, Any] | None = None,
+) -> Any:
+    """The ``sellerclaw_write`` tool: :func:`run_command` for a command that changes something."""
+    _require_kind(group, command, reads=False)
+    return run_command(group, command, positionals, flags, body)
+
+
+def _require_kind(group: str, command: str, *, reads: bool) -> None:
+    """Refuse, before anything is sent, a command of the other kind — naming the tool that runs it.
+
+    Not routed silently: a read tool that ran writes when asked would be exactly the tool a client
+    lets through without asking the owner, and the refusal costs one turn while teaching the caller
+    which tool the command belongs to.
+    """
+    matched, cmd = _resolve(group, command)
+    if _reads(cmd) == reads:
+        return
+    if reads:
+        raise UserInputError(
+            f"{matched.name} {cmd.name} changes something, so {READ_TOOL} does not run it: call "
+            f"{WRITE_TOOL} with the same arguments."
+        )
+    raise UserInputError(
+        f"{matched.name} {cmd.name} only reads, so {WRITE_TOOL} does not run it: call {READ_TOOL} "
+        "with the same arguments."
+    )
+
+
+_APPROVAL_CARD_NOTE = (
+    "Waiting on the owner. Show them the request as a card — "
+    'sellerclaw_approval(request="{request}") — and let them answer on it. Only if they reply to '
+    f'you in words instead, close it with {WRITE_TOOL}(group="action-requests", '
+    'command="confirm", positionals={{"request_id": "{request}"}}, '
+    'body={{"quote": "<their words, verbatim>"}}).'
+)
+
+
+def _point_at_approval_card(cmd: Cmd, result: Any) -> Any:
+    """A write the owner has to approve first comes back pointing at the card they answer it on.
+
+    The API's own ``message`` speaks to our agent, which closes an ask from its own chat. Here the
+    owner answers on the approval card, and the rule saying so in :data:`SERVER_INSTRUCTIONS` never
+    reaches the model on claude.ai, which drops server instructions (anthropics/claude-ai-mcp#93) —
+    so it travels with the answer instead. A read of something still pending is left alone: the
+    note is for the moment the ask was raised.
+    """
+    if _reads(cmd) or not isinstance(result, dict) or "note" in result:
+        return result
+    request = result.get("action_request_id")
+    if result.get("status") != "pending_approval" or not request:
+        return result
+    return {**result, "note": _APPROVAL_CARD_NOTE.format(request=request)}
 
 
 def _map_flags(group: str, command: str, cmd: Cmd, flags: dict[str, Any]) -> dict[str, Any]:
@@ -804,7 +924,7 @@ def _server_branding() -> dict[str, Any]:
 
 #: How long a client may treat our static lists as fresh, and who may share the cache.
 #:
-#: The four tools and their schemas are fixed by the installed version and identical for every
+#: The tools and their schemas are fixed by the installed version and identical for every
 #: account, so there is nothing per-user to leak and nothing to re-fetch mid-session; the commands
 #: behind them are read at call time, not from this list. Without a hint the SDK stamps ``ttlMs: 0``
 #: — "already stale" — and a client re-lists on every turn, paying for it in both round trips and a
@@ -881,18 +1001,18 @@ def _refusals_reach_the_caller(tool: Callable[..., Any]) -> Callable[..., Any]:
 
 
 def _register_tools(server: Any) -> None:
-    """Register the four discovery/proxy tools on an ``MCPServer``.
+    """Register the five discovery/proxy tools on an ``MCPServer``.
 
     Each carries a title as well as a name: the name is what a caller types, the title is what a
-    person reads in a permission dialog, where "Sellerclaw run" says a good deal less than "Run a
-    SellerClaw command".
+    person reads in a permission dialog, where "Sellerclaw write" says a good deal less than "Make a
+    change in SellerClaw".
 
     Each also carries annotations, because a client told nothing has to assume the worst: ChatGPT
     labels every unannotated tool "destructive" and "public write", so reading a guide came out
     looking exactly as dangerous as withdrawing a listing — and a warning that fires on everything
-    stops being read. Three of the four only read this process's own command registry and the
-    bundled guides; ``sellerclaw_run`` is the one that reaches the account and can change or
-    remove things in it.
+    stops being read. Three of the five only read this process's own command registry and the
+    bundled guides; ``sellerclaw_read`` reads the account, and ``sellerclaw_write`` is the one that
+    can change or remove things in it.
     """
     from mcp.types import ToolAnnotations
 
@@ -927,15 +1047,30 @@ def _register_tools(server: Any) -> None:
         annotations=_reads_only("Describe a SellerClaw command"),
     )
     server.add_tool(
-        _refusals_reach_the_caller(run_command),
-        name="sellerclaw_run",
-        title="Run a SellerClaw command",
-        description=_RUN_TOOL_DESC,
-        # The honest reading of the one tool that fronts every command: it writes, it can destroy
+        _refusals_reach_the_caller(read_command),
+        name=READ_TOOL,
+        title="Read from SellerClaw",
+        description=_READ_TOOL_DESC,
+        # It changes nothing, so a client may run it without asking — but it reaches the account and
+        # the marketplaces, research providers and the web behind it.
+        annotations=ToolAnnotations(
+            title="Read from SellerClaw",
+            read_only_hint=True,
+            destructive_hint=False,
+            idempotent_hint=True,
+            open_world_hint=True,
+        ),
+    )
+    server.add_tool(
+        _refusals_reach_the_caller(write_command),
+        name=WRITE_TOOL,
+        title="Make a change in SellerClaw",
+        description=_WRITE_TOOL_DESC,
+        # The honest reading of the tool that fronts every change: it writes, it can destroy
         # (withdraw a listing, cancel an order), running it twice is not the same as running it
         # once, and it reaches the outside world.
         annotations=ToolAnnotations(
-            title="Run a SellerClaw command",
+            title="Make a change in SellerClaw",
             read_only_hint=False,
             destructive_hint=True,
             idempotent_hint=False,
@@ -979,7 +1114,7 @@ def _register_prompts(server: Any) -> None:
 
 
 def build_server() -> Any:
-    """Construct the stdio MCP server with the four discovery/proxy tools.
+    """Construct the stdio MCP server with the five discovery/proxy tools.
 
     The optional ``mcp`` SDK is imported here (not at module load) so importing this module — and
     the core CLI — never requires it. Importing the CLI package populates the command ``REGISTRY``.
@@ -1171,7 +1306,8 @@ def _warn_if_unauthenticated() -> None:
 
     Written to stderr (never stdout, which carries the MCP protocol) — clients surface it in their
     logs. We warn rather than block: discovery (``sellerclaw_groups`` / ``sellerclaw_describe``) needs
-    no auth, only ``sellerclaw_run`` does, so the server still starts and the client can explore.
+    no auth, only ``sellerclaw_read`` / ``sellerclaw_write`` do, so the server still starts and the
+    client can explore.
     """
     import sys
 

@@ -41,6 +41,7 @@ SPECS = (
                 ),
             ),
         ),
+        read_only=True,
     ),
     Cmd(
         "confirm",
