@@ -128,6 +128,40 @@ def test_protected_resource_metadata_points_at_issuer() -> None:
     assert body["resource"].rstrip("/") == RESOURCE
 
 
+@pytest.mark.parametrize(
+    ("configured", "status", "body"),
+    [
+        pytest.param("tok_abc-123", 200, "tok_abc-123", id="configured"),
+        pytest.param("  tok_abc-123\n", 200, "tok_abc-123", id="surrounding-whitespace-dropped"),
+        pytest.param("", 404, None, id="empty"),
+        pytest.param(None, 404, None, id="unset"),
+    ],
+)
+def test_openai_domain_check_reads_the_token_from_the_environment(
+    monkeypatch: pytest.MonkeyPatch, configured: str | None, status: int, body: str | None
+) -> None:
+    """OpenAI's plugin dashboard fetches this path without a token and compares the body as is."""
+    monkeypatch.setenv("SELLERCLAW_MCP_ISSUER_URL", ISSUER)
+    monkeypatch.setenv("SELLERCLAW_MCP_RESOURCE_URL", RESOURCE)
+    monkeypatch.setenv("HOST", BIND_HOST)
+    if configured is None:
+        monkeypatch.delenv("SELLERCLAW_MCP_OPENAI_APPS_CHALLENGE", raising=False)
+    else:
+        monkeypatch.setenv("SELLERCLAW_MCP_OPENAI_APPS_CHALLENGE", configured)
+
+    async def _get() -> httpx.Response:
+        transport = httpx.ASGITransport(app=create_http_app())
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.get("/.well-known/openai-apps-challenge")
+
+    resp = asyncio.run(_get())
+
+    assert resp.status_code == status
+    if body is not None:
+        assert resp.text == body
+        assert resp.headers["content-type"].startswith("text/plain")
+
+
 def test_mcp_endpoint_challenges_unauthenticated_requests() -> None:
     resp = asyncio.run(
         _request(

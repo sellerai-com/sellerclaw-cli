@@ -47,15 +47,28 @@ SPECS = (
         "open",
         "POST",
         "/agent/chat/chats",
-        summary="Open a new chat with the owner about a topic they have not raised.",
+        summary=(
+            "Open a new chat with the owner: for a topic they have not raised, or for the news "
+            "of a job that has no chat of its own."
+        ),
         body=(
             body_field(
                 "title",
                 help=(
                     "Thread name in the owner's sidebar. Name the topic, not the action: "
-                    "'Order #1234 shipping address looks wrong'."
+                    "'Order #1234 shipping address looks wrong'. Defaults to the job's title "
+                    "with `team_task_id`."
                 ),
                 example="Order #1234 shipping address looks wrong",
+            ),
+            body_field(
+                "team_task_id",
+                option="--team-task-id",
+                help=(
+                    "The job this chat is for (from `team-tasks get`): ties the chat to the job, "
+                    "so its later news lands here. Refused when the job already has a chat — "
+                    "the error names it."
+                ),
             ),
         ),
     ),

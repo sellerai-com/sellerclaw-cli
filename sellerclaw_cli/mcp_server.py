@@ -1185,6 +1185,7 @@ def build_http_server(
     issuer_url: str,
     resource_url: str | None,
     api_url: str,
+    openai_apps_challenge: str | None = None,
 ) -> Any:
     """Build the hosted MCP server that authenticates every request as an OAuth resource server.
 
@@ -1194,6 +1195,11 @@ def build_http_server(
     ``resource_url`` carries no path, so RFC 9728 (which appends the resource's own path when it has
     one) leaves that metadata at the bare ``/.well-known/oauth-protected-resource`` — the same URL the
     deployment's health check probes.
+
+    ``openai_apps_challenge`` is the token OpenAI's plugin dashboard hands out to prove the MCP
+    hostname belongs to the publisher; it fetches it, unauthenticated, from
+    ``/.well-known/openai-apps-challenge``. Each deployment has its own, so it comes from the
+    environment, and without one the path is not served at all.
 
     Where it listens and whether it keeps sessions are transport decisions, and in the v2 SDK they
     belong to ``run()`` / ``streamable_http_app()`` rather than here — see :func:`serve_http`.
@@ -1227,7 +1233,19 @@ def build_http_server(
     )
     _register_tools(server)
     _register_prompts(server)
+    if openai_apps_challenge:
+        _register_openai_apps_challenge(server, openai_apps_challenge)
     return server
+
+
+def _register_openai_apps_challenge(server: Any, token: str) -> None:
+    """Answer OpenAI's domain check with the token, as plain text and without auth."""
+    from starlette.requests import Request
+    from starlette.responses import PlainTextResponse, Response
+
+    @server.custom_route("/.well-known/openai-apps-challenge", methods=["GET"])
+    async def _openai_apps_challenge(_request: Request) -> Response:
+        return PlainTextResponse(token)
 
 
 def _http_server_from_env() -> Any:
@@ -1244,6 +1262,8 @@ def _http_server_from_env() -> Any:
         issuer_url=issuer_url,
         resource_url=resource_url,
         api_url=_config.load().api_url,
+        openai_apps_challenge=os.environ.get("SELLERCLAW_MCP_OPENAI_APPS_CHALLENGE", "").strip()
+        or None,
     )
 
 
