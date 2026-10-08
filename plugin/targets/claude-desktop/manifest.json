@@ -108,7 +108,7 @@
     },
     {
       "name": "sellerclaw_connections",
-      "description": "Show your connections as an interactive card, broken ones first with the page that fixes them."
+      "description": "Show your connections as an interactive card: which work, and the page that fixes the ones that do not."
     },
     {
       "name": "sellerclaw_billing",

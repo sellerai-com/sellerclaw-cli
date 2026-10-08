@@ -58,9 +58,11 @@ waiting on them (`sellerclaw_approval`), generated images and videos (`sellercla
 media studio (`sellerclaw_media_studio`).
 
 - **For those questions, open the card** instead of running a command for the same data. Pass the
-  owner's own words — an order number, a title, a SKU — without looking up an id first: the card
-  finds the thing. You get a short summary back; where the client draws the card, the owner is
-  reading it, so don't recite it.
+  owner's own words — an order number, a title, a SKU, a store's name — without looking up an id
+  first: the card finds the thing. You get a short summary back; where the client draws the card,
+  the owner is reading it, so don't recite it.
+- **Cards are for the owner** — to work in, and to see what was asked for or what you did. Every call
+  draws the card in front of them, so gather what you need for your own next step with commands.
 - **Show the owner what you worked on.** After you publish a listing, ship an order, or add or change
   a product, open its card with the id from the answer, once any background job behind it has
   finished. Where there is no card for it, or the client draws none, give its essentials in a few

@@ -359,11 +359,11 @@ def _store_display_name(client: Client, store: str) -> str | None:
 
 
 def _store_identities(client: Client) -> list[dict[str, Any]]:
-    """Every store as a card names it: its id, its platform and the owner's name for it.
+    """Every store as a card names it: its id, its platform, the owner's name for it and its domain.
 
     A store row also carries its categories, settings and description — kilobytes a card never
-    draws — so only these three travel. Best-effort like the name above: a listing still reads
-    without its store's name, it just shows the platform instead.
+    draws — so only these travel; the domain is how an owner may name a web store. Best-effort like
+    the name above: a listing still reads without its store's name, it just shows the platform.
     """
     try:
         channels = client.request("GET", "/agent/sales-channels", read_only=True)
@@ -371,10 +371,39 @@ def _store_identities(client: Client) -> list[dict[str, Any]]:
         return []
     rows = channels if isinstance(channels, list) else (channels or {}).get("items") or []
     return [
-        {"id": row["id"], "platform": row.get("platform"), "display_name": row.get("display_name")}
+        {
+            "id": row["id"],
+            "platform": row.get("platform"),
+            "display_name": row.get("display_name"),
+            # A store with no web address (an eBay account) has no domain to name it by.
+            **({"domain": row["domain"]} if row.get("domain") else {}),
+        }
         for row in rows
         if isinstance(row, dict) and row.get("id")
     ]
+
+
+def _fold(text: Any) -> str:
+    """A store's name as the owner says it: case, spaces, hyphens and underscores ignored."""
+    return "".join(char for char in str(text or "").casefold() if char.isalnum())
+
+
+def _stores_named(reference: str, stores: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The stores the owner's word for one could mean: its id, the name they gave it, its domain,
+    its platform.
+
+    Tried in that order, and the first that answers wins — an owner with one eBay store says "my
+    eBay store", one with two says which by name. More than one store back means the word was not
+    enough to choose.
+    """
+    word = _fold(reference)
+    if not word:
+        return []
+    for key in ("id", "display_name", "domain", "platform"):
+        found = [store for store in stores if _fold(store.get(key)) == word]
+        if found:
+            return found
+    return []
 
 
 # ---------------------------------------------------------------------------------------------
@@ -387,6 +416,9 @@ def _store_identities(client: Client) -> list[dict[str, Any]]:
 # to talk about it. The same rule the screens follow applies here — a figure that is not there is
 # left out, never rendered as zero.
 
+
+#: How many orders a board reads at a time; the card's "Show more" asks for the next ones.
+_ORDERS_PAGE = 25
 
 #: What the order board treats as "still owed to the buyer" — the same set the screen leads with.
 _AWAITING_SHIPMENT_STATUSES = frozenset(
@@ -443,14 +475,20 @@ def _summarize_orders(payload: dict[str, Any]) -> str:
     overview = payload.get("overview") or {}
     found = payload.get("orders") or {}
     shown = len(found.get("items") or [])
-    query = (payload.get("filters") or {}).get("query")
+    filters = payload.get("filters") or {}
+    query = filters.get("query")
+    # A board narrowed to one store says whose orders these are; a store whose row could not be
+    # read is still one store, just without a name to give it.
+    store_id = filters.get("store")
+    store = (_store_name(payload.get("stores"), store_id) or "that store") if store_id else None
+    within = f" in {store}" if store else ""
     if query:
         if not shown:
             # Said with the reason, because "no such order" is usually "not one we ever saw".
             return (
-                f'No order matches "{query}". The board holds the orders SellerClaw has seen: an '
-                f"order joins while the marketplace still lists it unfulfilled, so one shipped "
-                f"before the store was connected was never imported. {_SHOWN_TO_THE_OWNER}"
+                f'No order matches "{query}"{within}. The board holds the orders SellerClaw has '
+                f"seen: an order joins while the marketplace still lists it unfulfilled, so one "
+                f"shipped before the store was connected was never imported. {_SHOWN_TO_THE_OWNER}"
             )
         total = found.get("total")
         head = (
@@ -458,17 +496,30 @@ def _summarize_orders(payload: dict[str, Any]) -> str:
             if isinstance(total, int) and total > shown
             else _plural(shown, "order")
         )
-        return f'{head} matching "{query}"; the owner can open the one they meant. {_SHOWN_TO_THE_OWNER}'
+        return (
+            f'{head}{within} matching "{query}"; the owner can open the one they meant. '
+            f"{_SHOWN_TO_THE_OWNER}"
+        )
     total = overview.get("total")
-    lines = [f"Showing {shown} orders." if total is None else f"Showing {shown} of {total} orders."]
+    source = f" from {store}" if store else ""
+    offset = found.get("offset") or 0
+    if offset and shown:
+        # A "Show more" page: the rows it added under the ones the card already had.
+        lines = [f"Showing orders {offset + 1}-{offset + shown} of {found.get('total')}{source}."]
+    else:
+        lines = [
+            f"Showing {shown} orders{source}." if total is None
+            else f"Showing {shown} of {total} orders{source}."
+        ]
     by_status = overview.get("by_status") or {}
     waiting = sum(
         count for status, count in by_status.items() if status in _AWAITING_SHIPMENT_STATUSES
     )
     if waiting:
-        # Said as "across the account" because that is what it is: the overview counts every order,
-        # while the rows above may be one filtered page of them.
-        lines.append(f"{waiting} across the account are waiting to ship.")
+        # Said as "across the account" because that is what it is: the overview counts every order
+        # (or every order of the one store the board is narrowed to), while the rows above may be
+        # one filtered page of them.
+        lines.append(f"{waiting}{within or ' across the account'} are waiting to ship.")
     lines.append(_SHOWN_TO_THE_OWNER)
     return " ".join(lines)
 
@@ -801,11 +852,37 @@ _CONNECTION_TROUBLE = {
     "provider_suspended": "switched off by the platform",
 }
 
+#: The sections the connections card lists connections under, as ``view`` names them — the same split
+#: the screen draws (``screens/Connections/connections.ts`` in the web app).
+_CONNECTION_SECTIONS = ("stores", "ads", "suppliers", "email", "research")
+#: The screens the connections card opens on: every connection, only what needs fixing, or a section.
+_CONNECTION_VIEWS = ("all", "needs_fixing", *_CONNECTION_SECTIONS)
+
+
+def _connection_section(kind: str) -> str:
+    if kind.endswith("_store"):
+        return "stores"
+    if kind in {"google_ads", "facebook_ads", "ebay_promoted"}:
+        return "ads"
+    if kind.startswith("supplier_"):
+        return "suppliers"
+    if kind in {"klaviyo_email", "email_mailbox", "social_dm"}:
+        return "email"
+    if kind.startswith("research_"):
+        return "research"
+    return "other"
+
 
 def _summarize_connections(payload: dict[str, Any]) -> str:
+    # A section's screen is about that section: the model should not talk about an ad account
+    # while the owner looks at their stores.
+    view = (payload.get("filters") or {}).get("view") or "all"
+    section = view if view in _CONNECTION_SECTIONS else None
     trouble: list[str] = []
     working = 0
     for group in payload.get("integrations") or []:
+        if section is not None and _connection_section(str(group.get("kind") or "")) != section:
+            continue
         service = group.get("display_name") or group.get("kind")
         for connection in group.get("connections") or []:
             name = connection.get("custom_name") or connection.get("name")
@@ -826,6 +903,8 @@ def _summarize_connections(payload: dict[str, Any]) -> str:
         lines = ["The one connection is working." if working == 1 else f"All {working} connections are working."]
     else:
         lines = ["Nothing is connected yet."]
+    if section is not None:
+        lines.insert(0, f"The {section} section of the connections.")
     lines.append(_SHOWN_TO_THE_OWNER)
     return " ".join(lines)
 
@@ -1197,21 +1276,25 @@ can switch the period on the card itself.
 Prefer this over running an analytics command for the same question — it answers it and shows it.
 The text you get back is a summary for you; the owner is reading the card.
 
-`store` takes one store id or several; omit it for every store on the account. `period` is one of
-last_7d, last_30d, last_90d, this_month, last_month, this_year.\
+`store` takes one store or several, each as the owner names it — the name they gave it, or its
+platform when they have one store there — or by its id; omit it for every store on the account.
+`period` is one of last_7d, last_30d, last_90d, this_month, last_month, this_year.\
 """
 
 _ORDERS_DESC = """\
 The order board as an interactive card: who is waiting, for how long, and for how much, oldest wait
-first. The owner can filter by status and open an order.
+first. The owner can switch the store and the status and open an order.
 
 Prefer this over running an orders command for the same question, and pass the owner's own words —
 do not look an order up first. `order` opens one order in full (its items, where it ships, the
 supplier's order and the tracking): the number they quote (#1001), the marketplace's order id
 (14-15000-75039) or the SellerClaw id. A number two stores share shows both to choose from.
 `query` narrows the board to orders matching the buyer's name or email, a SKU or item title, or
-part of a number — and opens the order itself when only one matches. `status` opens on one
-status; omit everything for the whole board.
+part of a number — and opens the order itself when only one matches. `store` narrows it to one
+store: the owner's name for it, its platform when they have one store there, or its id. `status`
+opens on one status; omit everything for the whole board across every store. The board lists the
+orders waiting on someone first, longest wait first, a page at a time; `offset` is where the next
+page starts, and the owner pages through it on the card.
 
 Open it also right after you ship, cancel or change an order: `order` with its id or number.\
 """
@@ -1234,7 +1317,8 @@ refused, and the same product in the owner's other stores.
 
 Pass the owner's own words; do not look a listing up first. `query` finds listings by part of the
 title, a SKU or the marketplace's item number, and opens the listing itself when only one matches.
-Narrow a list by `store` (a store id) or `status` (draft, active, published, withdrawn, removed).
+Narrow a list by `store` — the owner's name for it, its platform when they have one store there, or
+its id — or by `status` (draft, active, published, withdrawn, removed).
 `sale_state` narrows it by whether a shopper can buy the listing — selling, out_of_stock,
 not_selling (hidden, under review, refused or gone from the marketplace), not_published; pass
 several. "Which listings aren't selling?" is `["out_of_stock", "not_selling"]`: a live listing
@@ -1276,8 +1360,13 @@ a campaign, use the ads commands.\
 """
 
 _CONNECTIONS_DESC = """\
-Everything the business is connected to — stores, ad accounts, suppliers, email — as an interactive
-card, with what is broken first and a link to the page on the SellerClaw website that fixes each.
+Every connection the business runs on — stores, ad accounts, suppliers, email, research — as an
+interactive card: whether each one works and, where the owner has to act, a link to the page on the
+SellerClaw website that fixes it.
+
+`view` picks the screen it opens on: `all` (the default) lists every connection by section,
+`needs_fixing` only what the owner has to act on, and `stores`, `ads`, `suppliers`, `email` or
+`research` one section. The owner can switch screens on the card.
 
 Reconnecting a marketplace always happens on that page, signed in as the owner; you cannot do it for
 them, and a connection the platform itself switched off will not come back by reconnecting.\
@@ -1386,6 +1475,23 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
         connect_domains=[],
         resource_domains=[apps_base(), media_base(), *_IMAGE_CDN_DOMAINS],
     )
+    resource_meta = {
+        "ui": {
+            "csp": csp.model_dump(by_alias=True, exclude_none=True),
+            # The screens draw their own frame; a second one from the host would double it.
+            "prefersBorder": False,
+        },
+        # The same policy under ChatGPT's own key, in its snake_case names. Its docs call ``ui.csp``
+        # the standard, but a published ChatGPT app has been seen taking the policy only from here
+        # and otherwise applying a default that blocks every outside script — a blank card that
+        # developer mode never shows, because it enforces no policy at all ("CSP off"). Dumped from
+        # the one object so the two cannot drift.
+        "openai/widgetCSP": csp.model_dump(exclude_none=True),
+        # Where the screens are hosted, which the plugin directory requires of a plugin with UI.
+        # Only under ChatGPT's key: every host reads ``ui.domain``, and Claude accepts nothing there
+        # but its own ``<hash>.claudemcpcontent.com`` — our origin in it would break Claude's cards.
+        "openai/widgetDomain": apps_base(),
+    }
     for screen in SCREENS:
         apps.add_resource(
             FunctionResource(
@@ -1397,14 +1503,7 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
                 # ``FunctionResource`` calls this at read time, on a worker thread — the fetch never
                 # blocks the event loop, and listing resources costs nothing.
                 fn=lambda screen=screen: fetch_document(screen),  # type: ignore[misc]
-                meta={
-                    "ui": {
-                        "csp": csp.model_dump(by_alias=True, exclude_none=True),
-                        # The screens draw their own frame; a second one from the host would
-                        # double it.
-                        "prefersBorder": False,
-                    }
-                },
+                meta=resource_meta,
             )
         )
 
@@ -1429,10 +1528,27 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
             open_world_hint=True,
         )
 
+    def _store_selection(client: Client, store: str | list[str] | None) -> str | list[str] | None:
+        """The stores a summary covers, as ids — each named by the owner's words or by its id.
+
+        The card sends ids back on every period switch, so ids alone skip reading the stores.
+        """
+        given = [store] if isinstance(store, str) else list(store or [])
+        words = [word for word in (_words(value) for value in given) if word is not None]
+        if not words or any(word.casefold() == "all" for word in words):
+            return None
+        if all(_is_uuid(word) for word in words):
+            ids = words
+        else:
+            stores = _store_identities(client)
+            ids = [str(_store_id(word, stores)) for word in words]
+        ids = list(dict.fromkeys(ids))
+        return ids[0] if len(ids) == 1 else ids
+
     def _read_store_summary(
         client: Client, store: str | list[str] | None, period: str | None
     ) -> dict[str, Any]:
-        primary, extra = _one_or_many(store)
+        primary, extra = _one_or_many(_store_selection(client, store))
         window = _query(period=period)
         metrics = client.request(
             "GET",
@@ -1489,17 +1605,36 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
     def _read_orders(
         client: Client,
         *,
+        store: str | None,
         status: str | None,
         query: str | None,
         limit: int | None,
+        offset: int | None = None,
+        stores: list[dict[str, Any]] | None = None,
         open_only_match: bool = True,
     ) -> dict[str, Any]:
-        """The board — or, when the owner's words name exactly one order, that order."""
-        filters = _query(status=status, query=query, limit=limit)
+        """The board — or, when the owner's words name exactly one order, that order.
+
+        ``store`` is a store id, already resolved from the owner's words (``_store_id``);
+        ``stores`` are the identities read to resolve it, so a board does not read them twice.
+        The board reads as a queue — the orders waiting on someone first, longest wait first — a
+        page at a time; ``offset`` is where the card's "Show more" picks up.
+        """
+        filters = _query(store=store, status=status, query=query, limit=limit)
         orders = client.request(
-            "GET", "/agent/orders", params=_query(status=status, q=query, limit=limit), read_only=True
+            "GET",
+            "/agent/orders",
+            params=_query(
+                sales_channel_id=store,
+                status=status,
+                q=query,
+                sort="waiting_first",
+                limit=limit or _ORDERS_PAGE,
+                offset=offset or None,
+            ),
+            read_only=True,
         )
-        only = _only_match(orders) if query and open_only_match else None
+        only = _only_match(orders) if query and open_only_match and not offset else None
         if only is not None:
             # Asked for "Jane's order" and there is one: the order, not a board of one row. Marked,
             # so the card's "Back" goes to the whole board instead of searching its way back here.
@@ -1507,13 +1642,27 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
             return {**order, "filters": filters, "sole_match": True}
         return {
             "orders": orders,
-            "overview": client.request("GET", "/agent/orders/overview", read_only=True),
-            # Echoed so the card shows the status it was opened on and "Back" returns to this board.
+            # The same store as the rows: a board of one store under the account's counts would
+            # offer status chips for orders it does not show.
+            "overview": client.request(
+                "GET", "/agent/orders/overview", params=_query(sales_channel_id=store), read_only=True
+            ),
+            # Every store, so the card can offer the owner the others.
+            "stores": stores if stores is not None else _store_identities(client),
+            # Echoed so the card shows the store and status it was opened on and "Back" returns to
+            # this board.
             "filters": filters,
         }
 
     def _read_named_order(
-        client: Client, reference: str, *, status: str | None, query: str | None, limit: int | None
+        client: Client,
+        reference: str,
+        *,
+        store: str | None,
+        status: str | None,
+        query: str | None,
+        limit: int | None,
+        stores: list[dict[str, Any]] | None,
     ) -> dict[str, Any]:
         """The order the owner named — our id, its number or the marketplace's id.
 
@@ -1528,11 +1677,52 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
             if exc.status not in (404, 409):
                 raise
             return _read_orders(
-                client, status=status, query=reference, limit=limit, open_only_match=False
+                client,
+                store=store,
+                status=status,
+                query=reference,
+                limit=limit,
+                stores=stores,
+                open_only_match=False,
             )
         # The board the order was opened from, carried along for "Back".
-        payload["filters"] = _query(status=status, query=query, limit=limit)
+        payload["filters"] = _query(store=store, status=status, query=query, limit=limit)
         return payload
+
+    def _store_id(store: str | None, stores: list[dict[str, Any]]) -> str | None:
+        """The store a card is narrowed to, as the id the Agent API filters by.
+
+        The owner names a store by what they called it or by its platform, not by our id; the card
+        sends the id back. A word no store answers to, or one several do, is refused naming the
+        stores, so the next call can pick — a card quietly widened to every store would pass for
+        the store that was asked about. Taking the words here is what keeps Claude from opening the
+        connections card just to look a store's id up: that card leads with whatever is broken on
+        the account, which is not what the owner asked about.
+        """
+        reference = _words(store)
+        # "all" is how the Agent API names every store; a card reads every store without a filter.
+        if reference is None or reference.casefold() == "all":
+            return None
+        found = _stores_named(reference, stores)
+        if len(found) == 1:
+            return str(found[0]["id"])
+        if not found and _is_uuid(reference):
+            # A store row that could not be read: the API filters by the id all the same.
+            return reference
+        named = "; ".join(
+            f"{row.get('display_name') or row.get('platform')} ({row.get('platform')}, id {row['id']})"
+            for row in found or stores
+        )
+        if found:
+            raise ToolError(
+                f'{len(found)} stores answer to "{reference}": {named}. '
+                "Pass `store` with the id of the one the owner meant."
+            )
+        if not stores:
+            raise ToolError(
+                f'The stores could not be read to find "{reference}"; pass `store` with the store\'s id.'
+            )
+        raise ToolError(f'No store answers to "{reference}". The stores are: {named}.')
 
     def _listing_detail(client: Client, reference: str) -> dict[str, Any] | None:
         """One listing by our id, or ``None`` when the words are not one of our ids."""
@@ -1595,6 +1785,7 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
         limit: int | None,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {"stores": _store_identities(client)}
+        store = _store_id(store, payload["stores"])
         if listing is not None:
             detail = _listing_detail(client, listing)
             if detail is not None:
@@ -1709,8 +1900,15 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
             ),
         }
 
-    def _read_connections(client: Client) -> dict[str, Any]:
-        return {"integrations": client.request("GET", "/agent/integrations", read_only=True)}
+    def _read_connections(client: Client, view: str | None) -> dict[str, Any]:
+        if view is not None and view not in _CONNECTION_VIEWS:
+            raise ToolError(f"view is one of {', '.join(_CONNECTION_VIEWS)}; got {view!r}.")
+        return {
+            "integrations": client.request("GET", "/agent/integrations", read_only=True),
+            # Echoed so the card opens on the screen asked for; every screen is drawn from this one
+            # answer, so the owner's switching asks for nothing more.
+            "filters": _query(view=view),
+        }
 
     def _read_billing(client: Client) -> dict[str, Any]:
         return {"billing": client.request("GET", "/agent/billing/overview", read_only=True)}
@@ -1769,15 +1967,35 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
         limit: int | None = None,
         order: str | None = None,
         query: str | None = None,
+        store: str | None = None,
+        offset: int | None = None,
     ) -> Any:
         with _refusals_in_their_own_words(), client_for_tool(DEFAULT_TIMEOUT_SECONDS) as client:
             reference = _words(order)
+            # Read only to turn the owner's name for a store into its id; a board without one
+            # reads them itself, for the card's store switcher.
+            stores = _store_identities(client) if _words(store) else None
+            store_id = _store_id(store, stores or [])
             if reference is not None:
                 payload = _read_named_order(
-                    client, reference, status=status, query=_words(query), limit=limit
+                    client,
+                    reference,
+                    store=store_id,
+                    status=status,
+                    query=_words(query),
+                    limit=limit,
+                    stores=stores,
                 )
             else:
-                payload = _read_orders(client, status=status, query=_words(query), limit=limit)
+                payload = _read_orders(
+                    client,
+                    store=store_id,
+                    status=status,
+                    query=_words(query),
+                    limit=limit,
+                    offset=offset,
+                    stores=stores,
+                )
         if "order" in payload:
             return _result(payload, _summarize_order(payload))
         return _result(payload, _summarize_orders(payload))
@@ -1900,9 +2118,9 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
         description=_CONNECTIONS_DESC,
         annotations=_reads_only("Show the connections"),
     )
-    def sellerclaw_connections() -> Any:
+    def sellerclaw_connections(view: str | None = None) -> Any:
         with _refusals_in_their_own_words(), client_for_tool(DEFAULT_TIMEOUT_SECONDS) as client:
-            payload = _read_connections(client)
+            payload = _read_connections(client, (_words(view) or "").lower() or None)
         return _result(payload, _summarize_connections(payload))
 
     @card_tool(

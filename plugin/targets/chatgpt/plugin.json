@@ -62,6 +62,7 @@
       },
       "onboardingSkill": "./skills/sellerclaw/SKILL.md",
       "review": {
+        "demo_recording_url": "https://youtu.be/Xxqa220uGPg",
         "test_cases": {
           "positive": [
             {
