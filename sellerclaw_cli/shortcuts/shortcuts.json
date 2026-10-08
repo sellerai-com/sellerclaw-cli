@@ -23,8 +23,8 @@
     "file": "orders.md",
     "words": {
       "name": "order",
-      "hint": "[#order | buyer | SKU | status]",
-      "description": "An order number (#1001), a buyer, a SKU or item, or a status. Empty for the whole board."
+      "hint": "[#order | buyer | SKU | status | store]",
+      "description": "An order number (#1001), a buyer, a SKU or item, a status or a store. Empty for the whole board."
     }
   },
   {

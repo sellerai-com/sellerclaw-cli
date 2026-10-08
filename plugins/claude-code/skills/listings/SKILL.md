@@ -9,7 +9,7 @@ Show the listings: call `sellerclaw_listings` with the owner's words — do not 
 
 - A title, a SKU or a marketplace item number → `query`.
 - "Not selling" or "out of stock" → `sale_state`: `["out_of_stock", "not_selling"]` for both.
-- A store → its id from `sellerclaw_read(group="channels", command="list")` as `store`.
+- A store (its name, or its platform) → `store`.
 - No words → no arguments.
 
 Owner's words: $ARGUMENTS

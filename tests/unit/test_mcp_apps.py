@@ -203,6 +203,24 @@ def test_the_resource_declares_our_origin_and_asks_for_no_network() -> None:
     assert resources["ui://sellerclaw/orders.html"].mime_type == "text/html;profile=mcp-app"
 
 
+def test_chatgpt_gets_the_same_policy_under_its_own_keys() -> None:
+    """A published ChatGPT app may read the policy only from ``openai/widgetCSP``.
+
+    Without it the card gets a default that blocks our scripts — and developer mode, which enforces
+    nothing, never shows it. The domain goes only under ChatGPT's key: Claude refuses a ``ui.domain``
+    that is not its own hash.
+    """
+    resources = {str(r.uri): r for r in asyncio.run(build_server().list_resources())}
+    meta = resources["ui://sellerclaw/orders.html"].meta or {}
+
+    assert meta["openai/widgetCSP"] == {
+        "connect_domains": [],
+        "resource_domains": meta["ui"]["csp"]["resourceDomains"],
+    }
+    assert meta["openai/widgetDomain"] == APPS_BASE
+    assert "domain" not in meta["ui"]
+
+
 # --------------------------------------------------------------------------- the document
 
 
@@ -219,7 +237,10 @@ def test_the_screen_is_served_exactly_as_the_web_app_built_it() -> None:
     assert contents[0].content == html
     assert contents[0].mime_type == "text/html;profile=mcp-app"
     # The CSP has to ride along on the read: hosts take it from here, not from the listing.
-    assert (contents[0].meta or {})["ui"]["csp"]["resourceDomains"][0] == APPS_BASE
+    meta = contents[0].meta or {}
+    assert meta["ui"]["csp"]["resourceDomains"][0] == APPS_BASE
+    assert meta["openai/widgetCSP"]["resource_domains"][0] == APPS_BASE
+    assert meta["openai/widgetDomain"] == APPS_BASE
 
 
 @respx.mock
@@ -412,6 +433,120 @@ def test_the_whole_account_is_the_default_view(
     assert "store_name" not in result.structured_content
 
 
+@pytest.mark.parametrize(
+    ("named", "in_path", "alongside"),
+    [
+        pytest.param("my  shopify", None, None, id="unknown-words-are-refused"),
+        pytest.param("Shopify", "SHOP", [], id="its-platform-when-it-is-the-only-one-there"),
+        pytest.param(["Pawpilot Shop", "ebay"], "SHOP", ["STORE"], id="several-by-name-and-platform"),
+        pytest.param(["pawpilot shop", "Pawpilot Shop"], "SHOP", [], id="the-same-store-twice-counts-once"),
+    ],
+)
+@respx.mock
+def test_a_summary_takes_the_stores_as_the_owner_names_them(
+    env_pointing_at_fake_api: None,
+    fake_api_url: str,
+    named: str | list[str],
+    in_path: str | None,
+    alongside: list[str] | None,
+) -> None:
+    """"How is my Shopify store doing?" — no trip through the connections card for an id first."""
+    ids = {"SHOP": SHOP_ID, "STORE": STORE_ID}
+    stores = _two_stores(fake_api_url)
+    metrics = respx.get(url__regex=rf"{fake_api_url}/agent/analytics/stores/[^/]+/metrics").mock(
+        return_value=httpx.Response(200, json={"revenue": "1.00"})
+    )
+    respx.get(url__regex=rf"{fake_api_url}/agent/analytics/stores/[^/]+/timeseries").mock(
+        return_value=httpx.Response(200, json={"points": []})
+    )
+    respx.get(url__regex=rf"{fake_api_url}/agent/sales-channels/[^/]+").mock(
+        return_value=httpx.Response(200, json={"display_name": "Pawpilot Shop"})
+    )
+
+    if in_path is None:
+        with pytest.raises(ToolError, match=r'No store answers to "my  shopify"\. The stores are: Pawpilot Supply'):
+            _call("sellerclaw_store_summary", {"store": named})
+        assert metrics.call_count == 0
+        return
+    _call("sellerclaw_store_summary", {"store": named})
+
+    asked = metrics.calls[0].request
+    assert asked.url.path == f"/agent/analytics/stores/{ids[in_path]}/metrics"
+    assert asked.url.params.get_list("store") == [ids[key] for key in alongside or []]
+    assert stores.call_count == 1
+
+
+@pytest.mark.parametrize("named", ["all", ["ALL"], " All "])
+@respx.mock
+def test_all_is_every_store_and_reads_no_stores(
+    env_pointing_at_fake_api: None, fake_api_url: str, named: str | list[str]
+) -> None:
+    """The Agent API's own word for every store reaches the summary and the board unfiltered."""
+    stores = _two_stores(fake_api_url)
+    respx.get(f"{fake_api_url}/agent/analytics/stores/all/metrics").mock(
+        return_value=httpx.Response(200, json={"revenue": "1.00"})
+    )
+    respx.get(f"{fake_api_url}/agent/analytics/stores/all/timeseries").mock(
+        return_value=httpx.Response(200, json={"points": []})
+    )
+    orders = respx.get(f"{fake_api_url}/agent/orders").mock(
+        return_value=httpx.Response(200, json={"items": [], "total": 0})
+    )
+    respx.get(f"{fake_api_url}/agent/orders/overview").mock(
+        return_value=httpx.Response(200, json={"total": 0, "by_status": {}})
+    )
+
+    _call("sellerclaw_store_summary", {"store": named})
+    board = _call("sellerclaw_orders", {"store": named[0] if isinstance(named, list) else named})
+
+    assert "sales_channel_id" not in dict(orders.calls[0].request.url.params)
+    assert "store" not in board.structured_content["filters"]
+    # Read once, for the board's switcher — never to look "all" up.
+    assert stores.call_count == 1
+
+
+@respx.mock
+def test_a_summary_the_card_reads_again_by_id_does_not_read_the_stores(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    """The card sends ids back on every period switch; looking them up would be a wasted read."""
+    stores = _two_stores(fake_api_url)
+    respx.get(f"{fake_api_url}/agent/analytics/stores/{STORE_ID}/metrics").mock(
+        return_value=httpx.Response(200, json={"revenue": "1.00"})
+    )
+    respx.get(f"{fake_api_url}/agent/analytics/stores/{STORE_ID}/timeseries").mock(
+        return_value=httpx.Response(200, json={"points": []})
+    )
+
+    _call("sellerclaw_store_summary", {"store": [STORE_ID, SHOP_ID]})
+
+    assert stores.call_count == 0
+
+
+@pytest.mark.parametrize(
+    "named",
+    [
+        pytest.param("Pawpilot Shop", id="the-owners-name-for-it"),
+        # The listings API took a domain before the cards learned names; it still has to work.
+        pytest.param("pawpilot.myshopify.com", id="its-domain"),
+    ],
+)
+@respx.mock
+def test_listings_take_the_store_as_the_owner_names_it(
+    env_pointing_at_fake_api: None, fake_api_url: str, named: str
+) -> None:
+    _two_stores(fake_api_url)
+    search = respx.get(f"{fake_api_url}/agent/listings/search").mock(
+        return_value=httpx.Response(200, json={"items": [], "total": 0})
+    )
+
+    result = _call("sellerclaw_listings", {"store": named, "status": "draft"})
+
+    assert dict(search.calls[0].request.url.params) == {"store_id": SHOP_ID, "status": "draft"}
+    # The card sends the id back for "Back", whatever the owner called the store.
+    assert result.structured_content["filters"] == {"store": SHOP_ID, "status": "draft"}
+
+
 @respx.mock
 def test_the_order_board_carries_its_own_totals(
     env_pointing_at_fake_api: None, fake_api_url: str
@@ -422,12 +557,17 @@ def test_the_order_board_carries_its_own_totals(
     respx.get(f"{fake_api_url}/agent/orders/overview").mock(
         return_value=httpx.Response(200, json={"total": 1, "by_status": {"new": 1}})
     )
+    _two_stores(fake_api_url)
 
     result = _call("sellerclaw_orders", {"status": "new"})
 
-    assert set(result.structured_content) == {"orders", "overview", "filters"}
+    assert set(result.structured_content) == {"orders", "overview", "stores", "filters"}
     assert result.structured_content["filters"] == {"status": "new"}
-    assert dict(orders.calls[0].request.url.params) == {"status": "new"}
+    assert result.structured_content["stores"] == [
+        {"id": STORE_ID, "platform": "ebay", "display_name": "Pawpilot Supply"},
+        {"id": SHOP_ID, "platform": "shopify", "display_name": "Pawpilot Shop", "domain": "pawpilot.myshopify.com"},
+    ]
+    assert dict(orders.calls[0].request.url.params) == {**_QUEUE_PAGE, "status": "new"}
 
 
 @respx.mock
@@ -438,13 +578,203 @@ def test_an_unfiltered_board_does_not_ask_for_the_status_none(
     orders = respx.get(f"{fake_api_url}/agent/orders").mock(
         return_value=httpx.Response(200, json={"items": []})
     )
+    overview = respx.get(f"{fake_api_url}/agent/orders/overview").mock(
+        return_value=httpx.Response(200, json={"total": 0, "by_status": {}})
+    )
+    _two_stores(fake_api_url)
+
+    _call("sellerclaw_orders", {"status": None, "store": None})
+
+    assert dict(orders.calls[0].request.url.params) == _QUEUE_PAGE
+    assert dict(overview.calls[0].request.url.params) == {}
+
+
+SHOP_ID = "33333333-3333-4333-8333-333333333333"
+OTHER_EBAY_ID = "55555555-5555-4555-8555-555555555555"
+#: What every board read asks for besides its filters: the queue order, a page at a time.
+_QUEUE_PAGE = {"sort": "waiting_first", "limit": "25"}
+
+
+@respx.mock
+def test_show_more_reads_the_next_page_of_the_same_board(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    """The card's "Show more": the same store and status from where the first page ended — and
+    the words it sends stay a board even when the next page holds one order."""
+    orders = respx.get(f"{fake_api_url}/agent/orders").mock(
+        return_value=httpx.Response(
+            200, json={"items": [{"id": ORDER_ID}], "total": 26, "limit": 25, "offset": 25}
+        )
+    )
+    respx.get(f"{fake_api_url}/agent/orders/overview").mock(
+        return_value=httpx.Response(200, json={"total": 26, "by_status": {"new": 26}})
+    )
+    _two_stores(fake_api_url)
+
+    result = _call(
+        "sellerclaw_orders", {"store": SHOP_ID, "status": "new", "query": "jane", "offset": 25}
+    )
+
+    assert dict(orders.calls[0].request.url.params) == {
+        **_QUEUE_PAGE,
+        "sales_channel_id": SHOP_ID,
+        "status": "new",
+        "q": "jane",
+        "offset": "25",
+    }
+    # The filters stay the board's, so "Back" lands on its first page.
+    assert result.structured_content["filters"] == {"store": SHOP_ID, "status": "new", "query": "jane"}
+    assert result.structured_content["orders"]["items"] == [{"id": ORDER_ID}]
+    assert "sole_match" not in result.structured_content
+
+
+def test_a_show_more_page_tells_the_model_which_orders_it_added() -> None:
+    text = mcp_apps._summarize_orders(
+        {
+            "orders": {"items": [{"id": "o"}] * 25, "total": 214, "offset": 25},
+            "overview": {"total": 214, "by_status": {"new": 3}},
+            "filters": {},
+        }
+    )
+
+    assert text.startswith("Showing orders 26-50 of 214.")
+
+
+def _two_stores(fake_api_url: str, *extra: dict[str, Any]) -> respx.Route:
+    return respx.get(f"{fake_api_url}/agent/sales-channels").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {"id": STORE_ID, "platform": "ebay", "display_name": "Pawpilot Supply", "settings": {}},
+                {
+                    "id": SHOP_ID,
+                    "platform": "shopify",
+                    "display_name": "Pawpilot Shop",
+                    "domain": "pawpilot.myshopify.com",
+                },
+                *extra,
+            ],
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    "named",
+    [
+        pytest.param(SHOP_ID, id="our-id"),
+        pytest.param("  pawpilot  SHOP ", id="the-owners-name-for-it"),
+        pytest.param("Shopify", id="its-platform-when-it-is-the-only-one-there"),
+    ],
+)
+@respx.mock
+def test_a_board_narrowed_to_one_store_reads_that_stores_rows_and_counts(
+    env_pointing_at_fake_api: None, fake_api_url: str, named: str
+) -> None:
+    """"My Shopify orders": the rows and the status counts are both the one store's."""
+    orders = respx.get(f"{fake_api_url}/agent/orders").mock(
+        return_value=httpx.Response(200, json={"items": [{"id": ORDER_ID}], "total": 1})
+    )
+    overview = respx.get(f"{fake_api_url}/agent/orders/overview").mock(
+        return_value=httpx.Response(200, json={"total": 1, "by_status": {"new": 1}})
+    )
+    stores = _two_stores(fake_api_url)
+
+    result = _call("sellerclaw_orders", {"store": named, "status": "new"})
+
+    assert dict(orders.calls[0].request.url.params) == {
+        **_QUEUE_PAGE,
+        "sales_channel_id": SHOP_ID,
+        "status": "new",
+    }
+    assert dict(overview.calls[0].request.url.params) == {"sales_channel_id": SHOP_ID}
+    # The card sends the id back, whatever the owner called the store.
+    assert result.structured_content["filters"] == {"store": SHOP_ID, "status": "new"}
+    assert [row["id"] for row in result.structured_content["stores"]] == [STORE_ID, SHOP_ID]
+    # Read once: the identities that resolved the name are the ones the switcher is drawn from.
+    assert stores.call_count == 1
+    assert result.content[0].text.startswith("Showing 1 of 1 orders from Pawpilot Shop.")
+
+
+@pytest.mark.parametrize(
+    ("named", "channels", "refusal"),
+    [
+        pytest.param(
+            "ebay",
+            [{"id": OTHER_EBAY_ID, "platform": "ebay", "display_name": "Pawpilot Outlet"}],
+            r'2 stores answer to "ebay": Pawpilot Supply \(ebay, id 1111.*Pawpilot Outlet \(ebay, id 5555',
+            id="two-stores-on-the-platform",
+        ),
+        pytest.param(
+            "Etsy shop",
+            [],
+            r'No store answers to "Etsy shop"\. The stores are: Pawpilot Supply \(ebay, id 1111',
+            id="no-such-store",
+        ),
+    ],
+)
+@respx.mock
+def test_a_store_the_words_do_not_single_out_is_refused_naming_the_stores(
+    env_pointing_at_fake_api: None,
+    fake_api_url: str,
+    named: str,
+    channels: list[dict[str, Any]],
+    refusal: str,
+) -> None:
+    """Widening to every store would pass the whole account off as the store that was asked about."""
+    _two_stores(fake_api_url, *channels)
+    orders = respx.get(f"{fake_api_url}/agent/orders")
+
+    with pytest.raises(ToolError, match=refusal):
+        _call("sellerclaw_orders", {"store": named})
+    assert orders.call_count == 0
+
+
+@pytest.mark.parametrize(
+    ("named", "reads"),
+    [
+        pytest.param(SHOP_ID, True, id="an-id-is-filtered-by-all-the-same"),
+        pytest.param("Pawpilot Shop", False, id="a-name-cannot-be-resolved"),
+    ],
+)
+@respx.mock
+def test_a_store_named_while_the_stores_cannot_be_read(
+    env_pointing_at_fake_api: None, fake_api_url: str, named: str, reads: bool
+) -> None:
+    respx.get(f"{fake_api_url}/agent/sales-channels").mock(
+        return_value=httpx.Response(500, json={"detail": "database is down"})
+    )
+    orders = respx.get(f"{fake_api_url}/agent/orders").mock(
+        return_value=httpx.Response(200, json={"items": [], "total": 0})
+    )
     respx.get(f"{fake_api_url}/agent/orders/overview").mock(
         return_value=httpx.Response(200, json={"total": 0, "by_status": {}})
     )
 
-    _call("sellerclaw_orders", {"status": None})
+    if reads:
+        result = _call("sellerclaw_orders", {"store": named})
+        assert dict(orders.calls[0].request.url.params) == {**_QUEUE_PAGE, "sales_channel_id": SHOP_ID}
+        assert result.structured_content["stores"] == []
+        assert result.content[0].text.startswith("Showing 0 of 0 orders from that store.")
+    else:
+        with pytest.raises(ToolError, match='The stores could not be read to find "Pawpilot Shop"'):
+            _call("sellerclaw_orders", {"store": named})
+        assert orders.call_count == 0
 
-    assert dict(orders.calls[0].request.url.params) == {}
+
+@respx.mock
+def test_an_order_opened_from_one_stores_board_remembers_the_store_for_back(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    respx.get(f"{fake_api_url}/agent/orders/{ORDER_ID}").mock(
+        return_value=httpx.Response(200, json={"id": ORDER_ID, "line_items": []})
+    )
+    _two_stores(fake_api_url)
+
+    result = _call("sellerclaw_orders", {"order": ORDER_ID, "store": "Pawpilot Shop", "status": "new"})
+
+    assert result.structured_content["filters"] == {"store": SHOP_ID, "status": "new"}
+    # One order names its own store; the switcher belongs to the board.
+    assert "stores" not in result.structured_content
 
 
 @respx.mock
@@ -816,10 +1146,11 @@ def test_a_number_that_names_no_single_order_becomes_the_board_of_what_it_could_
         return_value=httpx.Response(200, json={"items": found, "total": len(found)})
     )
     _no_overview(fake_api_url)
+    _two_stores(fake_api_url)
 
     result = _call("sellerclaw_orders", {"order": "#1001"})
 
-    assert dict(search.calls[0].request.url.params) == {"q": "#1001"}
+    assert dict(search.calls[0].request.url.params) == {**_QUEUE_PAGE, "q": "#1001"}
     assert result.structured_content["filters"] == {"query": "#1001"}
     assert result.structured_content["orders"]["items"] == found
     assert "sole_match" not in result.structured_content
@@ -854,7 +1185,7 @@ def test_the_only_order_matching_the_owners_words_opens_by_itself(
 
     result = _call("sellerclaw_orders", {"query": " jane "})
 
-    assert dict(search.calls[0].request.url.params) == {"q": "jane"}
+    assert dict(search.calls[0].request.url.params) == {**_QUEUE_PAGE, "q": "jane"}
     assert result.structured_content == {
         "order": row,
         "filters": {"query": "jane"},
@@ -1096,7 +1427,38 @@ def test_the_connections_card_is_the_agents_own_overview(
 
     result = _call("sellerclaw_connections", {})
 
-    assert result.structured_content == {"integrations": [{"kind": "ebay_store", "connections": []}]}
+    assert result.structured_content == {
+        "integrations": [{"kind": "ebay_store", "connections": []}],
+        "filters": {},
+    }
+
+
+@pytest.mark.parametrize("view", ["needs_fixing", "stores", " ads ", "Stores"])
+@respx.mock
+def test_the_connections_card_opens_on_the_screen_asked_for(
+    env_pointing_at_fake_api: None, fake_api_url: str, view: str
+) -> None:
+    """Every screen is drawn from one read of every connection; only the screen's name travels."""
+    integrations = respx.get(f"{fake_api_url}/agent/integrations").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+
+    result = _call("sellerclaw_connections", {"view": view})
+
+    assert result.structured_content["filters"] == {"view": view.strip().lower()}
+    assert dict(integrations.calls[0].request.url.params) == {}
+
+
+@respx.mock
+def test_a_screen_the_connections_card_does_not_have_is_refused_naming_the_ones_it_has(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    integrations = respx.get(f"{fake_api_url}/agent/integrations")
+
+    refusal = r"view is one of all, needs_fixing, stores, ads, suppliers, email, research; got 'billing'"
+    with pytest.raises(ToolError, match=refusal):
+        _call("sellerclaw_connections", {"view": "billing"})
+    assert integrations.call_count == 0
 
 
 @respx.mock
@@ -1130,6 +1492,7 @@ def test_the_model_gets_a_sentence_while_the_owner_gets_the_card(
     respx.get(f"{fake_api_url}/agent/orders/overview").mock(
         return_value=httpx.Response(200, json={"total": 50, "by_status": {"new": 7, "shipped": 43}})
     )
+    _two_stores(fake_api_url)
 
     result = _call("sellerclaw_orders", {})
 
@@ -1138,6 +1501,52 @@ def test_the_model_gets_a_sentence_while_the_owner_gets_the_card(
     assert len(text) < 500
     # The payload is still whole — it is the card's, not the model's.
     assert len(result.structured_content["orders"]["items"]) == 50
+
+
+_SHOP = [{"id": SHOP_ID, "platform": "shopify", "display_name": "Pawpilot Shop"}]
+
+
+@pytest.mark.parametrize(
+    ("payload", "opening"),
+    [
+        pytest.param(
+            {
+                "orders": {"items": [{"id": "o1"}], "total": 1},
+                "overview": {"total": 3, "by_status": {"new": 2, "fulfilled": 1}},
+                "stores": _SHOP,
+                "filters": {"store": SHOP_ID},
+            },
+            "Showing 1 of 3 orders from Pawpilot Shop. 2 in Pawpilot Shop are waiting to ship.",
+            id="board",
+        ),
+        pytest.param(
+            {
+                "orders": {"items": [{"id": "o1"}], "total": 1},
+                "stores": _SHOP,
+                "filters": {"store": SHOP_ID, "query": "jane"},
+            },
+            '1 order in Pawpilot Shop matching "jane"',
+            id="search",
+        ),
+        pytest.param(
+            {
+                "orders": {"items": [], "total": 0},
+                "stores": _SHOP,
+                "filters": {"store": SHOP_ID, "query": "jane"},
+            },
+            'No order matches "jane" in Pawpilot Shop.',
+            id="search-found-nothing",
+        ),
+    ],
+)
+def test_a_board_of_one_store_tells_the_model_whose_orders_these_are(
+    payload: dict[str, Any], opening: str
+) -> None:
+    """"Waiting across the account" under one store's board would be a figure about other stores."""
+    text = mcp_apps._summarize_orders(payload)
+
+    assert text.startswith(opening)
+    assert "across the account" not in text
 
 
 def test_a_figure_the_account_does_not_have_is_left_out_of_the_summary() -> None:
@@ -1631,6 +2040,23 @@ def test_an_account_without_ad_accounts_is_told_so() -> None:
 )
 def test_connections_are_told_by_what_needs_the_owner(integrations: list[Any], opening: str) -> None:
     assert mcp_apps._summarize_connections({"integrations": integrations}).startswith(opening)
+
+
+def test_a_section_of_the_connections_is_told_by_that_section_alone() -> None:
+    """The owner is looking at their stores; a broken ad account is not this screen's news."""
+    integrations = [
+        {"kind": "shopify_store", "display_name": "Shopify", "connections": [{"name": "shop", "status": "active"}]},
+        {
+            "kind": "facebook_ads",
+            "display_name": "Meta Ads",
+            "connections": [{"name": "ads", "status": "credentials_invalid"}],
+        },
+    ]
+
+    text = mcp_apps._summarize_connections({"integrations": integrations, "filters": {"view": "stores"}})
+
+    assert text.startswith("The stores section of the connections. The one connection is working.")
+    assert "Meta" not in text
 
 
 def _billing(
