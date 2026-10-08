@@ -98,6 +98,56 @@ def test_open_works_without_a_title(env: str) -> None:
 
 
 @respx.mock
+@pytest.mark.parametrize(
+    "argv",
+    [
+        pytest.param(["--team-task-id", "0d3f5c1e-7b2a-4c8d-9e6f-1a2b3c4d5e6f"], id="flag"),
+        pytest.param(
+            ["-b", json.dumps({"team_task_id": "0d3f5c1e-7b2a-4c8d-9e6f-1a2b3c4d5e6f"})],
+            id="body",
+        ),
+    ],
+)
+def test_open_for_a_job_sends_the_job_id(env: str, argv: list[str]) -> None:
+    """A job with no chat of its own gets one tied to it — the id has to reach the cloud, or the
+    chat opens loose and the job's next update asks for yet another. The flag is what an agent
+    reaches for first: a live run typed it before it ever looked at the body."""
+    route = respx.post(f"{env}/agent/chat/chats").mock(return_value=_opened_chat_response())
+    task_id = "0d3f5c1e-7b2a-4c8d-9e6f-1a2b3c4d5e6f"
+
+    result = runner.invoke(app, ["chats", "open", *argv])
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {"team_task_id": task_id}
+    assert f"sellerclaw-ui:direct:{CHAT_ID}" in result.stdout
+
+
+@respx.mock
+def test_open_for_a_job_that_has_its_chat_fails_and_names_it(env: str) -> None:
+    """The job's own chat is where its news goes: the refusal must reach the agent with that
+    chat in it, not read as a chat it opened."""
+    respx.post(f"{env}/agent/chat/chats").mock(
+        return_value=httpx.Response(
+            409,
+            json={
+                "detail": {
+                    "code": "team_task_has_chat",
+                    "message": f"This job already has its own chat {CHAT_ID}.",
+                }
+            },
+        )
+    )
+
+    result = runner.invoke(
+        app,
+        ["chats", "open", "-b", json.dumps({"team_task_id": "0d3f5c1e-7b2a-4c8d-9e6f-1a2b3c4d5e6f"})],
+    )
+
+    assert result.exit_code != 0
+    assert CHAT_ID in result.stdout + result.stderr
+
+
+@respx.mock
 def test_open_reports_the_unanswered_chat_limit_as_a_failure(env: str) -> None:
     """At the limit the cloud refuses. The agent must see that and fold the topic into an
     existing thread, not carry on as though a chat exists."""
