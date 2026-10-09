@@ -47,8 +47,9 @@ import mimetypes
 import os
 import threading
 import time
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
+from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from urllib.parse import quote
@@ -279,6 +280,37 @@ _READ_TIMEOUT_SECONDS = 60.0
 
 ClientFactory = Callable[[float], Client]
 
+#: How every summary ends. Deliberately conditional: a client that did not negotiate MCP Apps gets
+#: these same answers with no card at all, and telling its model "the owner is looking at it" would
+#: be a plain untruth. The full payload is in the structured result either way.
+_SHOWN_TO_THE_OWNER = (
+    "If this client shows SellerClaw cards, the owner is looking at this one and can act on it "
+    "there; the full figures are in the structured result."
+)
+
+
+@dataclass(frozen=True)
+class CardWording:
+    """What a card says about the tools around it, in the vocabulary of the server it is served from.
+
+    The cards are the same everywhere, but the tools beside them are not: the read/write runners run
+    a command by its group and name, while ChatGPT has one tool per action. A card that told ChatGPT
+    to run `action-requests confirm` would name something it has no way to call.
+    """
+
+    #: How an approval the owner answers in words gets closed.
+    close_in_words: str = "`action-requests confirm` quoting what they said"
+    #: How a client without cards reads a media job that is still generating.
+    read_media_job: str = "`media job-status` passing wait_seconds 25"
+    #: Card tool name -> its description, where it differs from the default one.
+    descriptions: Mapping[str, str] = field(default_factory=dict)
+    #: The sentence every summary ends with: what the owner already sees and what is left to say.
+    shown_to_the_owner: str = _SHOWN_TO_THE_OWNER
+
+
+#: The cards as the read/write runners' server words them.
+RUNNER_WORDING = CardWording()
+
 
 def _sale_states(value: list[str] | str | None) -> list[str] | None:
     """The sale states a list was asked for, as a list — a model sends one as a bare string."""
@@ -425,13 +457,6 @@ _AWAITING_SHIPMENT_STATUSES = frozenset(
     {"new", "pending_approval", "approved", "purchasing", "purchased", "awaiting_payment"}
 )
 
-#: How every summary ends. Deliberately conditional: a client that did not negotiate MCP Apps gets
-#: these same answers with no card at all, and telling its model "the owner is looking at it" would
-#: be a plain untruth. The full payload is in the structured result either way.
-_SHOWN_TO_THE_OWNER = (
-    "If this client shows SellerClaw cards, the owner is looking at this one and can act on it "
-    "there; the full figures are in the structured result."
-)
 
 
 def _money(value: Any, currency: str | None) -> str | None:
@@ -524,7 +549,7 @@ def _summarize_orders(payload: dict[str, Any]) -> str:
     return " ".join(lines)
 
 
-def _summarize_approval(payload: dict[str, Any]) -> str:
+def _summarize_approval(payload: dict[str, Any], wording: CardWording = RUNNER_WORDING) -> str:
     request = payload.get("request") or {}
     title = request.get("title") or "a request"
     status = request.get("status")
@@ -537,7 +562,7 @@ def _summarize_approval(payload: dict[str, Any]) -> str:
     lines.append(
         "Only they can answer it: you have no tool that closes it. If this client shows the "
         "card, they press the button on it; if they answer you in words instead, close it with "
-        "`action-requests confirm` quoting what they said. Never decide for them."
+        f"{wording.close_in_words}. Never decide for them."
     )
     return " ".join(lines)
 
@@ -1089,7 +1114,7 @@ _TASK_WORDS = {
 }
 
 
-def _summarize_media_jobs(payload: dict[str, Any]) -> str:
+def _summarize_media_jobs(payload: dict[str, Any], wording: CardWording = RUNNER_WORDING) -> str:
     jobs = [job for job in payload.get("jobs") or [] if isinstance(job, dict)]
     lines: list[str] = []
     ready = [job for job in jobs if job.get("status") == "succeeded" and job.get("result_url")]
@@ -1107,7 +1132,7 @@ def _summarize_media_jobs(payload: dict[str, Any]) -> str:
             f"{_plural(len(working), 'job')} still generating (an image takes under a minute, a "
             "video one to three). On a SellerClaw card each one fills in as it finishes, so end "
             "your turn instead of checking again; a client without cards reads it with "
-            "`media job-status` passing wait_seconds 25."
+            f"{wording.read_media_job}."
         )
     missing = len(payload.get("asked") or []) - len(jobs)
     if missing > 0:
@@ -1149,9 +1174,9 @@ def _media_kind(item: dict[str, Any]) -> str:
     return "video" if str(item.get("content_type") or "").startswith("video/") else "image"
 
 
-def _summarize_media(payload: dict[str, Any]) -> str:
+def _summarize_media(payload: dict[str, Any], wording: CardWording = RUNNER_WORDING) -> str:
     if "jobs" in payload:
-        return _summarize_media_jobs(payload)
+        return _summarize_media_jobs(payload, wording)
     return _summarize_media_library(payload)
 
 
@@ -1239,6 +1264,28 @@ def _answer_paused(tool: Callable[..., Any]) -> Callable[..., Any]:
             return tool(*args, **kwargs)
         except _PausedForPlan as paused:
             return _result({"paywall": paused.paywall}, paused.relay)
+
+    return _tool
+
+
+def _ending_in(tool: Callable[..., Any], ending: str) -> Callable[..., Any]:
+    """End the tool's summary with this server's sentence about the card instead of the default one."""
+    if ending == _SHOWN_TO_THE_OWNER:
+        return tool
+    from mcp.types import CallToolResult, TextContent
+
+    @functools.wraps(tool)
+    def _tool(*args: Any, **kwargs: Any) -> Any:
+        result = tool(*args, **kwargs)
+        if not isinstance(result, CallToolResult):
+            return result
+        content = [
+            TextContent(type="text", text=block.text.replace(_SHOWN_TO_THE_OWNER, ending))
+            if isinstance(block, TextContent)
+            else block
+            for block in result.content
+        ]
+        return result.model_copy(update={"content": content})
 
     return _tool
 
@@ -1443,12 +1490,12 @@ card to follow.\
 """
 
 
-def build_extension(client_for_tool: ClientFactory) -> Any:
+def build_extension(client_for_tool: ClientFactory, wording: CardWording = RUNNER_WORDING) -> Any:
     """The MCP Apps extension: the screens in :data:`SCREENS` and the tools bound to them.
 
     ``client_for_tool`` builds an Agent API client carrying whoever is on the other end of this
     request — passed in rather than imported so this module never has to know how the server
-    authenticates.
+    authenticates. ``wording`` says how the cards name the tools beside them on this server.
 
     Registration order matters: the SDK checks every tool's ``resource_uri`` against the registered
     resources when the server is constructed, so a screen that is never registered fails at startup
@@ -1463,9 +1510,10 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
 
     def card_tool(**options: Any) -> Callable[[Callable[..., Any]], Any]:
         """``apps.tool`` for a card: a paused account answers with the paywall, not an error."""
+        options["description"] = wording.descriptions.get(options["name"], options["description"])
 
         def register(tool: Callable[..., Any]) -> Any:
-            return apps.tool(**options)(_answer_paused(tool))
+            return apps.tool(**options)(_ending_in(_answer_paused(tool), wording.shown_to_the_owner))
 
         return register
     csp = ResourceCsp(
@@ -2011,7 +2059,7 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
     def sellerclaw_approval(request: str) -> Any:
         with _refusals_in_their_own_words(), client_for_tool(DEFAULT_TIMEOUT_SECONDS) as client:
             payload = _read_approval(client, request)
-        return _result(payload, _summarize_approval(payload))
+        return _result(payload, _summarize_approval(payload, wording))
 
     @card_tool(
         resource_uri=resource_uri("approval"),
@@ -2035,7 +2083,7 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
                 json=_query(decision=decision, option_id=option),
             )
             payload = _read_approval(client, request, known=answered)
-        return _result(payload, _summarize_approval(payload))
+        return _result(payload, _summarize_approval(payload, wording))
 
     @card_tool(
         resource_uri=resource_uri("attention"),
@@ -2264,7 +2312,7 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
                 payload = {"jobs": (found or {}).get("jobs") or [], "asked": ids}
             else:
                 payload = _read_media_library(client, category, _words(query), offset or 0)
-        return _result(payload, _summarize_media(payload))
+        return _result(payload, _summarize_media(payload, wording))
 
     @card_tool(
         resource_uri=resource_uri("media-studio"),

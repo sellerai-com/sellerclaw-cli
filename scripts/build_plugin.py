@@ -13,11 +13,10 @@ Each target is assembled by merging the layer component dirs (skills/, hooks/) a
 the target's own files (``.claude-plugin/plugin.json``, ``.mcp.json``/``connector.json``, ...). The
 version from ``plugin/VERSION`` is stamped into the target's manifest.
 
-``chatgpt`` takes none of the layers: the shared core skill teaches the shell CLI and how to wire
-Claude, which a ChatGPT user can do nothing with, and the directory refuses a plugin with lifecycle
-hooks. Its core skill is the ``start`` guide instead — the very text the MCP server already hands any
-client — and the owner's shortcuts stay out (Claude Code's ``$ARGUMENTS`` and
-``disable-model-invocation`` mean nothing there; the server offers them as MCP prompts).
+``chatgpt`` takes none of the layers, guides or shortcuts: it reaches its own tool surface (one tool
+per action, served at ``/chatgpt/mcp``), so everything written for the read/write runners would teach
+it calls it cannot make, and the directory refuses a plugin with lifecycle hooks. Its skills are its
+own, kept with its manifest under ``plugin/targets/chatgpt/skills/``.
 
 ``claude-code`` lands in the committed ``plugins/`` tree (the marketplace references it by path); the
 rest are throwaway artifacts under ``dist/``.
@@ -47,28 +46,18 @@ COMPONENT_DIRS = ("skills", "hooks")
 CLAUDE_LAYERS = ("shared", "claude")
 
 
-# Frontmatter description of the core skill a target compiles from the ``start`` guide.
-CHATGPT_CORE_SKILL = (
-    "Use when the user wants to run their SellerClaw e-commerce business — stores, orders, listings, "
-    "catalog, suppliers, ads, mailbox, storefront or product media — or asks how SellerClaw works, "
-    "what it can do, or why a SellerClaw call was refused."
-)
-
-
 class TargetSpec(NamedTuple):
     # Output location relative to the repo root. Committed targets sit in the repo so the marketplace
     # can point at them; the rest are build artifacts under the git-ignored dist/.
     out: str
     # Component layers merged in. Claude plugins get the skills/hooks core; the Desktop .mcpb bundle
-    # ships only the MCP server, and ChatGPT gets its core skill from the `start` guide instead.
+    # ships only the MCP server, and ChatGPT brings its own skills with its manifest.
     layers: tuple[str, ...] = CLAUDE_LAYERS
     # Compile the task guides into recipe skills. The Desktop .mcpb has no skills concept and reaches
     # the same text through the `sellerclaw_guide` tool instead.
     skills: bool = True
     # Compile the owner's shortcuts into skills only they start (`/sellerclaw:<name>`).
     shortcuts: bool = True
-    # When set, the `start` guide becomes the core `sellerclaw` skill with this description.
-    start_skill: str | None = None
     # Folder the files sit under inside the --zip archive; None puts the manifest at its root.
     zip_folder: str | None = "sellerclaw"
 
@@ -79,9 +68,7 @@ TARGETS: dict[str, TargetSpec] = {
     "claude-web": TargetSpec("dist/plugins/claude-web"),
     "claude-cowork": TargetSpec("dist/plugins/claude-cowork"),
     # The OpenAI dashboard takes a ZIP with plugin.json at the root of the archive.
-    "chatgpt": TargetSpec(
-        "dist/plugins/chatgpt", layers=(), shortcuts=False, start_skill=CHATGPT_CORE_SKILL, zip_folder=None
-    ),
+    "chatgpt": TargetSpec("dist/plugins/chatgpt", layers=(), skills=False, shortcuts=False, zip_folder=None),
 }
 
 # Manifests whose "version" field is stamped from plugin/VERSION (whichever is present in the output).
@@ -123,12 +110,6 @@ def _skill_file(out: Path, name: str, description: str, body: str) -> None:
     skill_file = out / "skills" / name / "SKILL.md"
     skill_file.parent.mkdir(parents=True, exist_ok=True)
     skill_file.write_text(f'---\nname: {name}\ndescription: "{description}"\n---\n\n{body}')
-
-
-def _write_start_skill(out: Path, guides_src: Path, description: str) -> None:
-    """Compile the ``start`` guide into the core ``sellerclaw`` skill, for a target without the shared core."""
-    topic = next(t for t in json.loads((guides_src / "topics.json").read_text()) if t["topic"] == "start")
-    _skill_file(out, CORE_SKILL, description, (guides_src / topic["file"]).read_text())
 
 
 def _write_guide_skills(out: Path, guides_src: Path) -> None:
@@ -205,8 +186,6 @@ def assemble(
     out.mkdir(parents=True)
     for layer in spec.layers:
         _merge_components(plugin_src / layer, out)
-    if spec.start_skill:
-        _write_start_skill(out, guides_src, spec.start_skill)
     if spec.skills:
         _write_guide_skills(out, guides_src)
     if spec.shortcuts:

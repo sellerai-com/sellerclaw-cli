@@ -3,7 +3,7 @@
   "mcpServers": {
     "sellerclaw": {
       "type": "streamable-http",
-      "url": "https://mcp.sellerclaw.ai/mcp"
+      "url": "https://mcp.sellerclaw.ai/chatgpt/mcp"
     }
   }
 }

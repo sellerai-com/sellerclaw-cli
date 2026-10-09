@@ -659,6 +659,7 @@ _POST_READS = frozenset(
         ("catalog-file", "preview"),
         ("categories", "suggest"),
         ("ebay-listings", "preview-drafts"),
+        ("ebay-promoted", "create-report"),
         ("google-ads", "keyword-ideas"),
         ("listings", "check"),
         ("listings", "readiness"),

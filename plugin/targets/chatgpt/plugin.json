@@ -2,7 +2,7 @@
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "sellerclaw",
   "version": "0.0.0",
-  "description": "Run your e-commerce business from ChatGPT: stores, orders, listings, catalog, suppliers, ads, mailbox and product media, through your SellerClaw account.",
+  "description": "Run your e-commerce business from ChatGPT: stores, orders, listings, catalog, suppliers, ads, market research and product media, through your SellerClaw account.",
   "author": {
     "name": "SellerAI",
     "email": "hello@sellerai.com",
@@ -17,7 +17,6 @@
     "shopify",
     "ebay",
     "amazon",
-    "etsy",
     "walmart",
     "orders",
     "listings",
@@ -31,22 +30,20 @@
       "interface": {
         "displayName": "SellerClaw",
         "shortDescription": "Run your e-commerce business",
-        "longDescription": "SellerClaw connects your sales channels (Shopify, eBay, Amazon, Etsy, Walmart, TikTok Shop, WooCommerce, Wix and BigCommerce) together with your suppliers, ad accounts and mailbox, and lets you run them from ChatGPT.\n\nAsk what needs your attention today, see how a store is doing, find and ship orders, publish listings and fix the ones a marketplace refused, add products from a supplier, check stock, read buyer messages and reply, review your ads, research keywords and competitors, and make product images and videos.\n\nAnswers about your orders, listings, products, store figures, ads and connections can come back as interactive cards. Actions such as sending an email, replying to a buyer or launching an ad campaign can require your approval first, and you choose how much SellerClaw asks before it acts.\n\nSellerClaw only reaches the stores and accounts you have connected to your SellerClaw account. Connecting a store and changing approval settings happen in the SellerClaw web app at app.sellerclaw.ai. A SellerClaw account is required.",
+        "longDescription": "SellerClaw connects your stores (Shopify, eBay, Amazon, Walmart, WooCommerce, Wix and BigCommerce) together with your suppliers and ad accounts, and lets you run them from ChatGPT.\n\nAsk what needs your attention today, see how a store is doing, find and ship orders on any of your stores, publish listings and fix the ones a marketplace refused, add products from a supplier, check stock and reorder, review your ads and pause or adjust campaigns, research keywords, trends and competitors, and make product images and videos.\n\nAnswers about your orders, listings, products, store figures, ads and connections can come back as interactive cards. Actions such as launching an ad campaign, paying a supplier or replying publicly to a review can require your approval first, and you choose how much SellerClaw asks before it acts.\n\nSellerClaw only reaches the stores and accounts you have connected to your SellerClaw account. Connecting a store and changing approval settings happen in the SellerClaw web app at app.sellerclaw.ai. A SellerClaw account is required.",
         "developerName": "SellerAI, Inc.",
         "category": "Business & Operations",
         "capabilities": [
           "See what needs your attention across your stores today",
           "Check sales, profit, best sellers and stock for a store",
-          "Find, fulfill, ship, track and cancel orders",
+          "Find, ship, track and cancel orders on any of your stores",
           "Publish, update and withdraw marketplace listings",
           "Find out why a marketplace refused a listing and fix it",
           "Add products from suppliers and manage your catalog",
-          "Check supplier stock and shipping cost",
-          "Read your connected mailbox and reply to buyers",
-          "Review and adjust Google, Meta and eBay Promoted ads",
-          "Research keywords, trends and competitors",
-          "Generate and edit product images and videos",
-          "Build and publish your own SellerCart storefront"
+          "Check supplier stock and shipping cost, and place dropship orders",
+          "Review Google, Meta and eBay Promoted ads, and pause or adjust them",
+          "Research keywords, trends, competitors and social media",
+          "Generate and edit product images and videos"
         ],
         "websiteURL": "https://sellerclaw.ai",
         "supportURL": "https://github.com/sellerai-com/sellerclaw-cli/issues",
@@ -92,8 +89,8 @@
             {
               "description": "Products running low on stock",
               "prompt": "Which products should I reorder soon?",
-              "tools_triggered": "sellerclaw_read",
-              "expected_behavior": "Finds the connected store, runs the inventory analytics read and lists the products that are selling out while still listed, with their stock. If nothing is running low, says so plainly. Changes nothing."
+              "tools_triggered": "get_inventory_health",
+              "expected_behavior": "Finds the connected store and runs the inventory health read, then lists the products that are selling out while still listed, with their stock and how much to reorder. If nothing is running low, says so plainly. Changes nothing."
             }
           ],
           "negative": [
@@ -115,7 +112,7 @@
         "commerce_description": "SellerClaw does not sell anything to ChatGPT users and has no checkout. It manages the seller's own stores; an order placed with a supplier is paid from the seller's own supplier account."
       },
       "publication": {
-        "release_notes": "First release in ChatGPT: manage stores, orders, listings, catalog, suppliers, ads, mailbox and product media through SellerClaw, with interactive cards and task skills."
+        "release_notes": "First release in ChatGPT: manage stores, orders, listings, catalog, suppliers, ads, research and product media through SellerClaw, with one tool per action, interactive cards and task skills."
       }
     }
   }

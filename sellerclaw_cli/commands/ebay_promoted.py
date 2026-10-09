@@ -25,6 +25,9 @@ SPECS = (
         flags=(
             flag("days", type=int, param="days", minimum=1, maximum=90, default=7, help="Trailing window in days."),
         ),
+        # Asking eBay to assemble figures changes nothing in the business — no campaign, ad or
+        # listing moves — so reading ad performance runs without asking the owner each time.
+        read_only=True,
     ),
     Cmd(
         "get-report",
