@@ -175,9 +175,28 @@ def test_every_screen_tool_points_at_a_resource_that_exists() -> None:
     registered = {str(resource.uri) for resource in asyncio.run(server.list_resources())}
 
     for tool in asyncio.run(server.list_tools()):
-        ui = (tool.meta or {}).get("ui")
-        if ui is not None:
-            assert ui["resourceUri"] in registered, tool.name
+        uri = ((tool.meta or {}).get("ui") or {}).get("resourceUri")
+        if uri is not None:
+            assert uri in registered, tool.name
+
+
+def test_a_card_button_s_tool_opens_no_card_of_its_own() -> None:
+    """A tool hidden from the model answers the card whose button called it.
+
+    Bound to a screen anyway, ChatGPT listed the four of them in the plugin's settings as "private
+    tools can't render their widgets" (09.10.2026). Every tool the model may call keeps its screen.
+    """
+    by_name = {tool.name: tool for tool in asyncio.run(build_server().list_tools())}
+    ui = {name: (by_name[name].meta or {})["ui"] for name in mcp_apps.tool_names()}
+
+    buttons = {name: meta for name, meta in ui.items() if "model" not in meta["visibility"]}
+    assert buttons == {
+        "sellerclaw_approval_decide": {"visibility": ["app"]},
+        "sellerclaw_media_set_default": {"visibility": ["app"]},
+        "sellerclaw_media_upload_image": {"visibility": ["app"]},
+        "sellerclaw_media_generate": {"visibility": ["app"]},
+    }
+    assert {name for name, meta in ui.items() if "resourceUri" in meta} == set(ui) - set(buttons)
 
 
 def test_the_resource_declares_our_origin_and_asks_for_no_network() -> None:

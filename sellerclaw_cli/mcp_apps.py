@@ -1522,18 +1522,52 @@ def build_extension(client_for_tool: ClientFactory, wording: CardWording = RUNNE
     instead of on someone's card.
     """
     from mcp.server.apps import Apps, ResourceCsp
+    from mcp.server.extension import ToolBinding
     from mcp.server.mcpserver.exceptions import ToolError
     from mcp.server.mcpserver.resources import FunctionResource
     from mcp.types import ToolAnnotations
 
-    apps = Apps()
+    class CardApps(Apps):
+        """``Apps``, plus the tools only a card calls — its buttons, hidden from the model.
+
+        The SDK's ``Apps.tool`` binds every tool to a screen. A tool hidden from the model opens no
+        screen of its own: it answers the card whose button called it. Bound anyway, ChatGPT lists
+        it as "private tools can't render their widgets", so these carry only their visibility.
+        """
+
+        def __init__(self) -> None:
+            super().__init__()
+            self._card_only: list[ToolBinding] = []
+
+        def card_only_tool(self, **tool_kwargs: Any) -> Callable[[Callable[..., Any]], Any]:
+            def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
+                self._card_only.append(
+                    ToolBinding(fn=fn, meta={"ui": {"visibility": ["app"]}}, kwargs=tool_kwargs)
+                )
+                return fn
+
+            return decorator
+
+        def tools(self) -> Sequence[ToolBinding]:
+            return [*super().tools(), *self._card_only]
+
+    apps = CardApps()
 
     def card_tool(**options: Any) -> Callable[[Callable[..., Any]], Any]:
-        """``apps.tool`` for a card: a paused account answers with the paywall, not an error."""
+        """``apps.tool`` for a card: a paused account answers with the paywall, not an error.
+
+        A button's tool (``visibility=["app"]``) keeps its ``resource_uri`` here for the reader —
+        which card presses it — and is registered without one (see ``CardApps``).
+        """
         options["description"] = wording.descriptions.get(options["name"], options["description"])
 
         def register(tool: Callable[..., Any]) -> Any:
-            return apps.tool(**options)(_ending_in(_answer_paused(tool), wording.shown_to_the_owner))
+            answered = _ending_in(_answer_paused(tool), wording.shown_to_the_owner)
+            if options.get("visibility") == ["app"]:
+                return apps.card_only_tool(
+                    **{key: value for key, value in options.items() if key not in {"resource_uri", "visibility"}}
+                )(answered)
+            return apps.tool(**options)(answered)
 
         return register
     csp = ResourceCsp(
