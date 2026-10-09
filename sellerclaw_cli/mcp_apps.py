@@ -359,6 +359,15 @@ def _query(**params: Any) -> dict[str, Any]:
     return {key: value for key, value in params.items() if value is not None}
 
 
+def _board_filters(*, sort: str, **params: Any) -> dict[str, Any]:
+    """The board's filters as echoed to the card — the queue order left unsaid, being the board's own.
+
+    The card sends them back for "Show more", another store and "Back", so a board opened on the
+    newest orders stays one.
+    """
+    return _query(**params, sort=None if sort == "waiting_first" else sort)
+
+
 def _one_or_many(store: str | list[str] | None) -> tuple[str, list[str]]:
     """The store selection as the Agent API takes it: one in the path, the rest repeated in query.
 
@@ -452,6 +461,13 @@ def _stores_named(reference: str, stores: Sequence[dict[str, Any]]) -> list[dict
 #: How many orders a board reads at a time; the card's "Show more" asks for the next ones.
 _ORDERS_PAGE = 25
 
+#: The orders a board can lead with, in the Agent API's words: the queue — orders waiting on
+#: someone, longest wait first, then the rest — or the newest orders first. The queue is the default.
+_ORDER_SORTS = ("waiting_first", "newest")
+#: How a board's summary says which orders come first, so a board of one row is never taken for
+#: the newest order when it is the one waiting longest.
+_ORDER_SORT_WORDS = {"waiting_first": "longest wait first", "newest": "newest first"}
+
 #: What the order board treats as "still owed to the buyer" — the same set the screen leads with.
 _AWAITING_SHIPMENT_STATUSES = frozenset(
     {"new", "pending_approval", "approved", "purchasing", "purchased", "awaiting_payment"}
@@ -527,14 +543,15 @@ def _summarize_orders(payload: dict[str, Any]) -> str:
         )
     total = overview.get("total")
     source = f" from {store}" if store else ""
+    first = _ORDER_SORT_WORDS.get(filters.get("sort") or "", _ORDER_SORT_WORDS["waiting_first"])
     offset = found.get("offset") or 0
     if offset and shown:
         # A "Show more" page: the rows it added under the ones the card already had.
-        lines = [f"Showing orders {offset + 1}-{offset + shown} of {found.get('total')}{source}."]
+        lines = [f"Showing orders {offset + 1}-{offset + shown} of {found.get('total')}{source}, {first}."]
     else:
         lines = [
-            f"Showing {shown} orders{source}." if total is None
-            else f"Showing {shown} of {total} orders{source}."
+            f"Showing {shown} orders{source}, {first}." if total is None
+            else f"Showing {shown} of {total} orders{source}, {first}."
         ]
     by_status = overview.get("by_status") or {}
     waiting = sum(
@@ -1339,9 +1356,12 @@ supplier's order and the tracking): the number they quote (#1001), the marketpla
 `query` narrows the board to orders matching the buyer's name or email, a SKU or item title, or
 part of a number — and opens the order itself when only one matches. `store` narrows it to one
 store: the owner's name for it, its platform when they have one store there, or its id. `status`
-opens on one status; omit everything for the whole board across every store. The board lists the
-orders waiting on someone first, longest wait first, a page at a time; `offset` is where the next
-page starts, and the owner pages through it on the card.
+opens on one status; omit everything for the whole board across every store.
+`sort` is which orders come first. By default (`waiting_first`) the board is a queue: the orders
+waiting on someone, longest wait first, then the rest — its first row is the oldest open order, not
+the latest. `newest` puts the newest orders first: for "my latest order" or "what came in today".
+The board reads a page at a time; `offset` is where the next page starts, and the owner pages
+through it on the card.
 
 Open it also right after you ship, cancel or change an order: `order` with its id or number.\
 """
@@ -1660,15 +1680,17 @@ def build_extension(client_for_tool: ClientFactory, wording: CardWording = RUNNE
         offset: int | None = None,
         stores: list[dict[str, Any]] | None = None,
         open_only_match: bool = True,
+        sort: str = "waiting_first",
     ) -> dict[str, Any]:
         """The board — or, when the owner's words name exactly one order, that order.
 
         ``store`` is a store id, already resolved from the owner's words (``_store_id``);
         ``stores`` are the identities read to resolve it, so a board does not read them twice.
-        The board reads as a queue — the orders waiting on someone first, longest wait first — a
-        page at a time; ``offset`` is where the card's "Show more" picks up.
+        The board reads as a queue — the orders waiting on someone first, longest wait first — or,
+        with ``sort="newest"``, newest first; a page at a time, ``offset`` is where the card's
+        "Show more" picks up.
         """
-        filters = _query(store=store, status=status, query=query, limit=limit)
+        filters = _board_filters(store=store, status=status, query=query, limit=limit, sort=sort)
         orders = client.request(
             "GET",
             "/agent/orders",
@@ -1676,7 +1698,7 @@ def build_extension(client_for_tool: ClientFactory, wording: CardWording = RUNNE
                 sales_channel_id=store,
                 status=status,
                 q=query,
-                sort="waiting_first",
+                sort=sort,
                 limit=limit or _ORDERS_PAGE,
                 offset=offset or None,
             ),
@@ -1711,6 +1733,7 @@ def build_extension(client_for_tool: ClientFactory, wording: CardWording = RUNNE
         query: str | None,
         limit: int | None,
         stores: list[dict[str, Any]] | None,
+        sort: str = "waiting_first",
     ) -> dict[str, Any]:
         """The order the owner named — our id, its number or the marketplace's id.
 
@@ -1732,9 +1755,10 @@ def build_extension(client_for_tool: ClientFactory, wording: CardWording = RUNNE
                 limit=limit,
                 stores=stores,
                 open_only_match=False,
+                sort=sort,
             )
         # The board the order was opened from, carried along for "Back".
-        payload["filters"] = _query(store=store, status=status, query=query, limit=limit)
+        payload["filters"] = _board_filters(store=store, status=status, query=query, limit=limit, sort=sort)
         return payload
 
     def _store_id(store: str | None, stores: list[dict[str, Any]]) -> str | None:
@@ -2017,7 +2041,11 @@ def build_extension(client_for_tool: ClientFactory, wording: CardWording = RUNNE
         query: str | None = None,
         store: str | None = None,
         offset: int | None = None,
+        sort: str | None = None,
     ) -> Any:
+        first = (_words(sort) or "waiting_first").lower()
+        if first not in _ORDER_SORTS:
+            raise ToolError(f"sort is one of {', '.join(_ORDER_SORTS)}; got {sort!r}.")
         with _refusals_in_their_own_words(), client_for_tool(DEFAULT_TIMEOUT_SECONDS) as client:
             reference = _words(order)
             # Read only to turn the owner's name for a store into its id; a board without one
@@ -2033,6 +2061,7 @@ def build_extension(client_for_tool: ClientFactory, wording: CardWording = RUNNE
                     query=_words(query),
                     limit=limit,
                     stores=stores,
+                    sort=first,
                 )
             else:
                 payload = _read_orders(
@@ -2043,6 +2072,7 @@ def build_extension(client_for_tool: ClientFactory, wording: CardWording = RUNNE
                     limit=limit,
                     offset=offset,
                     stores=stores,
+                    sort=first,
                 )
         if "order" in payload:
             return _result(payload, _summarize_order(payload))

@@ -628,6 +628,78 @@ def test_show_more_reads_the_next_page_of_the_same_board(
     assert "sole_match" not in result.structured_content
 
 
+@respx.mock
+@pytest.mark.parametrize(
+    ("arguments", "sent", "echoed", "opening"),
+    [
+        pytest.param({}, "waiting_first", {}, "Showing 1 of 1 orders, longest wait first.", id="the-queue-by-default"),
+        pytest.param(
+            {"sort": "newest"}, "newest", {"sort": "newest"}, "Showing 1 of 1 orders, newest first.", id="newest-first"
+        ),
+        pytest.param(
+            {"sort": " Newest "},
+            "newest",
+            {"sort": "newest"},
+            "Showing 1 of 1 orders, newest first.",
+            id="the-word-however-it-is-cased",
+        ),
+        pytest.param(
+            {"sort": "waiting_first"},
+            "waiting_first",
+            {},
+            "Showing 1 of 1 orders, longest wait first.",
+            id="the-queue-named-is-the-plain-board",
+        ),
+    ],
+)
+def test_the_board_leads_with_the_orders_asked_for_and_says_which(
+    env_pointing_at_fake_api: None,
+    fake_api_url: str,
+    arguments: dict[str, Any],
+    sent: str,
+    echoed: dict[str, Any],
+    opening: str,
+) -> None:
+    orders = respx.get(f"{fake_api_url}/agent/orders").mock(
+        return_value=httpx.Response(200, json={"items": [{"id": ORDER_ID}], "total": 1})
+    )
+    respx.get(f"{fake_api_url}/agent/orders/overview").mock(
+        return_value=httpx.Response(200, json={"total": 1, "by_status": {"fulfilled": 1}})
+    )
+    _two_stores(fake_api_url)
+
+    result = _call("sellerclaw_orders", arguments)
+
+    assert dict(orders.calls[0].request.url.params) == {"sort": sent, "limit": "25"}
+    # Echoed so "Show more", another store and "Back" keep the order the board was opened in.
+    assert result.structured_content["filters"] == echoed
+    assert result.content[0].text.startswith(opening)
+
+
+@respx.mock
+def test_an_order_the_board_cannot_lead_with_is_refused_before_anything_is_read(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    orders = respx.get(f"{fake_api_url}/agent/orders")
+
+    with pytest.raises(ToolError, match=r"sort is one of waiting_first, newest; got 'oldest'"):
+        _call("sellerclaw_orders", {"sort": "oldest"})
+    assert orders.call_count == 0
+
+
+@respx.mock
+def test_an_order_opened_from_a_newest_first_board_goes_back_to_that_board(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    respx.get(f"{fake_api_url}/agent/orders/{ORDER_ID}").mock(
+        return_value=httpx.Response(200, json={"id": ORDER_ID, "line_items": []})
+    )
+
+    result = _call("sellerclaw_orders", {"order": ORDER_ID, "sort": "newest"})
+
+    assert result.structured_content["filters"] == {"sort": "newest"}
+
+
 def test_a_show_more_page_tells_the_model_which_orders_it_added() -> None:
     text = mcp_apps._summarize_orders(
         {
@@ -637,7 +709,7 @@ def test_a_show_more_page_tells_the_model_which_orders_it_added() -> None:
         }
     )
 
-    assert text.startswith("Showing orders 26-50 of 214.")
+    assert text.startswith("Showing orders 26-50 of 214, longest wait first.")
 
 
 def _two_stores(fake_api_url: str, *extra: dict[str, Any]) -> respx.Route:
@@ -692,7 +764,7 @@ def test_a_board_narrowed_to_one_store_reads_that_stores_rows_and_counts(
     assert [row["id"] for row in result.structured_content["stores"]] == [STORE_ID, SHOP_ID]
     # Read once: the identities that resolved the name are the ones the switcher is drawn from.
     assert stores.call_count == 1
-    assert result.content[0].text.startswith("Showing 1 of 1 orders from Pawpilot Shop.")
+    assert result.content[0].text.startswith("Showing 1 of 1 orders from Pawpilot Shop, longest wait first.")
 
 
 @pytest.mark.parametrize(
@@ -754,7 +826,7 @@ def test_a_store_named_while_the_stores_cannot_be_read(
         result = _call("sellerclaw_orders", {"store": named})
         assert dict(orders.calls[0].request.url.params) == {**_QUEUE_PAGE, "sales_channel_id": SHOP_ID}
         assert result.structured_content["stores"] == []
-        assert result.content[0].text.startswith("Showing 0 of 0 orders from that store.")
+        assert result.content[0].text.startswith("Showing 0 of 0 orders from that store, longest wait first.")
     else:
         with pytest.raises(ToolError, match='The stores could not be read to find "Pawpilot Shop"'):
             _call("sellerclaw_orders", {"store": named})
@@ -1516,7 +1588,7 @@ _SHOP = [{"id": SHOP_ID, "platform": "shopify", "display_name": "Pawpilot Shop"}
                 "stores": _SHOP,
                 "filters": {"store": SHOP_ID},
             },
-            "Showing 1 of 3 orders from Pawpilot Shop. 2 in Pawpilot Shop are waiting to ship.",
+            "Showing 1 of 3 orders from Pawpilot Shop, longest wait first. 2 in Pawpilot Shop are waiting to ship.",
             id="board",
         ),
         pytest.param(
