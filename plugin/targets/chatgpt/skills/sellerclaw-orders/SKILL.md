@@ -7,7 +7,8 @@ description: "Use when the user wants to find, fulfill, ship, track or cancel or
 
 ## Find the order
 
-- `sellerclaw_orders` shows the order board, or one order by the number the owner quotes.
+- `sellerclaw_orders` shows the order board, or one order by the number the owner quotes. The board
+  is a queue, longest wait first; pass `sort: "newest"` for the latest orders.
 - `list_orders` with `awaiting_shipment: true` is the shipping queue; `search_orders` finds one by
   number, buyer or item. They hold open orders; `list_store_orders` reads older and shipped ones
   from the marketplace.
