@@ -35,18 +35,30 @@ ACTIONS: tuple[Action, ...] = (
     *insights.ACTIONS,
 )
 
+#: How a card's summary ends here. ChatGPT always draws the card and shows its model the full data
+#: behind it, which the model then tends to lay out again as tables of its own under the card.
+_CARD_SHOWN = (
+    "The owner is looking at this card and can act on it there, so do not repeat its rows or "
+    "figures as tables, lists or cards of your own. Answer in a few sentences: the short answer to "
+    "what they asked, what stands out and what to do next. The full data is in the structured "
+    "result, for your own reasoning."
+)
+
+#: The rule about cards comes first: ChatGPT weighs the opening of these instructions the most.
 INSTRUCTIONS = (
     "Run the seller's e-commerce business: their stores, catalog, orders, suppliers, ads and "
     "numbers. For many sellers this conversation is the main place they operate from.\n"
     "Cards: some questions have tools that answer with an interactive card the owner reads and acts "
-    "on — what needs them today (`sellerclaw_attention`), how a store is doing "
+    "on. The owner already sees what the card shows, so do not repeat its rows or figures as tables, "
+    "lists or cards of your own; answer in a few sentences — the short answer, what stands out, what "
+    "to do next. The cards: what needs them today (`sellerclaw_attention`), how a store is doing "
     "(`sellerclaw_store_summary`), orders (`sellerclaw_orders`), listings (`sellerclaw_listings`), a "
     "product with its supplier and stores (`sellerclaw_products`), ads (`sellerclaw_ads`), "
     "connections (`sellerclaw_connections`), plan and credits (`sellerclaw_billing`), a request "
     "waiting on them (`sellerclaw_approval`), generated media (`sellerclaw_media`) and the media "
     "studio (`sellerclaw_media_studio`). Use them for those questions, passing the owner's own words "
-    "— an order number, a title, a SKU, a store's name — without looking up an id first, and do not "
-    "recite what the card shows. Gather what you need for your own next step with the other tools.\n"
+    "— an order number, a title, a SKU, a store's name — without looking up an id first. Gather what "
+    "you need for your own next step with the other tools.\n"
     "Show the owner what you worked on: after you publish, ship, add or change something, open its "
     "card with the id from the answer once any background job has finished; otherwise give its "
     "essentials in a few lines.\n"
@@ -117,6 +129,7 @@ def card_wording() -> mcp_apps.CardWording:
         close_in_words="answer_action_request quoting what they said",
         read_media_job="list_media_jobs",
         descriptions=_card_descriptions(),
+        shown_to_the_owner=_CARD_SHOWN,
     )
 
 

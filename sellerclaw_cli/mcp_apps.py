@@ -280,6 +280,14 @@ _READ_TIMEOUT_SECONDS = 60.0
 
 ClientFactory = Callable[[float], Client]
 
+#: How every summary ends. Deliberately conditional: a client that did not negotiate MCP Apps gets
+#: these same answers with no card at all, and telling its model "the owner is looking at it" would
+#: be a plain untruth. The full payload is in the structured result either way.
+_SHOWN_TO_THE_OWNER = (
+    "If this client shows SellerClaw cards, the owner is looking at this one and can act on it "
+    "there; the full figures are in the structured result."
+)
+
 
 @dataclass(frozen=True)
 class CardWording:
@@ -296,6 +304,8 @@ class CardWording:
     read_media_job: str = "`media job-status` passing wait_seconds 25"
     #: Card tool name -> its description, where it differs from the default one.
     descriptions: Mapping[str, str] = field(default_factory=dict)
+    #: The sentence every summary ends with: what the owner already sees and what is left to say.
+    shown_to_the_owner: str = _SHOWN_TO_THE_OWNER
 
 
 #: The cards as the read/write runners' server words them.
@@ -447,13 +457,6 @@ _AWAITING_SHIPMENT_STATUSES = frozenset(
     {"new", "pending_approval", "approved", "purchasing", "purchased", "awaiting_payment"}
 )
 
-#: How every summary ends. Deliberately conditional: a client that did not negotiate MCP Apps gets
-#: these same answers with no card at all, and telling its model "the owner is looking at it" would
-#: be a plain untruth. The full payload is in the structured result either way.
-_SHOWN_TO_THE_OWNER = (
-    "If this client shows SellerClaw cards, the owner is looking at this one and can act on it "
-    "there; the full figures are in the structured result."
-)
 
 
 def _money(value: Any, currency: str | None) -> str | None:
@@ -1265,6 +1268,28 @@ def _answer_paused(tool: Callable[..., Any]) -> Callable[..., Any]:
     return _tool
 
 
+def _ending_in(tool: Callable[..., Any], ending: str) -> Callable[..., Any]:
+    """End the tool's summary with this server's sentence about the card instead of the default one."""
+    if ending == _SHOWN_TO_THE_OWNER:
+        return tool
+    from mcp.types import CallToolResult, TextContent
+
+    @functools.wraps(tool)
+    def _tool(*args: Any, **kwargs: Any) -> Any:
+        result = tool(*args, **kwargs)
+        if not isinstance(result, CallToolResult):
+            return result
+        content = [
+            TextContent(type="text", text=block.text.replace(_SHOWN_TO_THE_OWNER, ending))
+            if isinstance(block, TextContent)
+            else block
+            for block in result.content
+        ]
+        return result.model_copy(update={"content": content})
+
+    return _tool
+
+
 @contextmanager
 def _refusals_in_their_own_words() -> Iterator[None]:
     """Let the Agent API's refusal reach the card instead of a generic failure.
@@ -1488,7 +1513,7 @@ def build_extension(client_for_tool: ClientFactory, wording: CardWording = RUNNE
         options["description"] = wording.descriptions.get(options["name"], options["description"])
 
         def register(tool: Callable[..., Any]) -> Any:
-            return apps.tool(**options)(_answer_paused(tool))
+            return apps.tool(**options)(_ending_in(_answer_paused(tool), wording.shown_to_the_owner))
 
         return register
     csp = ResourceCsp(

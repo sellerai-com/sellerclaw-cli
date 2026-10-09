@@ -19,7 +19,14 @@ from sellerclaw_cli._command_group import positionals_of
 from sellerclaw_cli._errors import UserInputError
 from sellerclaw_cli.chatgpt import ACTIONS, _action, research
 from sellerclaw_cli.chatgpt._action import Action
-from sellerclaw_cli.mcp_server import _reads, _resolve, build_chatgpt_http_server, create_http_app
+from sellerclaw_cli.mcp_server import (
+    _client_for_tool,
+    _import_mcp_server,
+    _reads,
+    _resolve,
+    build_chatgpt_http_server,
+    create_http_app,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -174,6 +181,44 @@ def test_cards_name_this_surface_s_tools_instead_of_commands() -> None:
     for text in [*wording.descriptions.values(), wording.close_in_words, wording.read_media_job]:
         assert "command" not in text
     assert "answer_action_request" in mcp_apps._summarize_approval({"request": {"title": "x"}}, wording)
+
+
+@respx.mock
+@pytest.mark.usefixtures("env_pointing_at_fake_api")
+@pytest.mark.parametrize(
+    ("wording", "ending", "never"),
+    [
+        pytest.param(
+            chatgpt.card_wording(),
+            chatgpt._CARD_SHOWN,
+            mcp_apps._SHOWN_TO_THE_OWNER,
+            id="chatgpt-is-told-the-owner-sees-it-and-asked-for-a-takeaway",
+        ),
+        pytest.param(
+            mcp_apps.RUNNER_WORDING,
+            mcp_apps._SHOWN_TO_THE_OWNER,
+            chatgpt._CARD_SHOWN,
+            id="clients-that-may-draw-no-card-keep-the-conditional",
+        ),
+    ],
+)
+def test_a_card_s_summary_ends_with_what_this_surface_says_about_the_card(
+    fake_api_url: str, wording: mcp_apps.CardWording, ending: str, never: str
+) -> None:
+    overview = {"balance": {"subscription_state": "no_plan"}, "usage": {"categories": []}}
+    respx.get(f"{fake_api_url}/agent/billing/overview").mock(return_value=httpx.Response(200, json=overview))
+    server = _import_mcp_server()("t", extensions=[mcp_apps.build_extension(_client_for_tool, wording)])
+
+    result = asyncio.run(server.call_tool("sellerclaw_billing", {}))
+
+    text = result.content[0].text
+    assert text.endswith(ending)
+    assert never not in text
+    assert result.structured_content == {"billing": overview}
+
+
+def test_the_rule_about_cards_is_in_the_part_of_the_instructions_chatgpt_weighs_most() -> None:
+    assert chatgpt.INSTRUCTIONS.index("do not repeat its rows or figures") < 512
 
 
 # --------------------------------------------------------------------------- running them
