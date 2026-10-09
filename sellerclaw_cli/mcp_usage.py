@@ -5,7 +5,8 @@ Until this existed even that was invisible: a guide read, a card opened and the 
 client makes all looked the same from the API's side — a token check and nothing else.
 
 So after every ``tools/call`` and ``prompts/get`` the server reports, with the caller's own token:
-which tool or prompt (and, for ``sellerclaw_read``/``sellerclaw_write``, which command), whether it
+which tool or prompt (and which command ran: from the arguments of ``sellerclaw_read`` /
+``sellerclaw_write``, or as a tool that picks its own command names it), whether it
 worked — and when it did not, the refusal's code and HTTP status, never its message — how long it
 took, and the name the client gave itself when the protocol carried one. **Never the arguments** —
 they carry the owner's own words, and so does any name that is not shaped like one of ours. The cloud
@@ -25,6 +26,7 @@ import logging
 import re
 import time
 from collections.abc import Callable, Mapping
+from contextvars import ContextVar
 from typing import Any, Final
 
 import httpx
@@ -53,6 +55,32 @@ Failure = tuple[str | None, int | None]
 #: group is torn down when the request ends — so the reports are held here until they finish.
 _in_flight: set[asyncio.Task[None]] = set()
 
+#: Where a tool that is not a runner records the command it ran, for this call's report. A holder the
+#: middleware puts in place rather than a value the tool sets: a sync tool runs on a worker thread in
+#: a *copy* of the request's context, so a value it set would never come back — but the holder is one
+#: object both sides see.
+_executed: ContextVar[dict[str, str] | None] = ContextVar("sellerclaw_mcp_executed", default=None)
+
+
+def note_command(command: str, *, changes: bool = False) -> None:
+    """Name the ``"<group> <command>"`` this call ran, for its report; outside a reported call, nothing.
+
+    For tools that each stand for one action and pick the command themselves — by the store's
+    platform, say — so the arguments alone cannot say which one ran.
+
+    One call can run several. The report names the first, unless a later one ``changes`` something
+    and nothing before it did: shipping an order may look the order up first, and is still the
+    shipment; listing the connections reads the stores first, then the rest.
+    """
+    holder = _executed.get()
+    if holder is None or not all(_NAME_SHAPE.match(part) for part in command.split(" ")):
+        return
+    if "command" in holder and (holder.get("changes") or not changes):
+        return
+    holder["command"] = command[:_MAX_COMMAND_CHARS]
+    if changes:
+        holder["changes"] = "yes"
+
 
 class UsageReporter:
     """Server middleware that reports each tool call and prompt it lets through.
@@ -73,6 +101,8 @@ class UsageReporter:
         started = time.monotonic()
         ok = False
         failure: Failure = (None, None)
+        executed: dict[str, str] = {}
+        reset = _executed.set(executed)
         try:
             result = await call_next(ctx)
             ok = not _is_error(result)
@@ -83,11 +113,26 @@ class UsageReporter:
             failure = (_exception_code(exc), None)
             raise
         finally:
+            _executed.reset(reset)
             self._schedule(
-                ctx, kind=kind, ok=ok, failure=failure, duration_ms=int((time.monotonic() - started) * 1000)
+                ctx,
+                kind=kind,
+                ok=ok,
+                failure=failure,
+                duration_ms=int((time.monotonic() - started) * 1000),
+                executed=executed.get("command"),
             )
 
-    def _schedule(self, ctx: Any, *, kind: str, ok: bool, failure: Failure, duration_ms: int) -> None:
+    def _schedule(
+        self,
+        ctx: Any,
+        *,
+        kind: str,
+        ok: bool,
+        failure: Failure,
+        duration_ms: int,
+        executed: str | None = None,
+    ) -> None:
         try:
             token = self._token_for_request()
             params = ctx.params if isinstance(ctx.params, Mapping) else {}
@@ -97,7 +142,7 @@ class UsageReporter:
             if not _NAME_SHAPE.match(name.strip()):
                 name = "unknown"
             body: dict[str, Any] = {"kind": kind, "name": name, "ok": ok, "duration_ms": max(0, duration_ms)}
-            command = command_of(name, params.get("arguments"))
+            command = command_of(name, params.get("arguments")) or executed
             if command is not None:
                 body["command"] = command
             client_name = client_name_of(ctx)

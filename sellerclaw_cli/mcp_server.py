@@ -66,6 +66,7 @@ from __future__ import annotations
 
 import functools
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -600,7 +601,9 @@ def _background_job_schema(cmd: Cmd) -> dict[str, Any]:
     }
 
 
-def _poll_call(cmd: Cmd, positionals: dict[str, Any], job: dict[str, Any]) -> str | None:
+def _poll_call(
+    cmd: Cmd, positionals: dict[str, Any], job: dict[str, Any], notes: Notes
+) -> str | None:
     """The exact call that reads this job, ids filled in.
 
     A job id with no call to read it is a dead end, and the two ways out of a dead end are both bad:
@@ -611,15 +614,19 @@ def _poll_call(cmd: Cmd, positionals: dict[str, Any], job: dict[str, Any]) -> st
     if reader is None:
         return None
     group, candidate = reader
-    args: dict[str, Any] = {}
+    args: dict[str, str] = {}
     for name in positionals_of(candidate.path):
         value = job.get("id") if name == "job_id" else positionals.get(name)
         if value in (None, ""):
             return None
         args[name] = str(value)
+    return notes.poll_call(group, candidate, args)
+
+
+def _runner_poll_call(group: str, reader: Cmd, args: dict[str, str]) -> str:
+    """The job reader as a call of the read/write tools, which is how this face runs a command."""
     rendered = ", ".join(f'"{name}": "{value}"' for name, value in args.items())
-    tool = _tool_for(candidate)
-    return f'{tool}(group="{group}", command="{candidate.name}", positionals={{{rendered}}})'
+    return f'{_tool_for(reader)}(group="{group}", command="{reader.name}", positionals={{{rendered}}})'
 
 
 def _command_schema(group: str, cmd: Cmd) -> dict[str, Any]:
@@ -697,12 +704,31 @@ def _client_for_tool(timeout: float) -> Client:
     return Client.from_env(timeout=timeout)
 
 
+@dataclass(frozen=True)
+class Notes:
+    """How an answer names the call to make next, in the vocabulary of the tools that served it.
+
+    Two answers point onward: a background job at the call that reads it, and a write the owner has
+    to approve at the card they answer it on (and at the call that closes it with their words). The
+    same command runs behind tools of different names — the read/write runners here, one tool per
+    action for ChatGPT — and a note naming a tool the caller does not have is worse than none.
+    """
+
+    #: ``(reader group, reader command, its path arguments) -> the call``, ids filled in; None when
+    #: this surface has no tool that reads such a job.
+    poll_call: Callable[[str, Cmd, dict[str, str]], str | None]
+    #: ``request id -> the note``.
+    approval: Callable[[str], str]
+
+
 def run_command(
     group: str,
     command: str,
     positionals: dict[str, Any] | None = None,
     flags: dict[str, Any] | None = None,
     body: dict[str, Any] | None = None,
+    *,
+    notes: Notes | None = None,
 ) -> Any:
     """Execute a command against the SellerClaw Agent API and return the parsed JSON response.
 
@@ -716,7 +742,11 @@ def run_command(
     that reads it once it has finished: the CLI can offer ``--wait``, but an MCP client has no such
     flag, and a job id with no way to read it is what makes a caller re-send the write. A job that
     came back already finished is left alone — it is the outcome, not a receipt for one.
+
+    ``notes`` words those pointers for the tools the caller actually has; the read/write runners'
+    by default.
     """
+    notes = notes or RUNNER_NOTES
     matched, cmd = _resolve(group, command)
     positionals = positionals or {}
     flags = flags or {}
@@ -762,13 +792,13 @@ def run_command(
             read_only=cmd.read_only,
         )
     if cmd.job_poll_path is None or not looks_like_job(result):
-        return _point_at_approval_card(cmd, result)
+        return _point_at_approval_card(cmd, result, notes)
     if is_finished(result):
         # It queued nothing in the end — a small batch can be done, or refused, by the time the call
         # returns. Then this payload *is* the answer, and "running in the background, read it later"
         # would cost a turn and, on a failure, hide the refusal behind a promise.
         return result
-    poll_call = _poll_call(cmd, positionals, result)
+    poll_call = _poll_call(cmd, positionals, result, notes)
     if poll_call is None:
         return result
     return {**result, "note": queued_note_for_call(poll_call)}
@@ -828,7 +858,14 @@ _APPROVAL_CARD_NOTE = (
 )
 
 
-def _point_at_approval_card(cmd: Cmd, result: Any) -> Any:
+#: The pointers as the read/write runners word them.
+RUNNER_NOTES = Notes(
+    poll_call=_runner_poll_call,
+    approval=lambda request: _APPROVAL_CARD_NOTE.format(request=request),
+)
+
+
+def _point_at_approval_card(cmd: Cmd, result: Any, notes: Notes) -> Any:
     """A write the owner has to approve first comes back pointing at the card they answer it on.
 
     The API's own ``message`` speaks to our agent, which closes an ask from its own chat. Here the
@@ -842,7 +879,7 @@ def _point_at_approval_card(cmd: Cmd, result: Any) -> Any:
     request = result.get("action_request_id")
     if result.get("status") != "pending_approval" or not request:
         return result
-    return {**result, "note": _APPROVAL_CARD_NOTE.format(request=request)}
+    return {**result, "note": notes.approval(str(request))}
 
 
 def _map_flags(group: str, command: str, cmd: Cmd, flags: dict[str, Any]) -> dict[str, Any]:
@@ -1204,6 +1241,44 @@ def build_http_server(
     Where it listens and whether it keeps sessions are transport decisions, and in the v2 SDK they
     belong to ``run()`` / ``streamable_http_app()`` rather than here — see :func:`serve_http`.
     """
+    server = _hosted_server(
+        issuer_url=issuer_url,
+        resource_url=resource_url,
+        api_url=api_url,
+        instructions=SERVER_INSTRUCTIONS,
+        extension=_apps_extension(),
+    )
+    _register_tools(server)
+    _register_prompts(server)
+    if openai_apps_challenge:
+        _register_openai_apps_challenge(server, openai_apps_challenge)
+    return server
+
+
+def build_chatgpt_http_server(*, issuer_url: str, resource_url: str | None, api_url: str) -> Any:
+    """Build the hosted server's ChatGPT surface: one tool per action, and the same cards.
+
+    Same sign-in, the same usage reports and the same resource identity as :func:`build_http_server`
+    — it is the same server reached at another path — with :mod:`sellerclaw_cli.chatgpt`'s tools in
+    place of the read/write runners, and no prompts, which ChatGPT does not offer.
+    """
+    from sellerclaw_cli import chatgpt
+
+    server = _hosted_server(
+        issuer_url=issuer_url,
+        resource_url=resource_url,
+        api_url=api_url,
+        instructions=chatgpt.INSTRUCTIONS,
+        extension=mcp_apps.build_extension(_client_for_tool, chatgpt.card_wording()),
+    )
+    chatgpt.register_actions(server, wrap=_refusals_reach_the_caller)
+    return server
+
+
+def _hosted_server(
+    *, issuer_url: str, resource_url: str | None, api_url: str, instructions: str, extension: Any
+) -> Any:
+    """An ``MCPServer`` that authenticates every request as an OAuth resource server."""
     mcp_server = _import_mcp_server()
     from mcp.server.auth.settings import AuthSettings
 
@@ -1220,22 +1295,17 @@ def build_http_server(
         # defaults this to True in 3.0, and a silent switch would refuse every live token.
         validate_token_resource=False,
     )
-    server = mcp_server(
+    return mcp_server(
         SERVER_NAME,
-        instructions=SERVER_INSTRUCTIONS,
+        instructions=instructions,
         version=__version__,
         token_verifier=SellerclawTokenVerifier(api_url=api_url),
         auth=auth,
         cache_hints=_cache_hints(),
-        extensions=[_apps_extension()],
+        extensions=[extension],
         middleware=[_usage_reporter(api_url)],
         **_server_branding(),
     )
-    _register_tools(server)
-    _register_prompts(server)
-    if openai_apps_challenge:
-        _register_openai_apps_challenge(server, openai_apps_challenge)
-    return server
 
 
 def _register_openai_apps_challenge(server: Any, token: str) -> None:
@@ -1248,8 +1318,8 @@ def _register_openai_apps_challenge(server: Any, token: str) -> None:
         return PlainTextResponse(token)
 
 
-def _http_server_from_env() -> Any:
-    """Build the hosted HTTP server from environment configuration."""
+def _hosted_config_from_env() -> dict[str, Any]:
+    """Where the hosted server signs callers in and which API it serves, from the environment."""
     import os
 
     from sellerclaw_cli import _config
@@ -1257,11 +1327,19 @@ def _http_server_from_env() -> Any:
     issuer_url = os.environ.get("SELLERCLAW_MCP_ISSUER_URL", "").strip()
     if not issuer_url:
         raise UserInputError("SELLERCLAW_MCP_ISSUER_URL is required to run the HTTP MCP server.")
-    resource_url = os.environ.get("SELLERCLAW_MCP_RESOURCE_URL", "").strip() or None
+    return {
+        "issuer_url": issuer_url,
+        "resource_url": os.environ.get("SELLERCLAW_MCP_RESOURCE_URL", "").strip() or None,
+        "api_url": _config.load().api_url,
+    }
+
+
+def _http_server_from_env() -> Any:
+    """Build the hosted HTTP server from environment configuration."""
+    import os
+
     return build_http_server(
-        issuer_url=issuer_url,
-        resource_url=resource_url,
-        api_url=_config.load().api_url,
+        **_hosted_config_from_env(),
         openai_apps_challenge=os.environ.get("SELLERCLAW_MCP_OPENAI_APPS_CHALLENGE", "").strip()
         or None,
     )
@@ -1294,16 +1372,48 @@ def _http_transport_options() -> dict[str, Any]:
 
 
 def create_http_app() -> Any:
-    """ASGI app factory for the hosted MCP server (e.g. ``uvicorn ... --factory``)."""
-    return _http_server_from_env().streamable_http_app(**_http_transport_options())
+    """ASGI app factory for the hosted MCP server (e.g. ``uvicorn ... --factory``).
+
+    One app serves both surfaces: the read/write runners at ``/mcp`` and ChatGPT's tools at
+    ``/chatgpt/mcp``. The ChatGPT route joins the first app, so it passes the same sign-in middleware
+    and shares the protected-resource metadata; each server keeps its own session manager, and both
+    are started by the app's lifespan — a manager that was never started refuses every request.
+    """
+    from collections.abc import AsyncIterator
+    from contextlib import AsyncExitStack, asynccontextmanager
+
+    from starlette.routing import Route
+
+    from sellerclaw_cli.chatgpt import CHATGPT_MCP_PATH
+
+    options = _http_transport_options()
+    runners = _http_server_from_env()
+    chatgpt = build_chatgpt_http_server(**_hosted_config_from_env())
+    app = runners.streamable_http_app(**options)
+    chatgpt_app = chatgpt.streamable_http_app(streamable_http_path=CHATGPT_MCP_PATH, **options)
+    app.router.routes.extend(
+        route
+        for route in chatgpt_app.router.routes
+        if isinstance(route, Route) and route.path == CHATGPT_MCP_PATH
+    )
+
+    @asynccontextmanager
+    async def lifespan(_app: Any) -> AsyncIterator[None]:
+        async with AsyncExitStack() as stack:
+            await stack.enter_async_context(runners.session_manager.run())
+            await stack.enter_async_context(chatgpt.session_manager.run())
+            yield
+
+    app.router.lifespan_context = lifespan
+    return app
 
 
 def serve_http() -> None:
     """Run the hosted streamable-HTTP MCP server (blocks until shutdown)."""
-    _, port = _bind_from_env()
-    _http_server_from_env().run(
-        transport="streamable-http", port=port, **_http_transport_options()
-    )
+    import uvicorn
+
+    host, port = _bind_from_env()
+    uvicorn.run(create_http_app(), host=host, port=port, log_level="info")
 
 
 def main_http() -> None:

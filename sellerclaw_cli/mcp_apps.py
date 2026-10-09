@@ -47,8 +47,9 @@ import mimetypes
 import os
 import threading
 import time
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
+from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from urllib.parse import quote
@@ -278,6 +279,27 @@ def _forget_documents() -> None:
 _READ_TIMEOUT_SECONDS = 60.0
 
 ClientFactory = Callable[[float], Client]
+
+
+@dataclass(frozen=True)
+class CardWording:
+    """What a card says about the tools around it, in the vocabulary of the server it is served from.
+
+    The cards are the same everywhere, but the tools beside them are not: the read/write runners run
+    a command by its group and name, while ChatGPT has one tool per action. A card that told ChatGPT
+    to run `action-requests confirm` would name something it has no way to call.
+    """
+
+    #: How an approval the owner answers in words gets closed.
+    close_in_words: str = "`action-requests confirm` quoting what they said"
+    #: How a client without cards reads a media job that is still generating.
+    read_media_job: str = "`media job-status` passing wait_seconds 25"
+    #: Card tool name -> its description, where it differs from the default one.
+    descriptions: Mapping[str, str] = field(default_factory=dict)
+
+
+#: The cards as the read/write runners' server words them.
+RUNNER_WORDING = CardWording()
 
 
 def _sale_states(value: list[str] | str | None) -> list[str] | None:
@@ -524,7 +546,7 @@ def _summarize_orders(payload: dict[str, Any]) -> str:
     return " ".join(lines)
 
 
-def _summarize_approval(payload: dict[str, Any]) -> str:
+def _summarize_approval(payload: dict[str, Any], wording: CardWording = RUNNER_WORDING) -> str:
     request = payload.get("request") or {}
     title = request.get("title") or "a request"
     status = request.get("status")
@@ -537,7 +559,7 @@ def _summarize_approval(payload: dict[str, Any]) -> str:
     lines.append(
         "Only they can answer it: you have no tool that closes it. If this client shows the "
         "card, they press the button on it; if they answer you in words instead, close it with "
-        "`action-requests confirm` quoting what they said. Never decide for them."
+        f"{wording.close_in_words}. Never decide for them."
     )
     return " ".join(lines)
 
@@ -1089,7 +1111,7 @@ _TASK_WORDS = {
 }
 
 
-def _summarize_media_jobs(payload: dict[str, Any]) -> str:
+def _summarize_media_jobs(payload: dict[str, Any], wording: CardWording = RUNNER_WORDING) -> str:
     jobs = [job for job in payload.get("jobs") or [] if isinstance(job, dict)]
     lines: list[str] = []
     ready = [job for job in jobs if job.get("status") == "succeeded" and job.get("result_url")]
@@ -1107,7 +1129,7 @@ def _summarize_media_jobs(payload: dict[str, Any]) -> str:
             f"{_plural(len(working), 'job')} still generating (an image takes under a minute, a "
             "video one to three). On a SellerClaw card each one fills in as it finishes, so end "
             "your turn instead of checking again; a client without cards reads it with "
-            "`media job-status` passing wait_seconds 25."
+            f"{wording.read_media_job}."
         )
     missing = len(payload.get("asked") or []) - len(jobs)
     if missing > 0:
@@ -1149,9 +1171,9 @@ def _media_kind(item: dict[str, Any]) -> str:
     return "video" if str(item.get("content_type") or "").startswith("video/") else "image"
 
 
-def _summarize_media(payload: dict[str, Any]) -> str:
+def _summarize_media(payload: dict[str, Any], wording: CardWording = RUNNER_WORDING) -> str:
     if "jobs" in payload:
-        return _summarize_media_jobs(payload)
+        return _summarize_media_jobs(payload, wording)
     return _summarize_media_library(payload)
 
 
@@ -1443,12 +1465,12 @@ card to follow.\
 """
 
 
-def build_extension(client_for_tool: ClientFactory) -> Any:
+def build_extension(client_for_tool: ClientFactory, wording: CardWording = RUNNER_WORDING) -> Any:
     """The MCP Apps extension: the screens in :data:`SCREENS` and the tools bound to them.
 
     ``client_for_tool`` builds an Agent API client carrying whoever is on the other end of this
     request — passed in rather than imported so this module never has to know how the server
-    authenticates.
+    authenticates. ``wording`` says how the cards name the tools beside them on this server.
 
     Registration order matters: the SDK checks every tool's ``resource_uri`` against the registered
     resources when the server is constructed, so a screen that is never registered fails at startup
@@ -1463,6 +1485,7 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
 
     def card_tool(**options: Any) -> Callable[[Callable[..., Any]], Any]:
         """``apps.tool`` for a card: a paused account answers with the paywall, not an error."""
+        options["description"] = wording.descriptions.get(options["name"], options["description"])
 
         def register(tool: Callable[..., Any]) -> Any:
             return apps.tool(**options)(_answer_paused(tool))
@@ -2011,7 +2034,7 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
     def sellerclaw_approval(request: str) -> Any:
         with _refusals_in_their_own_words(), client_for_tool(DEFAULT_TIMEOUT_SECONDS) as client:
             payload = _read_approval(client, request)
-        return _result(payload, _summarize_approval(payload))
+        return _result(payload, _summarize_approval(payload, wording))
 
     @card_tool(
         resource_uri=resource_uri("approval"),
@@ -2035,7 +2058,7 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
                 json=_query(decision=decision, option_id=option),
             )
             payload = _read_approval(client, request, known=answered)
-        return _result(payload, _summarize_approval(payload))
+        return _result(payload, _summarize_approval(payload, wording))
 
     @card_tool(
         resource_uri=resource_uri("attention"),
@@ -2264,7 +2287,7 @@ def build_extension(client_for_tool: ClientFactory) -> Any:
                 payload = {"jobs": (found or {}).get("jobs") or [], "asked": ids}
             else:
                 payload = _read_media_library(client, category, _words(query), offset or 0)
-        return _result(payload, _summarize_media(payload))
+        return _result(payload, _summarize_media(payload, wording))
 
     @card_tool(
         resource_uri=resource_uri("media-studio"),

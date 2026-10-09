@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import shutil
 import zipfile
 from collections.abc import Callable
@@ -11,7 +12,6 @@ from pathlib import Path
 import pytest
 
 from scripts.build_plugin import (
-    CHATGPT_CORE_SKILL,
     TARGETS,
     assemble,
     available_targets,
@@ -30,6 +30,17 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 PLUGIN_SRC = REPO_ROOT / "plugin"
 
 CORE_SKILL = "sellerclaw"
+CHATGPT_SKILLS = frozenset(
+    {
+        "sellerclaw",
+        "sellerclaw-listings",
+        "sellerclaw-orders",
+        "sellerclaw-catalog",
+        "sellerclaw-ads",
+        "sellerclaw-research",
+        "sellerclaw-media",
+    }
+)
 TASK_RECIPES = (
     "sellerclaw-listings",
     "sellerclaw-orders",
@@ -107,8 +118,9 @@ def test_every_available_target_assembles(target: str, tmp_path: Path) -> None:
     # Every target carries at least one stampable manifest.
     manifests = (".claude-plugin/plugin.json", "manifest.json", "plugin.json")
     assert any((out / rel).is_file() for rel in manifests), target
-    # Plugin targets ship a core skill; the Desktop .mcpb bundle has no skills concept.
-    if spec.skills:
+    # Plugin targets ship a core skill — compiled, or (ChatGPT) its own; the Desktop .mcpb bundle has
+    # no skills concept.
+    if spec.skills or target == "chatgpt":
         assert (out / "skills" / CORE_SKILL / "SKILL.md").is_file(), target
     else:
         assert not (out / "skills").exists(), target
@@ -287,7 +299,10 @@ def test_chatgpt_ships_the_manifest_and_server_at_its_root(chatgpt: Path) -> Non
     assert manifest["name"] == "sellerclaw"
     assert manifest["version"] == "9.9.9"
     # One server: the dashboard connects exactly one per plugin.
-    assert servers == {"sellerclaw": {"type": "streamable-http", "url": "https://mcp.sellerclaw.ai/mcp"}}
+    # ChatGPT has its own surface on the same host: one tool per action, as its directory requires.
+    assert servers == {
+        "sellerclaw": {"type": "streamable-http", "url": "https://mcp.sellerclaw.ai/chatgpt/mcp"}
+    }
     assert not (chatgpt / ".claude-plugin").exists()
     assert not (chatgpt / ".mcp.json").exists()
 
@@ -300,17 +315,36 @@ def test_chatgpt_leaves_out_what_the_directory_refuses_or_cannot_use(chatgpt: Pa
     shortcuts = {item["name"] for item in listed}
     shipped = {p.name for p in (chatgpt / "skills").iterdir()}
     assert shipped.isdisjoint(shortcuts)
-    assert set(TASK_RECIPES) <= shipped
+    assert shipped == CHATGPT_SKILLS
 
 
-def test_chatgpt_core_skill_is_the_start_guide(chatgpt: Path) -> None:
-    start = (default_guides_src(PLUGIN_SRC) / "start.md").read_text()
+def _chatgpt_tool_names() -> set[str]:
+    from sellerclaw_cli.mcp_server import build_chatgpt_http_server
 
-    skill = (chatgpt / "skills" / CORE_SKILL / "SKILL.md").read_text()
+    server = build_chatgpt_http_server(issuer_url="https://api.test", resource_url=None, api_url="https://api.test")
+    return {
+        tool.name
+        for tool in asyncio.run(server.list_tools())
+        if "model" in ((tool.meta or {}).get("ui") or {}).get("visibility", ["model"])
+    }
 
-    assert skill == f'---\nname: {CORE_SKILL}\ndescription: "{CHATGPT_CORE_SKILL}"\n---\n\n{start}'
-    # The shell CLI and Claude setup notes of the shared core mean nothing in ChatGPT.
-    assert not (chatgpt / "skills" / CORE_SKILL / "references").exists()
+
+@pytest.mark.parametrize("skill", sorted(CHATGPT_SKILLS))
+def test_chatgpt_skills_teach_only_the_tools_chatgpt_has(chatgpt: Path, skill: str) -> None:
+    """A skill naming a runner, a CLI command or a tool that is not there sends the model into a wall."""
+    from sellerclaw_cli.chatgpt import ACTIONS
+
+    text = (chatgpt / "skills" / skill / "SKILL.md").read_text()
+    front, body = text.split("\n---\n", 1)
+    known = _chatgpt_tool_names() | {p.name for a in ACTIONS for p in a.params} | {
+        "approved_queued", "pending_approval", "out_of_stock", "not_selling", "performance_max",
+        "price_list", "listing_id", "product_id",
+    }
+    named = {word for word in re.findall(r"`([a-z]+(?:_[a-z]+)+)`", body)}
+
+    assert f"name: {skill}" in front
+    assert named <= known, sorted(named - known)
+    assert not re.search(r"sellerclaw_(read|write|describe|groups|guide)|sellerclaw [a-z-]+ [a-z-]+", text)
 
 
 def test_chatgpt_package_never_names_claude(chatgpt: Path) -> None:
@@ -351,17 +385,11 @@ def test_chatgpt_listing_fits_the_dashboard_limits() -> None:
 
 
 def test_chatgpt_review_cases_name_tools_the_model_can_call() -> None:
-    from sellerclaw_cli.mcp_server import build_server
-
     review = _openai(json.loads(CHATGPT_MANIFEST.read_text()))["review"]
     assert isinstance(review, dict)
     cases = review["test_cases"]
     # A card's own buttons call some tools the model never sees; a review case cannot expect those.
-    callable_tools = {
-        tool.name
-        for tool in asyncio.run(build_server().list_tools())
-        if "model" in ((tool.meta or {}).get("ui") or {}).get("visibility", ["model"])
-    }
+    callable_tools = _chatgpt_tool_names()
 
     # The dashboard demands exactly five of each kind it scores against, and three it must refuse.
     assert len(cases["positive"]) == 5

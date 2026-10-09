@@ -125,6 +125,33 @@ def test_every_tool_call_is_reported_with_its_outcome(
 
 @pytest.mark.usefixtures("env_pointing_at_fake_api")
 @respx.mock
+def test_an_action_tool_reports_the_command_it_ran(fake_api_url: str) -> None:
+    """ChatGPT's tools pick their command themselves, on a worker thread — the report still names it."""
+    from sellerclaw_cli.mcp_server import build_chatgpt_http_server
+
+    respx.get(f"{fake_api_url}/agent/orders").mock(return_value=httpx.Response(200, json={"items": []}))
+    reported = respx.post(f"{fake_api_url}/agent/mcp/calls").mock(return_value=httpx.Response(204))
+    server = build_chatgpt_http_server(issuer_url=fake_api_url, resource_url=None, api_url=fake_api_url)
+
+    async def _run() -> Any:
+        async with Client(server, client_info=Implementation(name="chatgpt", version="1"), mode="legacy") as client:
+            result = await client.call_tool("list_orders", {"awaiting_shipment": True})
+        await _reports_done()
+        return result
+
+    result = asyncio.run(_run())
+
+    assert result.is_error is False
+    [report] = _reports(reported)
+    assert {k: report[k] for k in ("name", "ok", "command")} == {
+        "name": "list_orders",
+        "ok": True,
+        "command": "orders list",
+    }
+
+
+@pytest.mark.usefixtures("env_pointing_at_fake_api")
+@respx.mock
 def test_a_refusal_is_reported_with_the_apis_own_code_and_status_but_not_its_message(fake_api_url: str) -> None:
     respx.get(f"{fake_api_url}/agent/orders/{ORDER_ID}").mock(
         return_value=httpx.Response(
