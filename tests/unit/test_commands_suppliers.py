@@ -302,3 +302,163 @@ def test_cancel_order_rejects_an_unknown_body_field_before_the_network_call(
     )
     assert result.exit_code != 0
     assert route.call_count == 0
+
+
+@respx.mock
+def test_a_warehouse_is_added_to_one_supplier_with_its_address(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    supplier_id = "8f6b3c1e-0000-4000-8000-000000000001"
+    route = respx.post(
+        f"{fake_api_url}/agent/supplier-accounts/offline/{supplier_id}/warehouses"
+    ).mock(return_value=httpx.Response(201, json={"id": "w-1", "products": 3}))
+
+    result = runner.invoke(
+        app,
+        [
+            "suppliers",
+            "create-warehouse",
+            supplier_id,
+            "-b",
+            json.dumps({"name": "Main", "country_code": "US", "postal_code": "10001", "city": "NYC"}),
+        ],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {
+        "name": "Main",
+        "country_code": "US",
+        "postal_code": "10001",
+        "city": "NYC",
+    }
+
+
+def test_a_warehouse_without_a_postal_code_is_refused_before_the_request(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "suppliers",
+            "create-warehouse",
+            "8f6b3c1e-0000-4000-8000-000000000001",
+            "-b",
+            json.dumps({"name": "Main", "country_code": "US"}),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "postal_code" in result.output + result.stderr
+
+
+@respx.mock
+def test_a_warehouse_field_is_cleared_with_null(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    supplier_id = "8f6b3c1e-0000-4000-8000-000000000001"
+    warehouse_id = "8f6b3c1e-0000-4000-8000-000000000002"
+    route = respx.patch(
+        f"{fake_api_url}/agent/supplier-accounts/offline/{supplier_id}/warehouses/{warehouse_id}"
+    ).mock(return_value=httpx.Response(200, json={"id": warehouse_id}))
+
+    result = runner.invoke(
+        app,
+        ["suppliers", "update-warehouse", supplier_id, warehouse_id, "-b", '{"city": null}'],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {"city": None}
+
+
+@respx.mock
+def test_warehouses_are_listed_and_deleted_by_supplier(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    supplier_id = "8f6b3c1e-0000-4000-8000-000000000001"
+    warehouse_id = "8f6b3c1e-0000-4000-8000-000000000002"
+    base = f"{fake_api_url}/agent/supplier-accounts/offline/{supplier_id}/warehouses"
+    listed = respx.get(base).mock(return_value=httpx.Response(200, json=[]))
+    deleted = respx.delete(f"{base}/{warehouse_id}").mock(return_value=httpx.Response(204))
+
+    listing = runner.invoke(app, ["suppliers", "list-warehouses", supplier_id])
+    deletion = runner.invoke(app, ["suppliers", "delete-warehouse", supplier_id, warehouse_id])
+
+    assert listing.exit_code == 0, listing.stderr
+    assert deletion.exit_code == 0, deletion.stderr
+    assert listed.called and deleted.called
+
+
+@respx.mock
+def test_a_countrys_warehouse_rates_are_sent_as_weight_bands(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    supplier_id = "8f6b3c1e-0000-4000-8000-000000000001"
+    warehouse_id = "8f6b3c1e-0000-4000-8000-000000000002"
+    route = respx.put(
+        f"{fake_api_url}/agent/supplier-accounts/offline/{supplier_id}/warehouses/{warehouse_id}"
+        "/shipping-rates/US"
+    ).mock(return_value=httpx.Response(200, json={"id": warehouse_id, "shipping_rates": []}))
+    bands = [
+        {"max_weight_grams": 500, "price": "5.00"},
+        {"max_weight_grams": 1000, "price": "8.00"},
+    ]
+
+    result = runner.invoke(
+        app,
+        [
+            "suppliers",
+            "set-warehouse-rates",
+            supplier_id,
+            warehouse_id,
+            "US",
+            "-b",
+            json.dumps({"bands": bands}),
+        ],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {"bands": bands}
+
+
+def test_warehouse_rates_without_bands_are_refused_before_the_request(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "suppliers",
+            "set-warehouse-rates",
+            "8f6b3c1e-0000-4000-8000-000000000001",
+            "8f6b3c1e-0000-4000-8000-000000000002",
+            "US",
+            "-b",
+            "{}",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "bands" in result.output + result.stderr
+
+
+@respx.mock
+def test_a_countrys_warehouse_rates_are_removed(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    supplier_id = "8f6b3c1e-0000-4000-8000-000000000001"
+    warehouse_id = "8f6b3c1e-0000-4000-8000-000000000002"
+    route = respx.delete(
+        f"{fake_api_url}/agent/supplier-accounts/offline/{supplier_id}/warehouses/{warehouse_id}"
+        "/shipping-rates/DE"
+    ).mock(return_value=httpx.Response(204))
+
+    result = runner.invoke(
+        app, ["suppliers", "delete-warehouse-rates", supplier_id, warehouse_id, "DE"]
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert route.called

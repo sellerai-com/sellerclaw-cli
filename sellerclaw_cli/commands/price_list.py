@@ -121,6 +121,14 @@ SPECS = (
                 help="Only these SKUs/barcodes. Omit to take every line with no product yet.",
             ),
             body_field("limit", type=int, help="Cap this batch (default 200)."),
+            body_field(
+                "supplier_warehouse_id",
+                help=(
+                    "The supplier warehouse the new products ship from (`suppliers "
+                    "list-warehouses`). Omitted: the supplier's only warehouse; a supplier with "
+                    "several refuses with the list and creates nothing."
+                ),
+            ),
         ),
     ),
 )

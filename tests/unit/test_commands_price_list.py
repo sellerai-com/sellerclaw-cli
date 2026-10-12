@@ -146,3 +146,23 @@ def test_a_missing_supplier_id_is_caught_before_the_request(
 
     assert result.exit_code != 0
     assert "supplier_id" in result.output
+
+
+@respx.mock
+def test_create_products_names_the_warehouse_they_ship_from(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.post(f"{fake_api_url}/agent/suppliers/price-list/create-products").mock(
+        return_value=httpx.Response(200, json={"created": [], "remaining": 0})
+    )
+    body = {
+        "supplier_id": "11111111-1111-1111-1111-111111111111",
+        "supplier_warehouse_id": "22222222-2222-2222-2222-222222222222",
+    }
+
+    result = runner.invoke(app, ["price-list", "create-products", "-b", json.dumps(body)])
+
+    assert result.exit_code == 0, result.output
+    sent = json.loads(route.calls.last.request.content)
+    assert sent["supplier_warehouse_id"] == "22222222-2222-2222-2222-222222222222"

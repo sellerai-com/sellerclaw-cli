@@ -337,11 +337,14 @@ SPECS = (
             "Apply per-listing changes to many listings at once — published ones too, not only "
             "drafts — and get each one's fresh readiness back in the same call. Body: 'items' is a "
             "list of {listing_id, patch:{title?, description?, sell_prices?, quantities?, images?, "
-            "variation_images?, videos?, attributes?}} — the listing_id is the listing's own id, and a "
+            "variation_images?, videos?, attributes?, weight_grams?, box_id?, sync_package?}} — the "
+            "listing_id is the listing's own id, and a "
             "variation's id is refused up front with the listing id to use instead (the whole "
             "batch, before anything is written); sell_prices / quantities are keyed by SKU. Nothing "
             "reaches a marketplace here: each edit is written locally and recorded as owed, and the "
-            "next publish delivers it. A field a channel's publish cannot carry is refused with the "
+            "next publish delivers it — except a live listing's weight and box, which go out on "
+            "their own within minutes (Walmart at most hourly; TikTok Shop with the next publish). "
+            "A field a channel's publish cannot carry is refused with the "
             "reason — item specifics ('attributes') go to eBay, Etsy, TikTok Shop, Walmart and "
             "SellerCart; videos go to Shopify, Wix, SellerCart and eBay; Amazon takes price/stock "
             "only (its copy and photos belong to the ASIN card). The seller's own "
@@ -364,14 +367,18 @@ SPECS = (
                     "up to 50 MB — eBay takes one MP4/MOV — a generated video's result_url works; [] "
                     "removes them, and a video the seller uploaded in the store's own admin is never "
                     "touched), "
-                    "package_weight_grams (what one packed unit weighs, in grams — eBay prices "
-                    "calculated postage from it and refuses a listing without it), "
-                    "package_length_mm / package_width_mm / package_height_mm (the box; all three "
-                    "or none) and attributes (item specifics, name -> list of values, each name "
+                    "attributes (item specifics, name -> list of values, each name "
                     "spelled as `attributes schema` gives it; the map replaces the listing's whole "
                     "set, so send the ones to keep too — `listings get` shows them. On Etsy and "
                     "TikTok Shop a name or value the category does not list is refused with the ones "
-                    "it takes)."
+                    "it takes), weight_grams (what one unit of the goods weighs, in grams, without "
+                    "the box — eBay prices calculated postage from it and refuses a listing without "
+                    "it; null clears it), box_id (one of the seller's boxes from `shipping-boxes "
+                    "list`; null takes the listing out of any box) and sync_package (true: follow the "
+                    "catalog product's weight and box again, copied at once; false: keep the "
+                    "listing's own; not in the same patch as weight_grams / box_id). A listing "
+                    "follows its catalog product's weight and box until either is set on it; Wix, "
+                    "WooCommerce and Amazon refuse both."
                 ),
                 example=[
                     {"listing_id": "<uuid>", "patch": {"title": "New title"}},
@@ -383,7 +390,8 @@ SPECS = (
                         "listing_id": "<uuid>",
                         "patch": {"videos": ["https://api.sellerclaw.ai/agent/files/<id>/clip.mp4"]},
                     },
-                    {"listing_id": "<uuid>", "patch": {"package_weight_grams": 28}},
+                    {"listing_id": "<uuid>", "patch": {"weight_grams": 28, "box_id": "<box uuid>"}},
+                    {"listing_id": "<uuid>", "patch": {"sync_package": True}},
                     {"listing_id": "<uuid>", "patch": {"attributes": {"Material": ["Cotton"]}}},
                 ],
             ),
