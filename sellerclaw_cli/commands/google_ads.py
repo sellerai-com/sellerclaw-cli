@@ -118,7 +118,13 @@ SPECS = (
                 repeatable=True,
                 help="Write these: 2-4 description lines, <=90 chars each. Omitted = first sentences of the product description.",
             ),
-            body_field("country", help="Target country (ISO code, English name, or geoTargetConstant id). Default US."),
+            body_field(
+                "country",
+                help=(
+                    "Target country (ISO code, English name, or geoTargetConstant id). "
+                    "Defaults to the owner's own market."
+                ),
+            ),
             body_field("language", help="Ad language (ISO 639-1 / name). Defaults to the user's preferred language."),
             body_field(
                 "final_url",
@@ -163,7 +169,9 @@ SPECS = (
             ),
             body_field("long_headlines", repeatable=True, help="Write these: >=1 long headline, <=90 chars each."),
             body_field("descriptions", repeatable=True, help="Write these: >=2 description lines, <=90 chars each."),
-            body_field("country", help="Target country (ISO code / name / constant id). Default US."),
+            body_field(
+                "country", help="Target country (ISO code / name / constant id). Defaults to the owner's own market."
+            ),
             body_field("language", help="Ad language (ISO 639-1 / name). Defaults to the user's preferred language."),
             body_field(
                 "final_url",

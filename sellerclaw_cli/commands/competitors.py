@@ -33,7 +33,7 @@ SPECS = (
             ),
             body_field(
                 "marketplace_id",
-                help="eBay marketplace for competitor_item_id (EBAY_US, EBAY_GB, …). Default EBAY_US; ignored for url.",
+                help="eBay marketplace for competitor_item_id (EBAY_US, EBAY_GB, EBAY_AU, …). Defaults to the store's own eBay site (for a non-eBay store, the site of the country it sells into); ignored for url.",
                 example="EBAY_US",
             ),
             body_field(

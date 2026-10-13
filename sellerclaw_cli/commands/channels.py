@@ -169,10 +169,12 @@ SPECS = (
         "PATCH",
         "/agent/sales-channels/{sales_channel_id}",
         summary=(
-            "Set the store's target market — the destination (ISO alpha-2, e.g. US) whose shipping "
-            "is folded into the listing price. Pass an empty string to clear the override, so "
-            "pricing falls back to the market inferred from the store's order history. Read the "
-            "current value from `channels get` (`specifics.target_market`)."
+            "Set the store's target market — the country (ISO alpha-2, e.g. AU) it sells into: "
+            "shipping there is folded into the listing price, and research defaults to it. Pass "
+            "an empty string to clear the owner's choice, so the store goes back to the market "
+            "worked out from its marketplace, orders or currency. `channels get` shows the "
+            "current one (`effective_target_market`) and where it came from "
+            "(`target_market_source`: owner / derived / default)."
         ),
         body=(
             body_field(

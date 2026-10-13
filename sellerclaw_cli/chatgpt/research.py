@@ -7,7 +7,7 @@ from typing import Any
 from sellerclaw_cli._errors import UserInputError
 from sellerclaw_cli.chatgpt._action import Param, action, execute, fit, runs, split
 
-_LOCATION = Param("location_name", "string", "Country, e.g. United States (default).")
+_LOCATION = Param("location_name", "string", "Country, e.g. Australia. Defaults to the owner's own market.")
 _LANGUAGE = Param("language_name", "string", "Language, e.g. English.")
 _NETWORK = Param(
     "network", "string", "The social network.", required=True,
@@ -120,7 +120,7 @@ ACTIONS = (
             Param("gtin", "string", "eBay: barcode."),
             Param("sellers", "array", "eBay: seller usernames.", items="string"),
             Param("condition_new_only", "boolean", "eBay: only new items."),
-            Param("marketplace_id", "string", "eBay site, e.g. EBAY_US (default)."),
+            Param("marketplace_id", "string", "eBay site, e.g. EBAY_AU. Defaults to the owner's own market's site."),
             Param("sort", "string", "eBay: result order."),
             Param("page", "integer", "Result page, where the storefront pages."),
             Param("store", "string", "Shopify: one store's domain."),

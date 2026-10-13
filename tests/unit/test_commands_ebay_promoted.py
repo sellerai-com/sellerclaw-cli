@@ -126,3 +126,93 @@ def test_promoted_create_report_rejects_out_of_range_days_locally(
 
     assert result.exit_code != 0
     assert route.call_count == 0
+
+
+@respx.mock
+def test_promoted_ads_forwards_each_listing_and_the_campaign(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.get(f"{fake_api_url}/agent/ebay/stores/{STORE_ID}/promoted/ads").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "ads": [
+                    {
+                        "listing_id": "276830391008",
+                        "ad_id": "ad-1",
+                        "ad_status": "ACTIVE",
+                        "bid_percentage": "9.0",
+                        "campaign_id": "164275429017",
+                        "campaign_name": "Campaign May 02 2026",
+                        "campaign_status": "RUNNING",
+                        "funding_model": "COST_PER_SALE",
+                    }
+                ],
+                "preparing": False,
+                "synced_at": "2026-10-13T07:20:04Z",
+                "incomplete_campaigns": [],
+            },
+        )
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "ebay-promoted",
+            "ads",
+            STORE_ID,
+            "--listing-id",
+            "276830391008",
+            "--listing-id",
+            "276434831853",
+            "--campaign-id",
+            "164275429017",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    params = route.calls.last.request.url.params
+    assert params.get_list("listing_ids") == ["276830391008", "276434831853"]
+    assert params["campaign_id"] == "164275429017"
+    assert json.loads(result.stdout)["data"]["ads"][0]["campaign_id"] == "164275429017"
+
+
+@respx.mock
+def test_promoted_prepare_campaign_surfaces_the_conflicts_it_was_refused_for(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    conflict = {
+        "listing_id": "276830391008",
+        "campaign_id": "164275429017",
+        "campaign_name": "Campaign May 02 2026",
+        "bid_percentage": "9.0",
+    }
+    respx.post(f"{fake_api_url}/agent/ebay/stores/{STORE_ID}/promoted/campaigns/prepare").mock(
+        return_value=httpx.Response(
+            409,
+            json={
+                "detail": {
+                    "code": "listings_already_promoted",
+                    "message": "1 of the 1 listings already advertise in another campaign …",
+                    "conflicts": [conflict],
+                }
+            },
+        )
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "ebay-promoted",
+            "prepare-campaign",
+            STORE_ID,
+            "-b",
+            json.dumps({"name": "Top 1", "bid_percentage": "7.0", "listing_ids": ["276830391008"]}),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "listings_already_promoted" in result.output
+    assert "164275429017" in result.output

@@ -9,12 +9,16 @@ Gathering market signal to inform listings, pricing, and content via `sellerclaw
 `sellerclaw_write` for a competitor watch list). Run the examples directly; reach for
 `sellerclaw_describe` only for a command not shown here, or when a call errors.
 
+A country left out means the owner's own market (the country their stores sell into) for keyword
+and SEO research, eBay catalog search and trending searches; name one only when the owner asks about
+another country. Trends over time and related queries without a `geo` cover the whole world.
+
 ## Common calls
 
 ```text
 # Google Trends interest over time. keywords is comma-separated; timeframe / geo optional.
 sellerclaw_read(group="research-trends", command="interest-over-time",
-  flags={"keywords": "wireless mouse, bluetooth mouse", "timeframe": "today 12-m", "geo": "US"})
+  flags={"keywords": "wireless mouse, bluetooth mouse", "timeframe": "today 12-m"})
 sellerclaw_read(group="research-trends", command="related-queries", flags={"keywords": "wireless mouse"})
 
 # SEO / keyword research (body-driven)
@@ -23,7 +27,7 @@ sellerclaw_read(group="research-seo", command="serp-competitors", body={"keyword
 
 # What the marketplace itself already lists (query, gtin, or a competitor's storefront)
 sellerclaw_read(group="research-catalog", command="ebay-search",
-  body={"query": "wireless mouse", "marketplace_id": "EBAY_US", "limit": 20})
+  body={"query": "wireless mouse", "limit": 20})
 sellerclaw_read(group="research-catalog", command="ebay-search",
   body={"sellers": ["rival_store"], "limit": 50})
 
