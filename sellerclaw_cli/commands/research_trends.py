@@ -7,7 +7,11 @@ from sellerclaw_cli._command_group import Cmd, build_group, flag
 NAME = "research-trends"
 
 _TIMEFRAME = flag("timeframe", help="Time window (e.g. 'today 12-m').")
-_GEO = flag("geo", help="Geo code (e.g. 'US').")
+_GEO = flag(
+    "geo",
+    help="Country code (e.g. 'AU'). Left out: 'trending' answers for the owner's own market, the "
+    "other commands for the whole world.",
+)
 _CATEGORY = flag("category", help="Category id.")
 
 SPECS = (

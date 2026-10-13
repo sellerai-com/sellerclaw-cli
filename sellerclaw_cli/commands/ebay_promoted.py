@@ -14,6 +14,27 @@ SPECS = (
         summary="List Promoted Listings campaigns (name, status, funding model, bid %).",
     ),
     Cmd(
+        "ads",
+        "GET",
+        "/agent/ebay/stores/{store_id}/promoted/ads",
+        summary=(
+            "Which listings already advertise in which of the store's live campaigns, and at what "
+            "ad rate — including campaigns the owner made in Seller Hub. A listing can be in only "
+            "one pay-on-sale campaign, so check here before choosing listings for a new one. Read "
+            "from SellerClaw's copy, refreshed daily and after every change made here "
+            "('synced_at'); 'incomplete_campaigns' names campaigns too large to be copied in full."
+        ),
+        flags=(
+            flag(
+                "listing_id",
+                repeatable=True,
+                param="listing_ids",
+                help="Only these eBay item numbers (repeat the flag for several).",
+            ),
+            flag("campaign_id", help="Only this campaign (eBay's campaign number)."),
+        ),
+    ),
+    Cmd(
         "create-report",
         "POST",
         "/agent/ebay/stores/{store_id}/promoted/reports",
@@ -63,7 +84,9 @@ SPECS = (
             "'pending_approval'; once the owner approves, run 'apply' with the returned id to "
             "actually create the campaign and start promoting the listings. The ad rate "
             "('bid_percentage') is charged only when an item sells through the ad, so weigh it "
-            "against the product's margin."
+            "against the product's margin. Refused with 409 'listings_already_promoted' when "
+            "listings already advertise in another pay-on-sale campaign; its 'conflicts' name the "
+            "campaign and rate of each (see 'ads')."
         ),
         body=(
             body_field(
@@ -120,7 +143,9 @@ SPECS = (
         "/agent/ebay/stores/{store_id}/promoted/campaigns/{campaign_id}/add-listings",
         summary=(
             "Stage adding listings to an existing campaign (this increases ad spend, so it needs "
-            "the owner's approval). Returns a pending action; 'apply' it after approval."
+            "the owner's approval). Returns a pending action; 'apply' it after approval. Refused "
+            "with 409 'listings_already_promoted' when listings already advertise in another "
+            "pay-on-sale campaign."
         ),
         body=(
             body_field(

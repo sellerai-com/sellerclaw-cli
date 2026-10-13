@@ -79,6 +79,13 @@ sellerclaw_write(group="catalog", command="bulk-update",
   body={"items": [{"product_id": PRODUCT_ID, "patch": {"name": "Wireless Mouse (2026)"}},
                   {"product_id": OTHER_PRODUCT_ID, "patch": {"brand": "ACME"}}]})
 
+# Weight of the goods (without the box) and the box they ship in. The product's listings follow both.
+sellerclaw_read(group="shipping-boxes", command="list")
+sellerclaw_write(group="shipping-boxes", command="create",
+  body={"name": "Small mailer", "length_mm": 300, "width_mm": 200, "height_mm": 100, "weight_grams": 120})
+sellerclaw_write(group="catalog", command="update", positionals={"product_id": PRODUCT_ID},
+  body={"weight_grams": 450, "box_id": BOX_ID})
+
 # Supplier cost, not the buyer-facing price. One value for every variation…
 sellerclaw_write(group="catalog", command="set-prices", positionals={"product_id": PRODUCT_ID},
   body={"purchase_price": 9.5})
@@ -96,10 +103,15 @@ sellerclaw_write(group="catalog", command="delete", positionals={"product_id": P
   in the `listings` guide.
 - **`set-prices` is the cost you pay the supplier**, which feeds margin and profit reporting. The
   buyer-facing price lives on the listing.
-- **`weight_grams` is what a marketplace prices postage from.** eBay refuses a listing outright under
-  a calculated-rate shipping policy without one. Set it on creation, or afterwards with `catalog
-  update` (it applies to every variation); send `null` to clear a wrong one. Leave it out when the
-  weight is genuinely unknown — a `0` or a guess is charged to a real buyer at checkout.
+- **`weight_grams` is what a marketplace prices postage from** — the goods alone; the box's own
+  weight is added when a parcel is sent. eBay refuses a listing outright under a calculated-rate
+  shipping policy without one. Set it on creation, or afterwards with `catalog update` (it applies to
+  every variation); send `null` to clear a wrong one. Leave it out when the weight is genuinely
+  unknown — a `0` or a guess is charged to a real buyer at checkout.
+- **`box_id` is one of the owner's shipping boxes** (`shipping-boxes list`); its sides are the
+  parcel's size. A product with no supplier gets the default box when it names none. Listings follow
+  the product's weight and box, and live ones are re-sent their parcel on their own; a listing given
+  its own (`listings bulk-update`) stops following until it is sent `sync_package: true`.
 - **`list` with no criteria returns the whole catalog.** Pass `limit` (or a filter) — `total` still
   reports the full match count, so a small page is enough to answer "how many". When `total` is
   bigger than the page you asked for, walk the rest with `offset`; `list` and `search` both take it.

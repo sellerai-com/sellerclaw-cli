@@ -20,6 +20,10 @@ _COLUMNS = Param(
     'e.g. {"Артикул": "SKU"}.',
 )
 _GROUPS = {"catalog": "catalog-file", "price_list": "price-list"}
+_WAREHOUSE = Param(
+    "supplier_warehouse_id", "string",
+    "The supplier warehouse the goods ship from, when the supplier has several. Omitted: its only one.",
+)
 
 
 def _import_body(values: dict[str, Any]) -> tuple[str, dict[str, Any]]:
@@ -48,7 +52,10 @@ def _apply_import(values: dict[str, Any]) -> Any:
     applied = execute(group, "apply", None, None, body)
     if values["kind"] != "price_list" or not values.get("create_missing_products"):
         return applied
-    created = execute("price-list", "create-products", None, None, {"supplier_id": body["supplier_id"]})
+    create_body = {"supplier_id": body["supplier_id"]}
+    if values.get("supplier_warehouse_id"):
+        create_body["supplier_warehouse_id"] = values["supplier_warehouse_id"]
+    created = execute("price-list", "create-products", None, None, create_body)
     return {"applied": applied, "created_products": created}
 
 
@@ -247,6 +254,7 @@ ACTIONS = (
             ),
             Param("supplier_product_id", "string", "The supplier's code for the item."),
             Param("supplier_product_url", "string", "The item's page at the supplier."),
+            _WAREHOUSE,
         ),
         runs("catalog", "set-supplier"),
         read_only=False,
@@ -273,6 +281,7 @@ ACTIONS = (
             _SUPPLIER,
             _COLUMNS,
             Param("create_missing_products", "boolean", "Price list: also create products for lines that match none."),
+            _WAREHOUSE,
         ),
         _apply_import,
         read_only=False,

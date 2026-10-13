@@ -110,6 +110,44 @@ sellerclaw_write(group="suppliers", command="cancel-order",
   body={"internal_order_id": SELLERCLAW_ORDER_ID})
 ```
 
+## Warehouses of the owner's own suppliers
+
+A supplier with no integration (its rows in `list-accounts` have `"platform": "offline"`) leaves
+"where do the goods ship from?" to us, so it can have warehouses — each catalog product of it ships
+from one. CJ and Amazon have none: they choose the origin themselves.
+
+```text
+sellerclaw_read(group="suppliers", command="list-warehouses", positionals={"supplier_id": SUPPLIER_ID})
+sellerclaw_write(group="suppliers", command="create-warehouse", positionals={"supplier_id": SUPPLIER_ID},
+  body={"name": "Main", "country_code": "US", "postal_code": "10001"})
+sellerclaw_write(group="catalog", command="set-supplier-warehouse", positionals={"product_id": PRODUCT_ID},
+  body={"supplier_warehouse_id": WAREHOUSE_ID})
+```
+
+The first warehouse becomes the warehouse of every product of that supplier (`products` in the
+answer). Once there are several, binding a product to the supplier — `catalog set-supplier`,
+`catalog create`, `price-list create-products` — needs `supplier_warehouse_id`, and is refused with
+the list otherwise: ask the owner which one, never pick. A warehouse products ship from cannot be
+deleted until they are moved.
+
+### Shipping rates
+
+A warehouse can be given what it charges to ship one unit to a country, as weight bands — "up to
+500 g costs 5.00, up to 1 kg 8.00". Prices are in the supplier's currency (set one with
+`update-account` first if the supplier has none). Setting a country replaces its whole table.
+
+```text
+sellerclaw_write(group="suppliers", command="set-warehouse-rates",
+  positionals={"supplier_id": SUPPLIER_ID, "warehouse_id": WAREHOUSE_ID, "country_code": "US"},
+  body={"bands": [{"max_weight_grams": 500, "price": "5.00"}, {"max_weight_grams": 1000, "price": "8.00"}]})
+```
+
+A store selling to that country then prices those products' shipping with the rate for the parcel
+(the product's weight plus its box's own weight) instead of the product's own `shipping_cost`; live
+listings follow within an hour. With no rate for the country, no product weight, or a parcel heavier
+than the last band, the product's own `shipping_cost` is used — `catalog get` says which and why in
+`warehouse_shipping`. Enter the rates from the supplier's own price table; never invent them.
+
 ## Watch for
 
 - **Ordering is three steps.** `create-order` alone reserves nothing useful — confirm, then pay, or

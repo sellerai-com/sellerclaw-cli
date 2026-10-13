@@ -81,24 +81,30 @@ _LAZY_DRAFT_BODY = (
 )
 
 # The parcel, shared by the two edit commands. eBay prices calculated postage from it and refuses a
-# listing that carries no weight — and it lives on the listing, so this is how an existing draft or a
-# live listing is fixed, without deleting and re-creating anything.
+# listing that carries no weight. A listing follows its catalog product's weight and box; these set the
+# listing's own, which is how one listing ships differently from its product.
 _PACKAGE_BODY = (
     body_field(
-        "package_weight_grams",
+        "weight_grams",
         type=int,
+        nullable=True,
         help=(
-            "What one packed unit weighs, in grams. Required by eBay under a calculated-rate "
-            "shipping policy; omit it if nobody knows, never send 0 or a guess."
+            "What one unit of the goods weighs, in grams, without the box (the box's own weight is "
+            "added). Required by eBay under a calculated-rate shipping policy; omit it if nobody "
+            "knows, never send 0 or a guess; null clears it. Setting it stops this listing "
+            "following its catalog product's weight and box — a weight true of the goods belongs "
+            "on the product (`catalog update`)."
         ),
     ),
     body_field(
-        "package_length_mm",
-        type=int,
-        help="Package length in millimetres. Send all three sides or none — eBay refuses a partial box.",
+        "box_id",
+        nullable=True,
+        help=(
+            "The seller's shipping box (`shipping-boxes list`); its sides are the parcel's size. "
+            "null takes the listing out of any box. Setting it stops this listing following its "
+            "catalog product's weight and box."
+        ),
     ),
-    body_field("package_width_mm", type=int, help="Package width in millimetres."),
-    body_field("package_height_mm", type=int, help="Package height in millimetres."),
 )
 
 SPECS = (
@@ -253,7 +259,8 @@ SPECS = (
         "/agent/stores/{store_id}/ebay-listings/{listing_id}",
         summary=(
             "Edit an eBay listing — local only, nothing reaches eBay here. The change is recorded "
-            "as owed and the next publish delivers it."
+            "as owed and the next publish delivers it; a live listing's weight and box go out on "
+            "their own within minutes."
         ),
         body=(
             body_field("title", help="New listing title (max 80 chars)."),

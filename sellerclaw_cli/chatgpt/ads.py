@@ -193,7 +193,7 @@ ACTIONS = (
             Param("negative_keywords", "array", "Search: negative keywords.", items="string"),
             Param("cpc_bid", "number", "Search: highest cost per click."),
             Param("objective", "string", "Search: traffic or sales."),
-            Param("country", "string", "Target country (default US)."),
+            Param("country", "string", "Target country (defaults to the owner's own market)."),
             Param("language", "string", "Ad language."),
             Param("final_url", "string", "Landing page; omit to use the product's live page."),
             Param("name", "string", "Campaign name."),

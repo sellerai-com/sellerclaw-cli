@@ -14,7 +14,7 @@ Channels and their command groups:
 
 - `google-ads` — campaigns, ad groups, ads, keywords, PMax assets, metrics.
 - `facebook-ads` — campaigns, ad sets, ads, audiences, metrics.
-- `ebay-promoted` — Promoted Listings campaigns and performance reports (read-only).
+- `ebay-promoted` — Promoted Listings campaigns, which listings already advertise where (`ads`), performance reports, and campaign changes (launches and higher rates need the owner's approval).
 - `klaviyo` — `segments`, `lists`, `profiles`, `campaigns`, `flows`, `metrics`.
 
 Pull metrics/reports freely — they're read-only. Find the right command with `sellerclaw_groups`.

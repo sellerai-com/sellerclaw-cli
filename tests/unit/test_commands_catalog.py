@@ -249,3 +249,139 @@ def test_bulk_update_refuses_an_undeclared_top_level_key(
 
     assert result.exit_code != 0
     assert "products" in result.stderr
+
+
+@respx.mock
+def test_a_product_is_moved_to_another_warehouse_of_its_supplier(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    warehouse_id = "22222222-2222-2222-2222-222222222222"
+    route = respx.patch(f"{fake_api_url}/agent/products/{PRODUCT_A}/supplier-warehouse").mock(
+        return_value=httpx.Response(200, json={"id": PRODUCT_A})
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "catalog",
+            "set-supplier-warehouse",
+            PRODUCT_A,
+            "-b",
+            json.dumps({"supplier_warehouse_id": warehouse_id}),
+        ],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {"supplier_warehouse_id": warehouse_id}
+
+
+@respx.mock
+def test_binding_a_supplier_can_name_the_warehouse(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.patch(f"{fake_api_url}/agent/products/{PRODUCT_A}/supplier").mock(
+        return_value=httpx.Response(200, json={"id": PRODUCT_A})
+    )
+    body = {
+        "supplier_id": "11111111-1111-1111-1111-111111111111",
+        "supplier_product_id": "NSC-1",
+        "supplier_warehouse_id": "22222222-2222-2222-2222-222222222222",
+    }
+
+    result = runner.invoke(app, ["catalog", "set-supplier", PRODUCT_A, "-b", json.dumps(body)])
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == body
+
+
+BOX_ID = "55555555-5555-4555-8555-555555555555"
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    ("command", "method", "path", "body"),
+    [
+        pytest.param(
+            "update",
+            "PATCH",
+            f"/agent/products/{PRODUCT_A}",
+            {"weight_grams": 450, "box_id": BOX_ID},
+            id="update-sets-weight-and-box",
+        ),
+        pytest.param(
+            "update",
+            "PATCH",
+            f"/agent/products/{PRODUCT_A}",
+            {"box_id": None},
+            id="update-takes-the-product-out-of-any-box",
+        ),
+        pytest.param(
+            "set-variations",
+            "PATCH",
+            f"/agent/products/{PRODUCT_A}/variations",
+            {"box_id": BOX_ID},
+            id="set-variations-broadcasts-a-box",
+        ),
+        pytest.param(
+            "set-variations",
+            "PATCH",
+            f"/agent/products/{PRODUCT_A}/variations",
+            {"variations": [{"supplier_variant_id": "V-L", "weight_grams": 900, "box_id": None}]},
+            id="set-variations-per-variation",
+        ),
+    ],
+)
+def test_a_product_weight_and_box_reach_the_api_as_sent(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+    command: str,
+    method: str,
+    path: str,
+    body: dict[str, object],
+) -> None:
+    """An explicit null is an instruction (no box), so it must survive the local check and the trip."""
+    route = respx.route(method=method, url=f"{fake_api_url}{path}").mock(
+        return_value=httpx.Response(200, json={"id": PRODUCT_A})
+    )
+
+    result = runner.invoke(app, ["catalog", command, PRODUCT_A, "-b", json.dumps(body)])
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == body
+
+
+@respx.mock
+def test_a_product_is_created_with_its_weight_and_box(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    body = {
+        "items": [
+            {
+                "name": "Wireless Mouse",
+                "description": "2.4 GHz",
+                "category": "Electronics",
+                "weight_grams": 95,
+                "box_id": BOX_ID,
+                "variations": [
+                    {
+                        "supplier_variant_id": "WM-01",
+                        "sku": "WM-01",
+                        "name": "Black",
+                        "available_quantity": 5,
+                        "shipping_cost": 0,
+                    }
+                ],
+            }
+        ]
+    }
+    route = respx.post(f"{fake_api_url}/agent/products").mock(
+        return_value=httpx.Response(200, json={"results": [], "errors": []})
+    )
+
+    result = runner.invoke(app, ["catalog", "create", "-b", json.dumps(body)])
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == body

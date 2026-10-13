@@ -14,7 +14,7 @@ Many groups take an id as the **first positional** (e.g. a store id for `shopify
 | `shopify-store` / `shopify-listings` / `shopify-orders` | Shopify admin, storefront listings, orders & fulfillment. |
 | `shopify-finances` | Shopify Payments P&L and cash flow (read-only). |
 | `ebay-store` / `ebay-listings` / `ebay-orders` | eBay admin (policies, locations), listings & drafts, orders & fulfillment. |
-| `ebay-finances` / `ebay-promoted` | eBay fees/payouts (read-only); Promoted Listings campaigns & reports. |
+| `ebay-finances` / `ebay-promoted` | eBay fees/payouts (read-only); Promoted Listings campaigns, which listings advertise where, reports & campaign changes. |
 | `amazon-store` / `amazon-listings` / `amazon-orders` | Amazon account, offers + price/stock sync, orders & merchant-fulfilled shipments. |
 | `etsy-store` / `etsy-listings` / `etsy-orders` | Etsy shop admin (shipping profiles, return policies), listings & drafts, receipts & shipment confirmation. |
 | `etsy-finances` | Etsy ledger summary — fees, credits, debits, net over a period (read-only). |
@@ -43,6 +43,7 @@ Many groups take an id as the **first positional** (e.g. a store id for `shopify
 | Group | What |
 | --- | --- |
 | `catalog` | Internal SellerClaw product catalog. |
+| `shipping-boxes` | The seller's standard boxes — a parcel's size and the box's own weight; products and listings name one by `box_id`. |
 | `orders` | Internal SellerClaw orders. |
 | `listings` | Marketplace listings across all stores, by SellerClaw id. |
 | `categories` / `attributes` | Place a product in a marketplace category and fill the item specifics that category demands — the two things a refused publish is usually missing. |

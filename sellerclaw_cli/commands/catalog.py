@@ -105,18 +105,26 @@ SPECS = (
                     "Array of products to create. Each item: name*, description*, category*, "
                     "variations* (array of {supplier_variant_id, sku, name, available_quantity, "
                     "shipping_cost, purchase_price?, images?, attributes?, barcode?, "
-                    "weight_grams?}), and optional images, brand, country_of_origin (two-letter "
-                    "code) and attributes — the product's own characteristics, e.g. "
-                    '{"Material": "100% Cotton", "Care": "Machine wash cold"}; marketplace item '
+                    "weight_grams?, box_id?}), and optional images, brand, country_of_origin "
+                    "(two-letter code), weight_grams, box_id and attributes — the product's own "
+                    'characteristics, e.g. {"Material": "100% Cotton", "Care": "Machine wash '
+                    'cold"}; marketplace item '
                     "specifics are built from them, so state every known fact there rather than only "
                     "in the description. A variation's attributes are its axes (Color, Size). "
                     "barcode is the variation's GTIN/UPC/EAN "
                     "— marketplaces identify the item by it and Walmart refuses a listing without "
-                    "one. weight_grams is what one packed unit weighs; eBay refuses a listing under "
+                    "one. weight_grams is what one unit of the goods weighs, without the box (the "
+                    "box's own weight is added when a parcel is sent); eBay refuses a listing under "
                     "a calculated-rate shipping policy without it. Omit it when the weight is "
-                    "unknown — never send 0 or a guess. Supplier binding (supplier_id, "
+                    "unknown — never send 0 or a guess. box_id is one of the seller's boxes "
+                    "(`shipping-boxes list`); a product with no supplier that names none gets the "
+                    "seller's default box, a supplier's product gets none. State weight_grams and "
+                    "box_id on the product; on a variation only when the variations differ. "
+                    "Supplier binding (supplier_id, "
                     "supplier_product_id, supplier_provider) must be all set together or all "
-                    "omitted."
+                    "omitted. supplier_warehouse_id is the supplier warehouse the goods ship from "
+                    "(`suppliers list-warehouses`); omitted, the supplier's only warehouse is "
+                    "used, and a supplier with several refuses the item with the list."
                 ),
             ),
         ),
@@ -127,13 +135,15 @@ SPECS = (
         "/agent/products/{product_id}",
         summary=(
             "Update ONE product's metadata (name, description, images, category, status, brand, "
-            "country of origin, characteristics, weight) — the "
+            "country of origin, characteristics, weight, shipping box) — the "
             "product id is a positional, so a set of products needs `catalog bulk-update` (up to "
-            "200 in one call) or, for a whole catalog, the `catalog-file` import. Catalog only — a "
-            "listing built from this product keeps its own copy of the text and pictures, so this "
-            "changes nothing already on a marketplace. Copy for one store belongs to its listing: "
+            "200 in one call) or, for a whole catalog, the `catalog-file` import. A listing built "
+            "from this product keeps its own copy of the text and pictures, so those change "
+            "nothing already on a marketplace. Copy for one store belongs to its listing: "
             "'products' on the draft call for a new one, `listings bulk-update` and a publish for "
-            "an existing one."
+            "an existing one. Weight and box are the exception: the product's listings follow "
+            "them unless a listing was given its own, and a live one's marketplace is sent the new "
+            "parcel on its own (TikTok Shop: with the next publish)."
         ),
         body=(
             body_field("name", help="New product name."),
@@ -182,10 +192,20 @@ SPECS = (
                 # undo a wrong weight. Omitting the key means something different (leave it alone).
                 nullable=True,
                 help=(
-                    "What one packed unit weighs, in grams, applied to every variation. eBay prices "
-                    "calculated-rate postage from it and refuses a listing that carries none. Send "
-                    "null to clear it back to unknown; omit the field to leave it alone. Never send "
-                    "0 or a guess — a buyer is charged real postage from this number."
+                    "What one unit of the goods weighs, in grams, without the box — applied to "
+                    "every variation. eBay prices calculated-rate postage from it (plus the box's "
+                    "own weight) and refuses a listing that carries none. Send null to clear it "
+                    "back to unknown; omit the field to leave it alone. Never send 0 or a guess — a "
+                    "buyer is charged real postage from this number."
+                ),
+            ),
+            body_field(
+                "box_id",
+                nullable=True,
+                help=(
+                    "The seller's shipping box the goods ship in (`shipping-boxes list`), applied "
+                    "to every variation. null takes the product out of any box; omit the field to "
+                    "leave it alone."
                 ),
             ),
         ),
@@ -201,8 +221,9 @@ SPECS = (
             "belongs in the `catalog-file` import instead. Items are isolated: a stale id or "
             "somebody else's product is reported on its own line while the rest still apply, so "
             "the reply is `{items: [{product_id, ok, error, product}]}` in the order sent — never "
-            "one 404 that loses the whole batch. Catalog only, and purely local: a listing built "
-            "from a product keeps its own copy of the content until it is republished."
+            "one 404 that loses the whole batch. A listing built from a product keeps its own copy "
+            "of the content until it is republished; weight and box are the exception, as in "
+            "`catalog update`."
         ),
         body=(
             body_field(
@@ -213,12 +234,14 @@ SPECS = (
                 help=(
                     "Array of {product_id*, patch*}. `patch` takes the same fields as `catalog "
                     "update`: name, description, images, category, status, brand, "
-                    "country_of_origin, attributes, weight_grams. Omit a field to leave it unchanged; "
-                    "weight_grams accepts an explicit null to clear it back to unknown."
+                    "country_of_origin, attributes, weight_grams, box_id. Omit a field to leave it "
+                    "unchanged; weight_grams and box_id accept an explicit null to clear them "
+                    "(weight unknown, no box)."
                 ),
                 example=[
                     {"product_id": "<uuid>", "patch": {"name": "Cat Litter Mat"}},
                     {"product_id": "<uuid>", "patch": {"brand": "ACME", "category": "Pet Supplies > Cats"}},
+                    {"product_id": "<uuid>", "patch": {"weight_grams": 450, "box_id": "<box uuid>"}},
                     {"product_id": "<uuid>", "patch": {"weight_grams": None}},
                 ],
             ),
@@ -318,7 +341,8 @@ SPECS = (
         "/agent/products/{product_id}/variations",
         summary=(
             "Correct a product's per-variation facts in place: stock, SKU, barcode, weight, "
-            "shipping cost, purchase price. Use this instead of deleting and re-creating a product "
+            "shipping box, shipping cost, purchase price. Use this instead of deleting and "
+            "re-creating a product "
             "to change one of them — the product id survives, and with it every listing built from "
             "it and every order line pointing back at it. Top-level fields apply to all variations "
             "(what a single-variation product wants); `variations` targets them one by one. Stock "
@@ -343,7 +367,18 @@ SPECS = (
                 type=int,
                 nullable=True,
                 clearable=True,
-                help="Packed weight of one unit in grams. null clears it back to unknown.",
+                help=(
+                    "What one unit of the goods weighs in grams, without the box, applied to every "
+                    "variation. null clears it back to unknown."
+                ),
+            ),
+            body_field(
+                "box_id",
+                nullable=True,
+                help=(
+                    "The seller's shipping box (`shipping-boxes list`), applied to every "
+                    "variation. null takes them out of any box."
+                ),
             ),
             body_field(
                 "purchase_price",
@@ -368,8 +403,9 @@ SPECS = (
                 repeatable=True,
                 help=(
                     "Per-variation edits: array of {supplier_variant_id*, sku?, barcode?, "
-                    "available_quantity?, purchase_price?, shipping_cost?, weight_grams?, "
-                    "purchase_currency?}. Mutually exclusive with the top-level fields above."
+                    "available_quantity?, purchase_price?, shipping_cost?, weight_grams?, box_id?, "
+                    "purchase_currency?} — weight and box per variation only when the variations "
+                    "really differ. Mutually exclusive with the top-level fields above."
                 ),
             ),
         ),
@@ -406,6 +442,32 @@ SPECS = (
                     "The item's page at the supplier. Kept verbatim, and only for suppliers whose "
                     "URLs we cannot rebuild ourselves."
                 ),
+            ),
+            body_field(
+                "supplier_warehouse_id",
+                help=(
+                    "The supplier warehouse the goods ship from (`suppliers list-warehouses`). "
+                    "Omitted: the product keeps its warehouse when it stays with the same "
+                    "supplier, else takes the supplier's only one; a supplier with several "
+                    "refuses with the list."
+                ),
+            ),
+        ),
+    ),
+    Cmd(
+        "set-supplier-warehouse",
+        "PATCH",
+        "/agent/products/{product_id}/supplier-warehouse",
+        summary=(
+            "Move a product to another warehouse of the supplier it already has — where its "
+            "shipping is priced from. Only suppliers with no integration have warehouses "
+            "(`suppliers list-warehouses`)."
+        ),
+        body=(
+            body_field(
+                "supplier_warehouse_id",
+                required=True,
+                help="The warehouse's id from `suppliers list-warehouses`.",
             ),
         ),
     ),

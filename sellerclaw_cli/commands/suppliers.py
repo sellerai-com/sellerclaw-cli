@@ -137,6 +137,135 @@ SPECS = (
         ),
     ),
     Cmd(
+        "list-warehouses",
+        "GET",
+        "/agent/supplier-accounts/offline/{supplier_id}/warehouses",
+        summary=(
+            "The places one of the owner's own suppliers ships from, each with how many catalog "
+            "products ship from it and its shipping rates by country (`shipping_rates`). Only "
+            "suppliers with no integration have warehouses — CJ and Amazon decide where their "
+            "goods leave from."
+        ),
+    ),
+    Cmd(
+        "create-warehouse",
+        "POST",
+        "/agent/supplier-accounts/offline/{supplier_id}/warehouses",
+        summary=(
+            "Add a place one of the owner's own suppliers ships from. Country and postal code are "
+            "required; the rest of the address only when the owner stated it. The supplier's first "
+            "warehouse becomes the warehouse of all its products that have none — `products` in "
+            "the answer says how many. With several warehouses, every product bound to the "
+            "supplier afterwards needs supplier_warehouse_id."
+        ),
+        body=(
+            body_field(
+                "name",
+                required=True,
+                help="What the owner calls this warehouse. Unique among the supplier's warehouses.",
+                example="Main",
+            ),
+            body_field(
+                "country_code",
+                required=True,
+                help="ISO-3166 alpha-2 country the goods ship from, e.g. US or DE.",
+                example="US",
+            ),
+            body_field(
+                "postal_code",
+                required=True,
+                help="Postal code the goods ship from.",
+                example="10001",
+            ),
+            body_field("address_line1", help="Street and number."),
+            body_field("address_line2", help="Unit, floor or building."),
+            body_field("city", help="City."),
+            body_field("state_or_province", help="State, province or region."),
+            body_field("phone", help="Phone at the warehouse."),
+        ),
+    ),
+    Cmd(
+        "update-warehouse",
+        "PATCH",
+        "/agent/supplier-accounts/offline/{supplier_id}/warehouses/{warehouse_id}",
+        summary=(
+            "Correct what is recorded about a warehouse. An omitted field keeps its value; null "
+            "clears an optional one. Name, country and postal code cannot be cleared."
+        ),
+        body=(
+            body_field("name", help="New name. Must stay unique among the supplier's warehouses."),
+            body_field("country_code", help="ISO-3166 alpha-2 country, e.g. US."),
+            body_field("postal_code", help="Postal code."),
+            body_field(
+                "address_line1", nullable=True, clearable=True, help="Street and number, or null."
+            ),
+            body_field(
+                "address_line2",
+                nullable=True,
+                clearable=True,
+                help="Unit, floor or building, or null.",
+            ),
+            body_field("city", nullable=True, clearable=True, help="City, or null."),
+            body_field(
+                "state_or_province",
+                nullable=True,
+                clearable=True,
+                help="State, province or region, or null.",
+            ),
+            body_field("phone", nullable=True, clearable=True, help="Phone, or null."),
+        ),
+    ),
+    Cmd(
+        "delete-warehouse",
+        "DELETE",
+        "/agent/supplier-accounts/offline/{supplier_id}/warehouses/{warehouse_id}",
+        summary=(
+            "Remove a warehouse no product ships from. Refused, with the count, while any does: "
+            "move those products first with `catalog set-supplier-warehouse`."
+        ),
+    ),
+    Cmd(
+        "set-warehouse-rates",
+        "PUT",
+        "/agent/supplier-accounts/offline/{supplier_id}/warehouses/{warehouse_id}/shipping-rates/{country_code}",
+        summary=(
+            "Set what a warehouse of the owner's own supplier charges to ship ONE unit to one "
+            "country, by parcel weight. Replaces that country's whole table; other countries are "
+            "kept. Prices are in the supplier's currency (set it first with `update-account` if "
+            "the supplier has none). Each band reads \"a parcel up to max_weight_grams costs "
+            "price\"; the parcel is the product's weight plus its box's own weight, and one "
+            "heavier than the last band has no rate. A store selling to this country then prices "
+            "these products' shipping with the rate instead of the product's own shipping_cost; "
+            "live listings follow within an hour. `list-warehouses` shows the tables."
+        ),
+        body=(
+            body_field(
+                "bands",
+                type=list,
+                required=True,
+                help=(
+                    "The weight bands, any order: [{max_weight_grams, price}], up to 50. Each "
+                    "max_weight_grams is used once; price may be 0 (free)."
+                ),
+                example=[
+                    {"max_weight_grams": 500, "price": "5.00"},
+                    {"max_weight_grams": 1000, "price": "8.00"},
+                    {"max_weight_grams": 2000, "price": "12.00"},
+                ],
+            ),
+        ),
+    ),
+    Cmd(
+        "delete-warehouse-rates",
+        "DELETE",
+        "/agent/supplier-accounts/offline/{supplier_id}/warehouses/{warehouse_id}/shipping-rates/{country_code}",
+        summary=(
+            "Remove a warehouse's shipping rates to one country. Listings in stores selling there "
+            "fall back to each product's own shipping_cost. Refused, naming the countries it has "
+            "rates for, when it has none for this one."
+        ),
+    ),
+    Cmd(
         "resolve-url",
         "GET",
         "/agent/suppliers/resolve-url",

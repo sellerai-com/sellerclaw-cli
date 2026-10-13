@@ -331,6 +331,7 @@ MCP_VISIBLE_GROUPS: frozenset[str] = frozenset(
         "social",
         # Internal catalog, orders, analytics
         "catalog",
+        "shipping-boxes",
         "orders",
         "listings",
         "analytics",

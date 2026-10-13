@@ -196,3 +196,59 @@ def test_set_policies_rejects_an_etsy_policy_name_locally(
     assert result.exit_code != 0
     assert route.call_count == 0
     assert "shipping_profile_id" in result.stderr
+
+
+#: The two eBay edit commands share one parcel body; both must take it the same way.
+_EDIT_COMMANDS = [
+    pytest.param("update", f"/agent/stores/{STORE_ID}/ebay-listings/{LISTING_ID}", id="update"),
+    pytest.param(
+        "update-draft", f"/agent/stores/{STORE_ID}/ebay-draft-listings/{LISTING_ID}", id="update-draft"
+    ),
+]
+
+
+@respx.mock
+@pytest.mark.parametrize(("command", "path"), _EDIT_COMMANDS)
+@pytest.mark.parametrize(
+    "body",
+    [
+        pytest.param({"weight_grams": 450, "box_id": "55555555-5555-4555-8555-555555555555"}, id="set"),
+        pytest.param({"weight_grams": None, "box_id": None}, id="clear"),
+    ],
+)
+def test_an_ebay_listing_takes_the_goods_weight_and_a_box(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+    command: str,
+    path: str,
+    body: dict[str, object],
+) -> None:
+    route = respx.patch(f"{fake_api_url}{path}").mock(
+        return_value=httpx.Response(200, json={"id": LISTING_ID})
+    )
+
+    result = runner.invoke(app, ["ebay-listings", command, STORE_ID, LISTING_ID, "-b", json.dumps(body)])
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == body
+
+
+@respx.mock
+@pytest.mark.parametrize(("command", "path"), _EDIT_COMMANDS)
+def test_the_old_package_fields_are_refused_before_the_request(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+    command: str,
+    path: str,
+) -> None:
+    """The API dropped package_*; the local check points at the field that replaced it."""
+    route = respx.patch(f"{fake_api_url}{path}").mock(return_value=httpx.Response(200, json={}))
+
+    result = runner.invoke(
+        app,
+        ["ebay-listings", command, STORE_ID, LISTING_ID, "-b", json.dumps({"package_weight_grams": 450})],
+    )
+
+    assert result.exit_code != 0
+    assert "'package_weight_grams' (did you mean 'weight_grams'?)" in result.stderr
+    assert route.call_count == 0

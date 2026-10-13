@@ -27,7 +27,8 @@ you invented.
 ## The draft rule, and how to look before you leap
 
 On a live shop **every edit waits in the draft** until it is published — buyers keep seeing the old
-version. That is a feature: build the whole change, look at it, then publish once.
+version. That is a feature: build the whole change, look at it, then publish once. Products are the
+exception: each goes on sale when it is published itself (below), not with the shop.
 
 ```text
 sellerclaw_read(group="sellercart", command="changes")      # what the draft would change, item by item
@@ -68,15 +69,22 @@ Read `blocks` before writing a page: a block type that is not in that list canno
 
 ```text
 sellerclaw_write(group="sellercart-products", command="add", body={"product_ids": [PRODUCT_ID]})
+sellerclaw_write(group="listings", command="bulk-publish", positionals={"store_id": STORE_ID},
+  body={"kind": "publish", "listing_ids": [LISTING_ID]})
 sellerclaw_read(group="sellercart-products", command="list")
 sellerclaw_write(group="sellercart-products", command="seo",
   positionals={"reference": PRODUCT_REF}, body={"title": "...", "description": "..."})
 ```
 
 Products come from the owner's catalog, one listing per variation, priced from the shop's markup over
-cost unless `prices` says otherwise. The list answers **one entry per product** — its `listing_id`
-is what a publish, a `listings bulk-update` and a withdraw take, and `variations[]` inside it names
-each variation by its own id with its sku and stock. `remove` takes that **variation's own id** and
+cost unless `prices` says otherwise. `add` stages them as drafts, which no one sees — not buyers, not
+the preview; putting a product on the shop ends with `bulk-publish` on the shop's `store_id`
+(`channels list`). That publish needs no approval and does not open the shop: on a shop not yet open
+the product shows in the preview and reaches buyers when the shop opens.
+
+The list answers **one entry per product** — its `listing_id` is what a publish, a
+`listings bulk-update` and a withdraw take, and `variations[]` inside it names each variation by its
+own id with its sku and stock. `remove` takes that **variation's own id** and
 takes just that size off, reversibly; `seo` takes the **listing's** id (or the catalog product's) —
 those words speak for the whole product. `delete` is not reversible, so only on an explicit word,
 and it takes the listing's id too: the whole product goes.
@@ -98,7 +106,7 @@ unanswered delivery price is not the same as free shipping.
 ## Going live
 
 ```text
-sellerclaw_write(group="sellercart", command="publish", body={"summary": "New home page and 12 products"})
+sellerclaw_write(group="sellercart", command="publish", body={"summary": "New home page and header menu"})
 ```
 
 Publishing is gated: it answers `pending_approval` or, on a connection the owner has set to not ask,

@@ -37,7 +37,11 @@ SPECS = (
         body=(
             body_field("query", help="Free-text search (e.g. 'brand + model'). Provide query, gtin or sellers."),
             body_field("gtin", help="Barcode: EAN, UPC, GTIN, or ISBN. Digits only (8-14 chars)."),
-            body_field("marketplace_id", help="eBay marketplace, e.g. EBAY_US, EBAY_GB, EBAY_DE. Defaults to EBAY_US."),
+            body_field(
+                "marketplace_id",
+                help="eBay marketplace, e.g. EBAY_US, EBAY_GB, EBAY_AU. Defaults to the eBay site of the "
+                "owner's own market.",
+            ),
             body_field("limit", type=int, help="Max results (1-200). Defaults to 20."),
             body_field("condition_new_only", type=bool, help="If true, restrict to NEW condition listings."),
             body_field(
