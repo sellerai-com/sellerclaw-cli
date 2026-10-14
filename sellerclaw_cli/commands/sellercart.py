@@ -149,6 +149,24 @@ SPECS = (
                 ),
                 example=30,
             ),
+            body_field(
+                "sells_online",
+                type=bool,
+                help=(
+                    "Omit for a shop with a basket and checkout. False opens it as a catalog — "
+                    "prices and stock, no basket, no payment step — only when the owner asked for one."
+                ),
+                example=False,
+            ),
+            body_field(
+                "source_store_id",
+                help=(
+                    "The owner's Amazon store the shop starts from (its id from `channels list`). "
+                    "The shop remembers it so its products step knows where they come from; the "
+                    "name, currency and language are still the values sent here."
+                ),
+                example="3f1c2a9e-5b7d-4c8e-9a10-6d2b4e8f7c31",
+            ),
         ),
     ),
     Cmd(

@@ -130,6 +130,45 @@ SPECS = (
         ),
     ),
     Cmd(
+        "create-from-listings",
+        "POST",
+        "/agent/products/from-listings",
+        summary=(
+            "Copy the seller's own marketplace listings into catalog products, grouped the way you "
+            "name them — title, description, photos, brand, category, barcode, SKU and quantity "
+            "come from the listings. Each product is answered on its own: created, "
+            "already_in_catalog (its SKUs already are that product; nothing new is made) or "
+            "refused with a code and the reason. The listings are not linked to the products. "
+            "The products have no cost; `prices` (by SKU, in `prices_currency`) are the listings' "
+            "own, ready to shelve them at the same prices. `fulfilment` says who ships: "
+            "`marketplace` from its warehouse, or the `seller`."
+        ),
+        body=(
+            body_field(
+                "products",
+                type=dict,
+                repeatable=True,
+                required=True,
+                help=(
+                    "Up to 50 products. Each: variations* (array of {listing_id, options?}) and an "
+                    "optional name (defaults to the first listing's title). One listing per "
+                    "variation, each listing in one product only. A product made from several "
+                    'listings needs options on each, with the same keys — {"Size": "M"}; a product '
+                    "made from one takes none."
+                ),
+                example=[
+                    {
+                        "name": "Lavender soy candle",
+                        "variations": [
+                            {"listing_id": "<listing-uuid>", "options": {"Size": "8 oz"}},
+                            {"listing_id": "<listing-uuid>", "options": {"Size": "16 oz"}},
+                        ],
+                    }
+                ],
+            ),
+        ),
+    ),
+    Cmd(
         "update",
         "PATCH",
         "/agent/products/{product_id}",
