@@ -385,3 +385,51 @@ def test_a_product_is_created_with_its_weight_and_box(
 
     assert result.exit_code == 0, result.stderr
     assert json.loads(route.calls.last.request.content) == body
+
+
+LISTING_S = "44444444-4444-4444-8444-444444444444"
+LISTING_L = "55555555-5555-4555-8555-555555555555"
+
+
+@respx.mock
+def test_listings_are_copied_into_products_as_they_are_grouped(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """The grouping is the caller's: the body reaches the API exactly as written."""
+    route = respx.post(f"{fake_api_url}/agent/products/from-listings").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "results": [{"outcome": "created", "product_id": PRODUCT_A, "variations": []}],
+                "prices": {"CANDLE-S": "18.00", "CANDLE-L": "24.00"},
+                "prices_currency": "USD",
+            },
+        )
+    )
+    body = {
+        "products": [
+            {
+                "name": "Lavender soy candle",
+                "variations": [
+                    {"listing_id": LISTING_S, "options": {"Size": "8 oz"}},
+                    {"listing_id": LISTING_L, "options": {"Size": "16 oz"}},
+                ],
+            }
+        ]
+    }
+
+    result = runner.invoke(app, ["catalog", "create-from-listings", "-b", json.dumps(body)])
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == body
+    assert json.loads(result.stdout)["data"]["prices_currency"] == "USD"
+
+
+def test_copying_listings_needs_the_products_to_make(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+) -> None:
+    result = runner.invoke(app, ["catalog", "create-from-listings", "-b", json.dumps({})])
+
+    assert result.exit_code != 0
+    assert "products" in (result.stderr + result.stdout)

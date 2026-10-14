@@ -82,6 +82,34 @@ def test_create_sets_the_language_the_shop_speaks(
     }
 
 
+@pytest.mark.parametrize(
+    "extra",
+    [
+        pytest.param({"sells_online": False}, id="a-catalog-the-owner-asked-for"),
+        pytest.param(
+            {"source_store_id": "3f1c2a9e-5b7d-4c8e-9a10-6d2b4e8f7c31"},
+            id="started-from-an-amazon-store",
+        ),
+    ],
+)
+@respx.mock
+def test_create_sends_how_the_shop_starts(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+    extra: dict[str, Any],
+) -> None:
+    """Both were refused before they reached the API: the body is checked against its fields."""
+    route = respx.post(f"{fake_api_url}/agent/sellercart").mock(
+        return_value=httpx.Response(200, json={"slug": "mossmere"})
+    )
+    body = {"name": "Mossmere", "slug": "mossmere", "currency": "USD", **extra}
+
+    result = runner.invoke(app, ["sellercart", "create", "-b", json.dumps(body)])
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == body
+
+
 @respx.mock
 def test_update_switches_the_language_the_shop_speaks(
     env_pointing_at_fake_api: None,  # noqa: ARG001
@@ -324,6 +352,39 @@ def test_theme_clears_a_token_with_an_empty_string(
     assert json.loads(route.calls.last.request.content) == {"heading_font": "", "custom_css": ""}
 
 
+@respx.mock
+def test_theme_moves_the_currency_switcher(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.patch(f"{fake_api_url}/agent/sellercart/theme").mock(
+        return_value=httpx.Response(200, json={"theme": {"currency_switcher": "product"}})
+    )
+
+    result = runner.invoke(
+        app, ["sellercart", "theme", "-b", json.dumps({"currency_switcher": "product"})]
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {"currency_switcher": "product"}
+
+
+@respx.mock
+def test_a_switcher_place_the_shop_cannot_draw_is_refused_before_the_call(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.patch(f"{fake_api_url}/agent/sellercart/theme")
+
+    result = runner.invoke(
+        app, ["sellercart", "theme", "-b", json.dumps({"currency_switcher": "footer"})]
+    )
+
+    assert result.exit_code != 0
+    assert "both" in (result.stderr or result.stdout)
+    assert route.call_count == 0
+
+
 def test_an_unavailable_typeface_is_refused_before_the_call(
     env_pointing_at_fake_api: None,  # noqa: ARG001
 ) -> None:
@@ -361,6 +422,104 @@ def test_apply_preset_posts_the_preset_id(
 
     assert result.exit_code == 0, result.stderr
     assert json.loads(route.calls.last.request.content) == {"preset": "boutique"}
+
+
+@respx.mock
+def test_layouts_lists_the_ready_made_layouts(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.get(f"{fake_api_url}/agent/sellercart/layouts").mock(
+        return_value=httpx.Response(200, json={"items": [{"id": "gallery", "header": "centered"}]})
+    )
+
+    result = runner.invoke(app, ["sellercart", "layouts"])
+
+    assert result.exit_code == 0, result.stderr
+    assert route.called
+    assert _data(result.stdout)["items"][0]["id"] == "gallery"
+
+
+@respx.mock
+def test_apply_layout_posts_the_layout_id_and_the_note(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.post(f"{fake_api_url}/agent/sellercart/layouts/apply").mock(
+        return_value=httpx.Response(200, json={"theme": {"template": "gallery"}})
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "sellercart",
+            "apply-layout",
+            "-b",
+            json.dumps({"layout": "gallery", "note": "Bigger photos"}),
+        ],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {
+        "layout": "gallery",
+        "note": "Bigger photos",
+    }
+
+
+@respx.mock
+def test_apply_layout_without_a_layout_is_refused_before_the_call(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.post(f"{fake_api_url}/agent/sellercart/layouts/apply")
+
+    result = runner.invoke(app, ["sellercart", "apply-layout", "-b", json.dumps({"note": "x"})])
+
+    assert result.exit_code != 0
+    assert "layout" in (result.stderr or result.stdout)
+    assert route.call_count == 0
+
+
+@respx.mock
+def test_theme_mixes_one_part_of_a_layout(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.patch(f"{fake_api_url}/agent/sellercart/theme").mock(
+        return_value=httpx.Response(200, json={"theme": {"product_card": "portrait"}})
+    )
+
+    result = runner.invoke(
+        app, ["sellercart", "theme", "-b", json.dumps({"product_card": "portrait"})]
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {"product_card": "portrait"}
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    ("field", "value", "a_choice"),
+    [
+        pytest.param("header", "floating", "centered", id="header"),
+        pytest.param("product_card", "huge", "portrait", id="product-card"),
+        pytest.param("product_page", "wide", "editorial", id="product-page"),
+    ],
+)
+def test_theme_refuses_a_layout_part_the_shop_cannot_draw(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+    field: str,
+    value: str,
+    a_choice: str,
+) -> None:
+    route = respx.patch(f"{fake_api_url}/agent/sellercart/theme")
+
+    result = runner.invoke(app, ["sellercart", "theme", "-b", json.dumps({field: value})])
+
+    assert result.exit_code != 0
+    assert a_choice in (result.stderr or result.stdout)
+    assert route.call_count == 0
 
 
 # --- Payments --------------------------------------------------------------------------------
