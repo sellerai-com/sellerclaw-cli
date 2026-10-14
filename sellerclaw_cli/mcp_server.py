@@ -257,6 +257,8 @@ _GUIDE_TOOL_DESC = (
 # the server refuses to create one on the MCP-only plan); `models` picks which LLMs it routes to.
 # All five describe an agent the MCP owner is not using — and for the ones who do run it alongside,
 # steering it belongs in the app where they can read the conversation, not in a second assistant.
+# `support-requests` (passing a problem or wish to the SellerClaw team) is hidden for now by the
+# owner's decision: for the time being only our own agent files those.
 MCP_VISIBLE_GROUPS: frozenset[str] = frozenset(
     {
         # Stores, integrations, account
