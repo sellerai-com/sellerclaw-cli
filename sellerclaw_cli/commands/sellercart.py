@@ -35,6 +35,12 @@ FONTS = (
     "Space Grotesk",
 )
 
+#: The variants of each part of a layout — how the header, a product card and a product page are
+#: arranged. Mirrors the API's own lists, so a wrong one is refused locally. Keep in step with it.
+_HEADER_STYLES = ("classic", "centered", "compact", "split", "bold")
+_CARD_STYLES = ("classic", "portrait", "dense", "framed", "deal")
+_PRODUCT_PAGE_STYLES = ("classic", "stacked", "specs", "editorial", "focus")
+
 SPECS = (
     Cmd(
         "status",
@@ -223,10 +229,11 @@ SPECS = (
                 repeatable=True,
                 help=(
                     "The shop's FULL list of extra currencies buyers may *read* prices in (up to "
-                    "four). It REPLACES the current list — to add or drop one currency, send "
-                    "add_display_currencies / remove_display_currencies instead. [] goes back to one "
-                    "price. Display only and never locked by the shelf. This, not `currency`, is the "
-                    "answer to 'let buyers see prices in euros'. A currency no rate source can quote "
+                    "four, not counting `currency`). It REPLACES the current list — to add or drop "
+                    "one currency, send add_display_currencies / remove_display_currencies instead. "
+                    "[] goes back to one price. Display only and never locked by the shelf. This, "
+                    "not `currency`, is the answer to 'let buyers see prices in euros'. A currency "
+                    "no rate source can quote "
                     "today comes back as display_currency_unavailable."
                 ),
                 example=["GBP", "EUR", "JPY"],
@@ -485,6 +492,33 @@ SPECS = (
                 ),
                 clearable=True,
             ),
+            body_field(
+                "currency_switcher",
+                help=(
+                    "Where buyers switch the currency prices are shown in, once the shop has "
+                    "display_currencies: the header, next to the price on a product page, or both. "
+                    "Restyle it with custom_css on sc-header__currency / sc-product__currency."
+                ),
+                choices=("header", "product", "both"),
+            ),
+            body_field(
+                "header",
+                help=(
+                    "One part of the layout: how the header is arranged. For mixing two layouts on the "
+                    "owner's request; a whole layout is `apply-layout`. Never changes the look."
+                ),
+                choices=_HEADER_STYLES,
+            ),
+            body_field(
+                "product_card",
+                help="One part of the layout: how a product looks on a shelf.",
+                choices=_CARD_STYLES,
+            ),
+            body_field(
+                "product_page",
+                help="One part of the layout: how a product's own page is arranged.",
+                choices=_PRODUCT_PAGE_STYLES,
+            ),
             body_field("note", help=_NOTE_HELP, example="Led with free delivery, as you asked"),
         ),
     ),
@@ -501,7 +535,10 @@ SPECS = (
         "apply-preset",
         "POST",
         "/agent/sellercart/presets/apply",
-        summary="Apply a ready-made look. Overwrites every style token; keeps the shop's logo and favicon.",
+        summary=(
+            "Apply a ready-made look: overwrites every colour, typeface and corner token. Keeps the "
+            "shop's logo, favicon and layout (`apply-layout`)."
+        ),
         body=(
             body_field(
                 "preset",
@@ -510,6 +547,35 @@ SPECS = (
                 example="boutique",
             ),
             body_field("note", help=_NOTE_HELP, example="Led with free delivery, as you asked"),
+        ),
+    ),
+    Cmd(
+        "layouts",
+        "GET",
+        "/agent/sellercart/layouts",
+        summary=(
+            "The ready-made layouts: how each arranges the header, product cards and product page, "
+            "and the blocks its home page is built from (`home_recipe`, top to bottom). A layout is "
+            "the shape, a look (`presets`) the paint; they combine freely."
+        ),
+    ),
+    Cmd(
+        "apply-layout",
+        "POST",
+        "/agent/sellercart/layouts/apply",
+        summary=(
+            "Put the shop on a ready-made layout: its header, product cards and product page change "
+            "at once. Keeps the look. Touches no page — rebuild the home page to the layout's "
+            "`home_recipe` next, keeping the owner's own words and pictures."
+        ),
+        body=(
+            body_field(
+                "layout",
+                required=True,
+                help="Layout id from `sellercart layouts`.",
+                example="gallery",
+            ),
+            body_field("note", help=_NOTE_HELP, example="Bigger photos for the new collection"),
         ),
     ),
 )
