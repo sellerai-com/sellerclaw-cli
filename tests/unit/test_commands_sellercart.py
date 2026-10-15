@@ -532,7 +532,7 @@ def test_payouts_status_reads_whether_the_shop_can_sell(
 ) -> None:
     route = respx.get(f"{fake_api_url}/agent/sellercart/payouts").mock(
         return_value=httpx.Response(
-            200, json={"connected": False, "can_accept_orders": False, "shipping_amount": None}
+            200, json={"connected": False, "can_accept_orders": False, "delivers": False}
         )
     )
 
@@ -600,9 +600,9 @@ def test_money_is_a_number_across_the_shop_commands() -> None:
     Prices on the shelf sit inside an object and are never type-checked locally, so the two commands
     can only agree by saying the same thing — hence the assertion on what the caller is told.
     """
-    delivery = _data(runner.invoke(app, ["describe", "sellercart-payouts", "delivery"]).stdout)
-    shipping = {f["field"]: f for f in delivery["body_fields"]}["shipping_amount"]
-    assert shipping["type"] == "float"
+    method = _data(runner.invoke(app, ["describe", "sellercart-delivery", "set-method"]).stdout)
+    fields = {f["field"]: f for f in method["body_fields"]}
+    assert {fields[name]["type"] for name in ("price", "extra_amount", "extra_percent")} == {"float"}
 
     products = _data(runner.invoke(app, ["describe", "sellercart-products", "add"]).stdout)
     prices = {f["field"]: f for f in products["body_fields"]}["prices"]
@@ -615,57 +615,142 @@ def test_a_quoted_price_is_refused_with_the_shape_to_use(
     """The wrong guess costs one turn, not a silent 422 the agent has to decode."""
     result = runner.invoke(
         app,
-        [
-            "sellercart-payouts",
-            "delivery",
-            "-b",
-            json.dumps({"shipping_amount": "5.99", "shipping_countries": ["US"]}),
-        ],
+        ["sellercart-delivery", "set-method", "US", "Standard", "-b", json.dumps({"price": "5.99"})],
     )
 
     assert result.exit_code != 0
     message = result.stderr or result.stdout
-    assert "shipping_amount" in message
+    assert "price" in message
     assert "number" in message
 
 
 @respx.mock
-def test_delivery_sends_price_and_countries(
+def test_delivery_zones_are_read_whole(
     env_pointing_at_fake_api: None,  # noqa: ARG001
     fake_api_url: str,
 ) -> None:
-    route = respx.put(f"{fake_api_url}/agent/sellercart/payouts/delivery").mock(
-        return_value=httpx.Response(200, json={"can_accept_orders": True})
+    route = respx.get(f"{fake_api_url}/agent/sellercart/delivery").mock(
+        return_value=httpx.Response(200, json={"zones": [], "warnings": [], "delivers": False})
+    )
+
+    result = runner.invoke(app, ["sellercart-delivery", "list"])
+
+    assert result.exit_code == 0, result.stderr
+    assert route.call_count == 1
+
+
+@respx.mock
+def test_a_zone_is_named_in_the_path_and_its_countries_sent_as_they_are(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """A name with a space is a zone name like any other — it reaches the API as one path segment."""
+    route = respx.put(f"{fake_api_url}/agent/sellercart/delivery/zones/North%20America").mock(
+        return_value=httpx.Response(200, json={"zones": []})
     )
 
     result = runner.invoke(
         app,
         [
-            "sellercart-payouts",
-            "delivery",
+            "sellercart-delivery",
+            "set-zone",
+            "North America",
             "-b",
-            json.dumps({"shipping_amount": 5.99, "shipping_countries": ["US", "CA"]}),
+            json.dumps({"countries": ["US", "CA"], "free_over": 75}),
         ],
     )
 
-    assert result.exit_code == 0, result.stderr
+    assert result.exit_code == 0, result.stderr or result.stdout
     assert json.loads(route.calls.last.request.content) == {
-        "shipping_amount": 5.99,
-        "shipping_countries": ["US", "CA"],
+        "countries": ["US", "CA"],
+        "free_over": 75,
     }
 
 
-def test_delivery_without_a_price_is_refused_locally(
+@respx.mock
+def test_a_free_delivery_offer_is_withdrawn_with_null(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """null is the request, not an omission — leaving the field out keeps the offer."""
+    route = respx.put(f"{fake_api_url}/agent/sellercart/delivery/zones/Europe").mock(
+        return_value=httpx.Response(200, json={"zones": []})
+    )
+
+    result = runner.invoke(
+        app, ["sellercart-delivery", "set-zone", "Europe", "-b", json.dumps({"free_over": None})]
+    )
+
+    assert result.exit_code == 0, result.stderr or result.stdout
+    assert json.loads(route.calls.last.request.content) == {"free_over": None}
+
+
+@respx.mock
+def test_a_method_is_sent_to_its_zone_with_its_terms(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.put(f"{fake_api_url}/agent/sellercart/delivery/zones/US/methods/Express").mock(
+        return_value=httpx.Response(200, json={"zones": []})
+    )
+    body = {
+        "price": 20,
+        "calculated": True,
+        "extra_percent": 10,
+        "pick": "fastest",
+        "days_min": 2,
+        "days_max": 4,
+    }
+
+    result = runner.invoke(
+        app, ["sellercart-delivery", "set-method", "US", "Express", "-b", json.dumps(body)]
+    )
+
+    assert result.exit_code == 0, result.stderr or result.stdout
+    assert json.loads(route.calls.last.request.content) == body
+
+
+def test_a_pick_the_api_does_not_know_is_refused_locally(
     env_pointing_at_fake_api: None,  # noqa: ARG001
 ) -> None:
-    """"Free" and "unanswered" are different states, so the price cannot simply be left out."""
     result = runner.invoke(
         app,
-        ["sellercart-payouts", "delivery", "-b", json.dumps({"shipping_countries": ["US"]})],
+        ["sellercart-delivery", "set-method", "US", "Express", "-b", json.dumps({"pick": "slowest"})],
     )
 
     assert result.exit_code != 0
-    assert "shipping_amount" in (result.stderr or result.stdout)
+    assert "pick" in (result.stderr or result.stdout)
+
+
+@pytest.mark.parametrize(
+    ("args", "path"),
+    [
+        pytest.param(["delete-zone", "Europe"], "/zones/Europe", id="a-zone"),
+        pytest.param(["delete-method", "Europe", "Express"], "/zones/Europe/methods/Express", id="a-method"),
+    ],
+)
+@respx.mock
+def test_zones_and_methods_are_removed_by_name(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+    args: list[str],
+    path: str,
+) -> None:
+    route = respx.delete(f"{fake_api_url}/agent/sellercart/delivery{path}").mock(
+        return_value=httpx.Response(200, json={"zones": []})
+    )
+
+    result = runner.invoke(app, ["sellercart-delivery", *args])
+
+    assert result.exit_code == 0, result.stderr or result.stdout
+    assert route.call_count == 1
+
+
+def test_the_one_price_delivery_command_is_gone() -> None:
+    """Zones replaced it; an agent reaching for it is pointed at `sellercart-delivery` instead."""
+    result = runner.invoke(app, ["sellercart-payouts", "delivery", "-b", "{}"])
+
+    assert result.exit_code != 0
 
 
 @respx.mock

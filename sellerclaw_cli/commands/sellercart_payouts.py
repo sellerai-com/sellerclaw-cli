@@ -13,8 +13,9 @@ SPECS = (
         "/agent/sellercart/payouts",
         summary=(
             "Whether the shop can take money yet, and what is still missing: Stripe connected, "
-            "charges cleared, delivery answered. A shop that cannot take orders is a browsable "
-            "catalog — check this before telling the seller they are open for business."
+            "charges cleared, delivery set up ('delivers'; the zones themselves: "
+            "`sellercart-delivery list`). A shop that cannot take orders is a browsable catalog — "
+            "check this before telling the seller they are open for business."
         ),
     ),
     Cmd(
@@ -45,31 +46,6 @@ SPECS = (
         summary="Re-read Stripe's verdict on the seller. Use after they say they finished onboarding.",
     ),
     Cmd(
-        "delivery",
-        "PUT",
-        "/agent/sellercart/payouts/delivery",
-        summary=(
-            "What delivery costs and where the shop ships. Both are required before checkout opens at "
-            "all — an unanswered delivery price is not the same as free."
-        ),
-        body=(
-            body_field(
-                "shipping_amount",
-                type=float,
-                required=True,
-                help="Delivery charge per order, in the shop's currency. 0 means free — say it on purpose.",
-                example=5.99,
-            ),
-            body_field(
-                "shipping_countries",
-                type=list,
-                required=True,
-                help="Two-letter country codes the shop ships to (1-50).",
-                example=["US", "CA"],
-            ),
-        ),
-    ),
-    Cmd(
         "tax",
         "PUT",
         "/agent/sellercart/payouts/tax",
@@ -91,7 +67,7 @@ SPECS = (
 
 app = build_group(
     NAME,
-    "Getting the storefront paid: Stripe onboarding, delivery terms, tax.",
+    "Getting the storefront paid: Stripe onboarding and tax. Delivery: `sellercart-delivery`.",
     SPECS,
 )
 
