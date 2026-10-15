@@ -321,6 +321,7 @@ MCP_VISIBLE_GROUPS: frozenset[str] = frozenset(
         "sellercart-media",
         "sellercart-domain",
         "sellercart-payouts",
+        "sellercart-delivery",
         # Shopify storefront content (collections, pages, menus, theme files)
         "shopify-collections",
         "shopify-pages",

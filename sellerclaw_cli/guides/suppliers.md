@@ -153,8 +153,12 @@ than the last band, the product's own `shipping_cost` is used — `catalog get` 
   goods — cancelling that is a separate decision, made on the order itself. Pass
   `internal_order_id` so the SellerClaw order stops pointing at a purchase that no longer exists;
   without it the owner is left looking at a payment page for goods nobody will ship.
-- **The warehouse is chosen for you** — the cheapest in-stock one nearest the buyer, which is often
-  not China. Only pass `from_country_code` when the owner wants a specific origin.
+- **An order from the owner's own shop names its delivery.** Its `shipping_choice.parcels[]` holds,
+  per supplier, the `service` the buyer paid for and where it `ships_from`: pass them as
+  `shipping_method` and `from_country_code` — together, or the parcel leaves from the default
+  warehouse.
+- **Otherwise the warehouse is chosen for you** — the cheapest in-stock one nearest the buyer, which
+  is often not China. Only pass `from_country_code` when the owner wants a specific origin.
 - **Spending money is the owner's call.** Confirm the total (product + shipping) with them before
   `pay-order` unless they already told you to buy.
 - To sell a supplier product rather than just buy it, add it to the catalog first — see the

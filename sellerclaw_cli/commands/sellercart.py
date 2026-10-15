@@ -310,7 +310,8 @@ SPECS = (
             "approved_queued when the owner's Autopilot answers it). Their 'publish it' from before "
             "this call cannot close it; hand only their reply from now on to `action-requests "
             "confirm`. Refused before asking: nothing_to_publish, home_page_required, "
-            "payments_required, publish_already_pending."
+            "payments_required, domain_required (a shop opens only on the owner's own domain, "
+            "once it is live), publish_already_pending."
         ),
         body=(
             body_field(
