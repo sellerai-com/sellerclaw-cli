@@ -148,6 +148,9 @@ Publishing is gated: it answers `pending_approval` or, on a connection the owner
 lands in the shop's version history (`versions`). `unpublish` closes the shop and is gated the same
 way.
 
+A shop opens only on a domain the owner owns, once that domain is live: until then the first
+`publish` answers `domain_required`. Connect the domain early (below) — DNS takes time.
+
 ## A domain they own
 
 ```text
