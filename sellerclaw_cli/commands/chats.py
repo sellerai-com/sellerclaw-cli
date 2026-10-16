@@ -70,6 +70,15 @@ SPECS = (
                     "the error names it."
                 ),
             ),
+            body_field(
+                "topic",
+                option="--topic",
+                choices=("sellercart",),
+                help=(
+                    "What the chat is about, when it belongs on a page of its own: `sellercart` "
+                    "lists it on the owner's SellerCart shop page as well as in the sidebar."
+                ),
+            ),
         ),
     ),
 )
