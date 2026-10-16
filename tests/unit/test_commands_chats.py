@@ -123,6 +123,26 @@ def test_open_for_a_job_sends_the_job_id(env: str, argv: list[str]) -> None:
 
 
 @respx.mock
+@pytest.mark.parametrize(
+    "argv",
+    [
+        pytest.param(["--topic", "sellercart"], id="flag"),
+        pytest.param(["-b", json.dumps({"topic": "sellercart"})], id="body"),
+    ],
+)
+def test_open_about_the_shop_sends_the_topic(env: str, argv: list[str]) -> None:
+    """A talk about the owner's SellerCart shop is filed under its topic, so the shop's page lists
+    it — the topic has to reach the cloud, or the chat lands only in the general sidebar."""
+    route = respx.post(f"{env}/agent/chat/chats").mock(return_value=_opened_chat_response())
+
+    result = runner.invoke(app, ["chats", "open", *argv])
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {"topic": "sellercart"}
+    assert f"sellerclaw-ui:direct:{CHAT_ID}" in result.stdout
+
+
+@respx.mock
 def test_open_for_a_job_that_has_its_chat_fails_and_names_it(env: str) -> None:
     """The job's own chat is where its news goes: the refusal must reach the agent with that
     chat in it, not read as a chat it opened."""
