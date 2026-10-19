@@ -179,6 +179,22 @@ class Client:
         self.close()
 
 
+def fetch_file(url: str, *, timeout: float = DEFAULT_TIMEOUT_SECONDS) -> bytes:
+    """The bytes behind a file link the API handed out — a screenshot, say.
+
+    Fetched without the API's headers: the link is a capability URL that opens for anyone holding
+    it, and it may point off the API host, where the bearer token has no business going.
+    """
+    try:
+        with httpx.Client(timeout=timeout, follow_redirects=True, trust_env=False) as http:
+            response = http.get(url)
+    except httpx.HTTPError as exc:
+        raise NetworkError(str(exc) or exc.__class__.__name__) from exc
+    if not 200 <= response.status_code < 300:
+        raise _error_for_response(response)
+    return response.content
+
+
 def _transport_message(
     exc: httpx.HTTPError,
     *,

@@ -312,6 +312,12 @@ class Cmd:
     # separate Typer command so the command still appears in ``describe`` and in the surface
     # snapshot the agent's skills are checked against.
     upload_file: bool = False
+    # The answer's key that carries a link to a file the caller is about to open — a screenshot it
+    # has to look at. Set it and the command takes ``-o/--output <file>``: the CLI saves the file
+    # there and the answer gains ``saved_to``. Without it the caller held a URL where it needed a
+    # file — the agent's ``read`` tool does not open links — so every look at its own work cost a
+    # failed read and a ``curl``.
+    save_url_field: str | None = None
 
     @property
     def effective_timeout(self) -> float:
@@ -713,6 +719,18 @@ def upload_payload(file_path: Path, *, filename: str | None = None) -> dict[str,
     return {"file": (name, content, content_type or "application/octet-stream")}
 
 
+def _output_target(output: Path) -> Path:
+    """Where ``-o`` saves the file — checked before the call, which may cost the owner credits."""
+    target = output.expanduser().resolve()
+    if target.is_dir():
+        emit_error(
+            UserInputError(
+                f"-o/--output takes a file path, and {target} is a folder — e.g. -o {target / 'shot.png'}"
+            )
+        )
+    return target
+
+
 def _make_callback(group: str, cmd: Cmd):
     """Build a callback with a synthetic signature Typer can introspect.
 
@@ -773,6 +791,10 @@ def _make_callback(group: str, cmd: Cmd):
         poll_path = cmd.job_poll_path
         if poll_path is not None:
             poll_path = fill_path(poll_path, {name: values[name] for name in positionals})
+        save_url: tuple[str, Path] | None = None
+        output = kwargs.pop("output", None)
+        if cmd.save_url_field and output is not None:
+            save_url = (cmd.save_url_field, _output_target(output))
         run_operation(
             ctx,
             cmd.method,
@@ -783,6 +805,7 @@ def _make_callback(group: str, cmd: Cmd):
             timeout=cmd.effective_timeout,
             job_poll_path=poll_path,
             read_only=cmd.read_only,
+            save_url=save_url,
         )
         # Only reached when the call succeeded (run_operation raises typer.Exit on error): remember
         # the task the `start` command just acted on, so follow-up commands can omit the id.
@@ -889,6 +912,26 @@ def _make_callback(group: str, cmd: Cmd):
             )
         )
         annotations[field.name] = field_annotation
+
+    if cmd.save_url_field:
+        parameters.append(
+            inspect.Parameter(
+                "output",
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                default=typer.Option(
+                    None,
+                    "--output",
+                    "-o",
+                    help=(
+                        f"Save the file behind {cmd.save_url_field} at this path; the answer says "
+                        "where in saved_to. Open that file — the link itself is not one."
+                    ),
+                    metavar="FILE",
+                ),
+                annotation=Path | None,
+            )
+        )
+        annotations["output"] = Path | None
 
     if cmd.takes_body:
         body_annotation: Any = str | None

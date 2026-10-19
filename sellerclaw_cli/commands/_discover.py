@@ -129,6 +129,9 @@ def _example(group: str, cmd: Cmd) -> str:
         parts.append("-b '" + json.dumps(_body_example(cmd), ensure_ascii=False) + "'")
     elif cmd.takes_body:
         parts.append("-b @body.json")
+    if cmd.save_url_field:
+        # The example is what gets copied, and a copy without it hands back a link to open as a file.
+        parts.append("-o <file to save it to>")
     return " ".join(parts)
 
 
@@ -258,6 +261,12 @@ def _command_detail(group: str, cmd: Cmd) -> dict[str, object]:
         "positionals": positionals_of(cmd.path),
         # This command sends a file, given as a local path in the first argument — not a JSON body.
         "upload_file": cmd.upload_file,
+        # The answer links to a file: `-o <file>` saves it there and the answer gains `saved_to`.
+        "output_file": (
+            {"option": "-o/--output", "saves": cmd.save_url_field, "answer_gains": "saved_to"}
+            if cmd.save_url_field
+            else None
+        ),
         "flags": _flag_repr(group, cmd),
         "body": cmd.takes_body,
         "body_fields": _body_repr(cmd),
