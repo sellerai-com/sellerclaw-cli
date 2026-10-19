@@ -281,6 +281,17 @@ SPECS = (
                 example=False,
             ),
             body_field(
+                "show_sold_out",
+                type=bool,
+                help=(
+                    "True keeps sold-out products on the shelf, marked 'Sold'. False is the normal "
+                    "state and needs no call: a sold-out product leaves every list, category and the "
+                    "sitemap by itself and comes back when restocked. Send it only when the owner "
+                    "asks to show them. On a live shop it waits in the draft."
+                ),
+                example=True,
+            ),
+            body_field(
                 "product_cta_label",
                 help=(
                     "The seller's own button where 'Add to cart' would be on a catalog shop, e.g. "
