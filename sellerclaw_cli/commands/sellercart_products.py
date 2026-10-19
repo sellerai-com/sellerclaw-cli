@@ -53,7 +53,12 @@ SPECS = (
             "product with no cost, "
             "or a shop with no markup set, is refused rather than listed at zero — get a markup on "
             "the shop (the owner approves it) or pass an explicit price first. Copy for the shop "
-            "goes in 'products' and lands on the listing; the catalog product keeps its own."
+            "goes in 'products' and lands on the listing; the catalog product keeps its own. "
+            "An entry may name a LISTING from another of the owner's stores instead — "
+            "{\"listing_id\": …}, the id 'listings search' hands back, up to 100 per call: it is "
+            "copied into the catalog (or found there by SKU) and shelved at the price it sells for "
+            "in its own store, and 'from_listings' answers each one — shelved, already_on_shelf or "
+            "refused with the reason — so the same call can simply be sent again."
         ),
         body=(
             body_field(
@@ -61,11 +66,13 @@ SPECS = (
                 type=list,
                 help=(
                     "List of {product_id, title?, description?, images?} — this shop's own copy "
-                    "for each product, written onto its listing. Omit a field to take the catalog's."
+                    "for each product, written onto its listing. Omit a field to take the catalog's. "
+                    "Or {listing_id, title?, description?, images?} to shelve one of the owner's "
+                    "listings from another store straight away, at its own price."
                 ),
                 example=[
                     {"product_id": "<uuid>", "description": "<the shop's own copy>"},
-                    {"product_id": "<uuid>"},
+                    {"listing_id": "<listing_id from listings search>"},
                 ],
             ),
             body_field(
