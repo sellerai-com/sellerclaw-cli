@@ -307,6 +307,20 @@ SPECS = (
                 example="/contacts",
                 clearable=True,
             ),
+            body_field(
+                "return_policy",
+                type=dict,
+                nullable=True,
+                help=(
+                    "The machine-readable half of the Returns page, told to search engines and "
+                    "shopping assistants as the shop's promise — so only what the owner said. "
+                    "{accepted, days, fees}: days from delivery (1-365, required when accepted); "
+                    "fees 'free' or 'buyer_pays', left out when the owner did not say who pays. "
+                    '{"accepted": false} takes nothing back. Replaces the policy whole and applies '
+                    "at once, like delivery; null removes it. Rewrite the Returns page to match."
+                ),
+                example={"accepted": True, "days": 30, "fees": "free"},
+            ),
             body_field("note", help=_NOTE_HELP, example="Led with free delivery, as you asked"),
         ),
     ),

@@ -175,6 +175,35 @@ def test_update_sends_the_whole_list_of_extra_currencies(
         assert json.loads(route.calls.last.request.content) == body
 
 
+@pytest.mark.parametrize(
+    "policy",
+    [
+        pytest.param({"accepted": True, "days": 30, "fees": "free"}, id="stated"),
+        pytest.param({"accepted": False}, id="takes-nothing-back"),
+        # ``null`` removes the policy: present and meaningful, so it must reach the API as sent.
+        pytest.param(None, id="removed"),
+    ],
+)
+@respx.mock
+def test_update_sends_the_return_policy_as_given(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+    policy: dict[str, Any] | None,
+) -> None:
+    """The strict body check refuses an unlisted key, so without the field the agent is told to save
+    the owner's returns terms and then cannot."""
+    route = respx.patch(f"{fake_api_url}/agent/sellercart").mock(
+        return_value=httpx.Response(200, json={"return_policy": policy})
+    )
+
+    result = runner.invoke(
+        app, ["sellercart", "update", "-b", json.dumps({"return_policy": policy})]
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {"return_policy": policy}
+
+
 def test_update_offers_adding_and_removing_one_currency() -> None:
     """The whole-list field replaces; these change the list the shop has, so asking to add one
     currency cannot cost the owner the others."""
