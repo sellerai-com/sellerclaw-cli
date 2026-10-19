@@ -232,9 +232,10 @@ SPECS = (
         summary=(
             "Where the orders went over the window: `countries` (each with order_count, "
             "order_share 0..1 and share_delta_pp — the shift vs the previous equal window), the "
-            "`primary_country`, and its `primary_country_regions` (e.g. US states). Use for 'where "
-            "are my buyers', and to advise on shipping policies, fulfillment placement and where "
-            f"to advertise. {_SELECTION} {_COVERAGE}"
+            "`primary_country`, and its `primary_country_regions` (e.g. US states). Over several "
+            "stores each country also lists `stores` (store_id, store_name, order_count) — which "
+            "store its orders came from. Use for 'where are my buyers', and to advise on shipping "
+            f"policies, fulfillment placement and where to advertise. {_SELECTION} {_COVERAGE}"
         ),
         flags=(*WINDOW_FLAGS, *STORE_FLAGS),
     ),

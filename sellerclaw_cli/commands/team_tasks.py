@@ -62,7 +62,11 @@ SPECS = (
         "create",
         "POST",
         "/agent/goals/team-tasks",
-        summary="Create a team task.",
+        summary=(
+            "Create a team task — with `start` and `plan`, start it, lay out its phases and open "
+            "the agent tasks of the phases that begin now, in one call. The reply carries `card` "
+            "(the chat marker to send) and, per agent task, `spawn` (the `sessions_spawn` arguments)."
+        ),
         body=(
             body_field("title", required=True, help="Short task title."),
             body_field("description", required=True, help="What the team task delivers."),
@@ -70,7 +74,40 @@ SPECS = (
             body_field("deadline", help="ISO-8601 deadline, e.g. 2026-06-20T00:00:00Z."),
             body_field("task_type", help="Optional classifier for the task."),
             body_field("effort", help="Effort tier.", example="standard"),
-            body_field("auto_approve", type=bool, help="Auto-approve on completion instead of owner review."),
+            body_field(
+                "auto_approve",
+                type=bool,
+                help="Skip the owner's approval: created ready to start instead of as a draft.",
+            ),
+            body_field(
+                "start",
+                type=bool,
+                help="Run it now: no owner approval, `in_progress` on return. Needed for `agent_task` in `plan`.",
+            ),
+            body_field(
+                "plan",
+                type=dict,
+                repeatable=True,
+                help=(
+                    "Every phase of the job, in order — an array of "
+                    '{"text": "...", "agent_task"?: {"assigned_to": "<specialist id>", "title": "...", '
+                    '"description": "<the brief>"}}. A phase with `agent_task` starts now: its agent '
+                    "task is opened and the phase goes `in_progress`. A phase that needs an earlier "
+                    "one's output carries only `text`; open it later with `subagent-tasks create` and "
+                    "its `plan_item_id`."
+                ),
+                example=[
+                    {
+                        "text": "Source a pet product from the supplier",
+                        "agent_task": {
+                            "assigned_to": "supplier",
+                            "title": "Source a pet product for Canada",
+                            "description": "Find one in-stock pet product under $15 that ships to Canada.",
+                        },
+                    },
+                    {"text": "Publish the chosen product to Shopify"},
+                ],
+            ),
         ),
     ),
     Cmd(

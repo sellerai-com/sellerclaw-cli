@@ -387,3 +387,65 @@ def test_set_plan_without_a_plan_names_the_option_as_well_as_the_body(
     assert "--step" in message
     assert "-b/--body" in message
     assert route.call_count == 0
+
+
+@respx.mock
+def test_team_task_create_sends_start_and_plan_with_briefs(env: str) -> None:
+    """One call opens the job: the plan and its executors' briefs must reach the API untouched."""
+    route = respx.post(f"{env}/agent/goals/team-tasks").mock(
+        return_value=httpx.Response(200, json={"id": TASK_ID})
+    )
+    body = {
+        "title": "Set up delivery",
+        "description": "Three zones with the owner's rates.",
+        "start": True,
+        "plan": [
+            {
+                "text": "Zones and rates",
+                "agent_task": {
+                    "assigned_to": "sellercart",
+                    "title": "Zones",
+                    "description": "USA $8/$18, Canada $16/$32.",
+                },
+            },
+            {"text": "Rewrite the Delivery page"},
+        ],
+    }
+
+    result = runner.invoke(app, ["team-tasks", "create", "-b", json.dumps(body)])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(route.calls.last.request.content) == body
+
+
+@respx.mock
+def test_subagent_task_create_sends_plan_item_id(env: str) -> None:
+    route = respx.post(f"{env}/agent/goals/agent-tasks").mock(
+        return_value=httpx.Response(200, json={"id": TASK_ID})
+    )
+    body = {
+        "title": "Publish the leash",
+        "description": "Publish catalog product X to Shopify.",
+        "assigned_to": "shopify",
+        "team_task_id": TASK_ID,
+        "plan_item_id": "2",
+    }
+
+    result = runner.invoke(app, ["subagent-tasks", "create", "-b", json.dumps(body)])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(route.calls.last.request.content) == body
+
+
+@respx.mock
+def test_team_task_create_refuses_a_misspelled_plan_locally(env: str) -> None:
+    route = respx.post(f"{env}/agent/goals/team-tasks").mock(
+        return_value=httpx.Response(200, json={"id": TASK_ID})
+    )
+    body = {"title": "T", "description": "D", "phases": [{"text": "Zones"}]}
+
+    result = runner.invoke(app, ["team-tasks", "create", "-b", json.dumps(body)])
+
+    assert result.exit_code != 0
+    assert "'phases'" in result.output
+    assert not route.called

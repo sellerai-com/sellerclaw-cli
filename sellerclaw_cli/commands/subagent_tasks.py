@@ -60,6 +60,13 @@ SPECS = (
             body_field("assigned_to", required=True, help="Agent id of the assignee (e.g. 'scout')."),
             body_field("team_task_id", help="Parent team task id (UUID), if any."),
             body_field("deadline", help="ISO-8601 deadline, e.g. 2026-06-20T00:00:00Z."),
+            body_field(
+                "plan_item_id",
+                help=(
+                    "The phase of `team_task_id` this task works (its id from `team-tasks get`). "
+                    "The phase goes `in_progress`, linked to this task, in the same call."
+                ),
+            ),
         ),
     ),
     Cmd(
