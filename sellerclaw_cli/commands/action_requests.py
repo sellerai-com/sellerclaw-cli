@@ -120,9 +120,10 @@ SPECS = (
             "press a button. Two forms, exactly one per call: `quote` — what they just said to "
             "you, when you are talking to them somewhere SellerClaw cannot read (an AI app, a "
             "terminal); or `chat_id` + `message_id`, when they answered in SellerClaw's own chat. "
-            "Quote them verbatim and only once they have actually answered: the cloud judges those "
-            "words against the action that would really run, and anything short of a plain yes or "
-            "no comes back as an error rather than an approval."
+            "Quote them verbatim — their answer, or the request in which they named everything the "
+            "action does ('raise the Shoes budget by 15%', 'publish my shop'): the cloud judges "
+            "those words against the action that would really run, and anything short of a plain "
+            "yes or no comes back as an error rather than an approval."
         ),
         body=(
             body_field(
@@ -141,8 +142,9 @@ SPECS = (
             body_field(
                 "message_id",
                 help=(
-                    "The owner's message that answers this request (from `chats list-messages`). "
-                    "Point at their reply — not your own question, and not an earlier line."
+                    "The owner's message that answers this request (from `chats list-messages`): "
+                    "their reply, or the request in which they named everything it does — never "
+                    "your own question."
                 ),
             ),
         ),

@@ -8,8 +8,8 @@ from typing import Any, NoReturn
 
 import typer
 
-from sellerclaw_cli._client import DEFAULT_TIMEOUT_SECONDS, Client
-from sellerclaw_cli._errors import CliError, UserInputError
+from sellerclaw_cli._client import DEFAULT_TIMEOUT_SECONDS, Client, fetch_file
+from sellerclaw_cli._errors import ApiError, CliError, UserInputError
 from sellerclaw_cli._job_wait import (
     is_finished,
     looks_like_job,
@@ -33,6 +33,7 @@ def run_operation(
     timeout: float | None = None,
     job_poll_path: str | None = None,
     read_only: bool = False,
+    save_url: tuple[str, Path] | None = None,
 ) -> None:
     """Execute an API call and print its result in the user-selected format.
 
@@ -55,6 +56,9 @@ def run_operation(
     two-minute publish it "waited" for cost five or six turns of "no new output", turns spent loading
     the very service the job was waiting on. The wait was written for a human watching a terminal; it
     is the wrong default for the caller this CLI mostly has (see :mod:`_job_wait`).
+
+    ``save_url`` is the answer's key that carries a file link, and the local path to save that file
+    at (``-o``). The answer then gains ``saved_to``, the absolute path, which is what gets opened.
     """
     budget = _timeout_from_ctx(ctx, timeout) or DEFAULT_TIMEOUT_SECONDS
     starts_a_job = job_poll_path is not None
@@ -84,10 +88,41 @@ def run_operation(
                     # "running in the background, read it later" would send the caller after a job with
                     # nothing left to say, or hide a refusal behind a promise that it went fine.
                     result = {**result, "note": queued_note(result, poll_command)}
+        if save_url is not None:
+            result = save_linked_file(result, *save_url, timeout=http_timeout)
     except CliError as err:
         code = print_error(err)
         raise typer.Exit(code=code) from err
     print_ok(result, fmt=_format_from_ctx(ctx))
+
+
+def save_linked_file(result: Any, field: str, target: Path, *, timeout: float) -> Any:
+    """Save the file the answer links to under ``field`` at ``target``, and say where it went.
+
+    By now the call has happened — a screenshot has already cost the owner its credits — so a
+    failure here must not lose the link: the refusal carries it, and says to fetch that rather than
+    make the call again.
+    """
+    url = result.get(field) if isinstance(result, dict) else None
+    if not isinstance(url, str) or not url:
+        raise ApiError(f"the answer carried no {field} to save at {target}", details={"answer": result})
+    kept = f"the call itself went through: fetch details.{field} instead of repeating it"
+    try:
+        content = fetch_file(url, timeout=timeout)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+    except CliError as err:
+        raise type(err)(
+            f"saving {field} to {target} failed: {err.message} — {kept}",
+            status=err.status,
+            details={field: url},
+        ) from err
+    except OSError as exc:
+        raise UserInputError(
+            f"could not write {target}: {exc.strerror or exc} — {kept}",
+            details={field: url},
+        ) from exc
+    return {**result, "saved_to": str(target)}
 
 
 def parse_json_body(arg: str | None) -> Any:

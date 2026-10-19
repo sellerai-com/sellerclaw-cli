@@ -318,9 +318,9 @@ SPECS = (
             "Ask the owner to put the shop's draft live — every change at once — or to open a shop "
             "that is not open yet. Nothing buyers see changes here: it raises an approval carrying "
             "the change list and the preview link and answers 202 with status pending_approval (or "
-            "approved_queued when the owner's Autopilot answers it). Their 'publish it' from before "
-            "this call cannot close it; hand only their reply from now on to `action-requests "
-            "confirm`. Refused before asking: nothing_to_publish, home_page_required, "
+            "approved_queued when the owner's Autopilot answers it). If the owner asked for this "
+            "publish, their message is the answer: hand it to `action-requests confirm` instead of "
+            "asking them again. Refused before asking: nothing_to_publish, home_page_required, "
             "payments_required, domain_required (a shop opens only on the owner's own domain, "
             "once it is live), publish_already_pending."
         ),
@@ -396,7 +396,7 @@ SPECS = (
             "A picture of one page of this shop, drafts included — look at what you built instead of "
             "imagining it. The preview secret is added server-side, so nothing has to be published "
             "first. Costs credits, so shoot when the answer matters (before publishing, after a "
-            "theme change), not routinely."
+            "theme change), not routinely. Answers with screenshot_url — a link, not a file."
         ),
         body=(
             body_field(
@@ -436,6 +436,7 @@ SPECS = (
         # that is still working.
         timeout=LONG_TIMEOUT_SECONDS,
         read_only=True,
+        save_url_field="screenshot_url",
     ),
     Cmd(
         "blocks",

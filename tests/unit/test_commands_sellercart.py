@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -9,6 +10,7 @@ import respx
 from typer.testing import CliRunner
 
 from sellerclaw_cli.cli import app
+from sellerclaw_cli.mcp_server import describe_command
 
 pytestmark = pytest.mark.unit
 
@@ -321,6 +323,191 @@ def test_preview_mints_the_secret_link(
     assert result.exit_code == 0, result.stderr
     assert route.call_count == 1
     assert "s3cr3t" in result.stdout
+
+
+# --- Screenshot ------------------------------------------------------------------------------
+
+_SHOT_URL = "https://files.test/agent/files/f1/shop-acme-home.png"
+_PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+
+
+def _error(stderr: str) -> dict[str, Any]:
+    return json.loads(stderr)["error"]
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    "output",
+    [
+        pytest.param("home.png", id="in-the-current-folder"),
+        pytest.param("shots/phone/home.png", id="into-folders-not-there-yet"),
+    ],
+)
+def test_screenshot_saves_the_picture_where_asked(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    output: str,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    respx.post(f"{fake_api_url}/agent/sellercart/screenshot").mock(
+        return_value=httpx.Response(200, json={"screenshot_url": _SHOT_URL, "width": 390})
+    )
+    download = respx.get(_SHOT_URL).mock(return_value=httpx.Response(200, content=_PNG))
+
+    result = runner.invoke(
+        app, ["sellercart", "screenshot", "-b", '{"width": 390}', "-o", output]
+    )
+
+    assert result.exit_code == 0, result.stderr
+    saved = (tmp_path / output).resolve()
+    assert saved.read_bytes() == _PNG
+    # The path comes back absolute: it is what the caller opens next, wherever it runs from.
+    assert _data(result.stdout) == {
+        "screenshot_url": _SHOT_URL,
+        "width": 390,
+        "saved_to": str(saved),
+    }
+    # The link opens for anyone holding it, so the API token is not sent along with it.
+    assert "authorization" not in download.calls.last.request.headers
+
+
+@respx.mock
+def test_screenshot_without_output_answers_the_link_alone(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    respx.post(f"{fake_api_url}/agent/sellercart/screenshot").mock(
+        return_value=httpx.Response(200, json={"screenshot_url": _SHOT_URL, "width": 1280})
+    )
+    download = respx.get(_SHOT_URL).mock(return_value=httpx.Response(200, content=_PNG))
+
+    result = runner.invoke(app, ["sellercart", "screenshot"])
+
+    assert result.exit_code == 0, result.stderr
+    assert _data(result.stdout) == {"screenshot_url": _SHOT_URL, "width": 1280}
+    assert download.call_count == 0
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    ("download", "output", "code", "reason"),
+    [
+        pytest.param(
+            httpx.Response(404, json={"detail": "File not found"}),
+            "home.png",
+            "api_error",
+            "File not found",
+            id="link-refused",
+        ),
+        pytest.param(
+            httpx.ConnectError("connection refused"),
+            "home.png",
+            "network_error",
+            "connection refused",
+            id="link-unreachable",
+        ),
+        pytest.param(
+            httpx.Response(200, content=_PNG),
+            "blocker/home.png",
+            "user_error",
+            "could not write",
+            id="folder-is-a-file",
+        ),
+    ],
+)
+def test_a_screenshot_that_cannot_be_saved_keeps_its_link(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    download: httpx.Response | Exception,
+    output: str,
+    code: str,
+    reason: str,
+) -> None:
+    """The shot is already paid for: losing the link would send the caller to pay for another."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "blocker").write_text("a file where a folder is wanted")
+    respx.post(f"{fake_api_url}/agent/sellercart/screenshot").mock(
+        return_value=httpx.Response(200, json={"screenshot_url": _SHOT_URL})
+    )
+    route = respx.get(_SHOT_URL)
+    if isinstance(download, Exception):
+        route.mock(side_effect=download)
+    else:
+        route.mock(return_value=download)
+
+    result = runner.invoke(app, ["sellercart", "screenshot", "-o", output])
+
+    assert result.exit_code != 0
+    assert result.stdout == ""
+    error = _error(result.stderr)
+    assert error["code"] == code
+    assert error["details"] == {"screenshot_url": _SHOT_URL}
+    assert reason in error["message"]
+    assert "fetch details.screenshot_url instead of repeating it" in error["message"]
+    assert not (tmp_path / "home.png").exists()
+
+
+@respx.mock
+def test_an_answer_without_a_link_says_there_was_nothing_to_save(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+    tmp_path: Path,
+) -> None:
+    respx.post(f"{fake_api_url}/agent/sellercart/screenshot").mock(
+        return_value=httpx.Response(200, json={"width": 1280})
+    )
+
+    result = runner.invoke(app, ["sellercart", "screenshot", "-o", str(tmp_path / "home.png")])
+
+    assert result.exit_code != 0
+    error = _error(result.stderr)
+    assert error["code"] == "api_error"
+    assert error["message"].startswith("the answer carried no screenshot_url")
+    assert error["details"] == {"answer": {"width": 1280}}
+
+
+@respx.mock
+def test_saving_into_a_folder_is_refused_before_the_shot(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+    tmp_path: Path,
+) -> None:
+    """A shot costs credits, so a path that cannot take the file is refused before it is taken."""
+    route = respx.post(f"{fake_api_url}/agent/sellercart/screenshot").mock(
+        return_value=httpx.Response(200, json={"screenshot_url": _SHOT_URL})
+    )
+
+    result = runner.invoke(app, ["sellercart", "screenshot", "-o", str(tmp_path)])
+
+    assert result.exit_code == 1
+    error = _error(result.stderr)
+    assert error["code"] == "user_error"
+    assert "is a folder" in error["message"]
+    assert route.call_count == 0
+
+
+def test_describe_teaches_saving_the_screenshot() -> None:
+    detail = _data(runner.invoke(app, ["describe", "sellercart", "screenshot"]).stdout)
+
+    assert detail["output_file"] == {
+        "option": "-o/--output",
+        "saves": "screenshot_url",
+        "answer_gains": "saved_to",
+    }
+    assert detail["example"].endswith(" -o <file to save it to>")
+    assert _data(runner.invoke(app, ["describe", "sellercart", "preview"]).stdout)["output_file"] is None
+
+
+def test_the_mcp_face_does_not_offer_saving_to_disk() -> None:
+    """Over MCP the caller may not share this machine's disk, so there is no -o to offer there."""
+    schema = describe_command("sellercart", "screenshot")
+
+    assert "output_file" not in schema
+    assert "-o" not in json.dumps(schema["call_example"])
 
 
 # --- Theme -----------------------------------------------------------------------------------
