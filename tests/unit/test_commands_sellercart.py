@@ -1247,3 +1247,92 @@ def test_deleting_a_page_carries_the_note_as_a_query(
 
     assert result.exit_code == 0, result.stderr
     assert route.calls.last.request.url.params["note"] == "The owner asked to drop it"
+
+
+# --- Discounts ---------------------------------------------------------------------------------
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    ("args", "query"),
+    [
+        pytest.param([], {}, id="running-and-scheduled"),
+        pytest.param(["--include-ended"], {"include_ended": "true"}, id="with-the-recently-ended"),
+    ],
+)
+def test_discounts_are_listed_with_the_ended_ones_on_request(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+    args: list[str],
+    query: dict[str, str],
+) -> None:
+    route = respx.get(f"{fake_api_url}/agent/sellercart/discounts").mock(
+        return_value=httpx.Response(200, json={"currency": "USD", "discounts": []})
+    )
+
+    result = runner.invoke(app, ["sellercart-discounts", "list", *args])
+
+    assert result.exit_code == 0, result.stderr or result.stdout
+    assert dict(route.calls.last.request.url.params) == query
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    "body",
+    [
+        pytest.param(
+            {"target": "shop", "percent": 20, "ends_at": "2026-12-01T00:00:00-05:00"},
+            id="the-whole-shop",
+        ),
+        pytest.param(
+            {
+                "target": "category",
+                "category": "Mugs",
+                "percent": 15,
+                "starts_at": "2026-11-27T00:00:00-05:00",
+                "ends_at": "2026-11-30T00:00:00-05:00",
+                "label": "Black Friday",
+            },
+            id="a-category-for-a-weekend",
+        ),
+        pytest.param({"id": "d-1", "percent": 30}, id="a-change-names-only-what-changes"),
+        pytest.param({"id": "d-1", "label": None}, id="null-drops-the-name"),
+    ],
+)
+def test_a_discount_is_sent_as_given(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+    body: dict[str, Any],
+) -> None:
+    route = respx.post(f"{fake_api_url}/agent/sellercart/discounts").mock(
+        return_value=httpx.Response(200, json={"discount": {}, "warnings": []})
+    )
+
+    result = runner.invoke(app, ["sellercart-discounts", "set", "-b", json.dumps(body)])
+
+    assert result.exit_code == 0, result.stderr or result.stdout
+    assert json.loads(route.calls.last.request.content) == body
+
+
+def test_a_discount_is_a_whole_percent_and_one_command_covers_every_target() -> None:
+    described = _data(runner.invoke(app, ["describe", "sellercart-discounts", "set"]).stdout)
+    fields = {f["field"]: f for f in described["body_fields"]}
+
+    assert fields["percent"]["type"] == "int"
+    assert fields["target"]["choices"] == ["shop", "category", "product", "variant"]
+    assert {"listing_id", "variation_id", "category", "starts_at", "ends_at", "label"} <= set(fields)
+
+
+@respx.mock
+def test_removing_a_discount_names_it_in_the_path(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.delete(f"{fake_api_url}/agent/sellercart/discounts/d-1").mock(
+        return_value=httpx.Response(200, json={"id": "d-1", "outcome": "stopped"})
+    )
+
+    result = runner.invoke(app, ["sellercart-discounts", "remove", "d-1"])
+
+    assert result.exit_code == 0, result.stderr or result.stdout
+    assert route.call_count == 1

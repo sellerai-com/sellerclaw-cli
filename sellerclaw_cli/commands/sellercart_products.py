@@ -26,7 +26,9 @@ SPECS = (
             "each one's own 'variation_id' (the id 'remove' takes), its sku, its stock, the "
             "changing option axes, and any price / status / picture that differs. A product of one "
             "variation has no 'variations': its sku, price and stock are on the entry. 'total' "
-            "counts products, matching the entries. Shows what a buyer sees, so a shelf staged while "
+            "counts products, matching the entries. Prices are the regular ones; 'sales' names the "
+            "variations selling at a discount right now, with the price a buyer pays and until "
+            "when. Shows what a buyer sees, so a shelf staged while "
             "the shop was still a draft reads as empty here — pass `--status draft` to see what is "
             "staged and not yet published, or `--status all` for the whole shelf."
         ),

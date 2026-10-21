@@ -37,6 +37,7 @@ Many groups take an id as the **first positional** (e.g. a store id for `shopify
 | `sellercart-products` | What is on the shelves, and each product's search title and description. |
 | `sellercart-payouts` | Stripe onboarding and tax — with delivery, what has to be true before checkout opens. |
 | `sellercart-delivery` | Where the shop delivers: zones of countries, and the fixed or at-cost methods priced in each. |
+| `sellercart-discounts` | Discounts on the shop: a percentage off the whole shop, a category, a product or one variant, for a period. |
 | `sellercart-domain` | A domain the seller owns: attach it, read out the DNS record, re-check it. |
 
 ## Internal catalog, orders & analytics

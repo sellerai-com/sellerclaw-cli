@@ -94,6 +94,33 @@ takes just that size off, reversibly; `seo` takes the **listing's** id (or the c
 those words speak for the whole product. `delete` is not reversible, so only on an explicit word,
 and it takes the listing's id too: the whole product goes.
 
+## Discounts — a percentage off, for a period
+
+```text
+sellerclaw_read(group="sellercart-discounts", command="list")
+sellerclaw_write(group="sellercart-discounts", command="set",
+  body={"target": "shop", "percent": 20, "ends_at": "2026-12-01T00:00:00-05:00"})
+sellerclaw_write(group="sellercart-discounts", command="set",
+  body={"target": "category", "category": "Mugs", "percent": 30, "label": "Black Friday",
+        "starts_at": "2026-11-27T00:00:00-05:00", "ends_at": "2026-11-30T00:00:00-05:00"})
+sellerclaw_write(group="sellercart-discounts", command="set",
+  body={"target": "product", "listing_id": LISTING_ID, "percent": 15, "ends_at": "..."})
+sellerclaw_write(group="sellercart-discounts", command="remove", positionals={"discount_id": ID})
+```
+
+One `set` for every target: `shop`, a `category` by the shop's own name for it, a `product` by its
+`listing_id` (every variant), a `variant` by its `variation_id`. A whole percent off the regular price,
+rounded down to the tenth; the regular price keeps following cost and markup, and the sale follows
+it. Buyers see the new price, the regular one struck through and a badge with the percent. It
+applies from `starts_at` (now when left out) until `ends_at` — the first moment it no longer applies —
+with no publish. Times carry the owner's UTC offset; ask for their time zone if you do not know it.
+
+Where several cover one variant, the narrowest wins (variant > product > category > shop), and of two
+of one kind the later-started one. Run one only when the owner asks for it, and never raise a price
+just before discounting it. Tell the owner the answer's `below_cost` (variants that now sell for less
+than they cost) and `warnings`; the discount stands. `sellercart-products list` names what sells at a
+discount now in `sales`. `remove` stops a running discount at once.
+
 ## Getting paid — check this before promising a working shop
 
 ```text
