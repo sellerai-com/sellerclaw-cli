@@ -92,8 +92,9 @@ SPECS = (
                 "price",
                 type=float,
                 help=(
-                    "Required for a new method, in the shop's currency. Fixed: its price (0 = free). "
-                    "Calculated: what the buyer pays when no cost can be worked out."
+                    "In the shop's currency. Fixed: its price (0 = free), required for a new one. "
+                    "Calculated: what the buyer pays when no cost can be worked out — left out on "
+                    "a new one, there is none, and such an order is not offered this method."
                 ),
                 example=9.99,
             ),
@@ -131,6 +132,16 @@ SPECS = (
                 example=2,
             ),
             body_field("days_max", type=int, nullable=True, help="See days_min.", example=4),
+            body_field(
+                "service",
+                nullable=True,
+                help=(
+                    "A supplier's own service this method stands for, by name — Amazon's "
+                    "Standard, Expedited or Priority. A parcel offering it goes by it; others by "
+                    "'pick'. null drops it."
+                ),
+                example="Expedited",
+            ),
             body_field("name", help="Rename the method.", example="Express"),
         ),
     ),
