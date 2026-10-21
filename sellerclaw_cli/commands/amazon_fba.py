@@ -12,10 +12,11 @@ SPECS = (
         "POST",
         "/agent/supplier-accounts/amazon-fba",
         summary=(
-            "Let one connected Amazon store ship orders that came from other channels. Nothing is "
-            "authorized here — the store's own connection already carries the right — so this only "
-            "records which store ships. Ask the owner which one when they have several; it decides "
-            "which country parcels leave from. The warehouse is read straight away."
+            "Let a connected Amazon store's warehouse ship orders that came from other channels. "
+            "Nothing is authorized here — the store's own connection already carries the right. "
+            "Each Amazon store has its own warehouse, and a product ships from the one that holds "
+            "it; linking one leaves the others as they are, and linking one that already ships "
+            "answers with it. The warehouse is read straight away."
         ),
         body=(
             body_field(
@@ -30,8 +31,9 @@ SPECS = (
         "GET",
         "/agent/supplier-accounts/amazon-fba",
         summary=(
-            "Which store ships for this seller, if any. 404 means none has been named yet, which "
-            "is the ordinary state — not a fault."
+            "The Amazon stores whose warehouses ship for this seller, one row per store. Empty "
+            "means none yet, which is the ordinary state — not a fault. A row's 'id' is what "
+            "`suppliers` commands take as --supplier-id when there are several."
         ),
     ),
     Cmd(
@@ -39,8 +41,18 @@ SPECS = (
         "DELETE",
         "/agent/supplier-accounts/amazon-fba",
         summary=(
-            "Stop shipping other channels' orders out of Amazon. The store itself stays connected, "
-            "and products already bound to the warehouse keep their binding."
+            "Stop one store's warehouse shipping other channels' orders. The store itself stays "
+            "connected. Refused while catalog products are still bound to that warehouse."
+        ),
+        flags=(
+            flag(
+                "store_id",
+                param="sales_channel_id",
+                help=(
+                    "The Amazon store whose warehouse to stop (from `status`). May be left out "
+                    "while only one warehouse ships."
+                ),
+            ),
         ),
     ),
     Cmd(
@@ -108,10 +120,11 @@ SPECS = (
         "/agent/amazon/fba/binding/apply",
         summary=(
             "Make Amazon the supplier of the products named here, so their orders can be shipped "
-            "out of its warehouse. Name only products preview-binding called 'matched', and never "
-            "decide an ambiguous one on the owner's behalf. Every product named gets an answer: "
-            "check 'bound_product_ids' against what you sent, and read the rest as refusals. "
-            "Running it again is harmless."
+            "out of its warehouse. Name only products preview-binding called 'matched' — or "
+            "'ambiguous' ones together with the store the owner chose — and never decide an "
+            "ambiguous one on the owner's behalf. Every product named gets an answer: check "
+            "'bound_product_ids' against what you sent, and read the rest as refusals. Running it "
+            "again is harmless."
         ),
         body=(
             body_field(
@@ -120,6 +133,15 @@ SPECS = (
                 required=True,
                 help="Catalog product ids to bind (at most 100 per call).",
                 example=["3f1a…", "9c22…"],
+            ),
+            body_field(
+                "sales_channel_id",
+                help=(
+                    "The owner's answer to an 'ambiguous' product: the store (one of its "
+                    "'candidate_channel_ids') whose warehouse ships it. A product only one "
+                    "warehouse holds ships from that one regardless."
+                ),
+                example="7b2e…",
             ),
         ),
     ),

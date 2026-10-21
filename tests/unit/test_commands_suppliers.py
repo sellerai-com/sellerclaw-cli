@@ -462,3 +462,30 @@ def test_a_countrys_warehouse_rates_are_removed(
 
     assert result.exit_code == 0, result.stderr
     assert route.called
+
+
+@pytest.mark.parametrize(
+    ("args", "query"),
+    [
+        pytest.param([], {}, id="the-provider-names-its-only-supplier"),
+        pytest.param(
+            ["--supplier-id", "acc-2"], {"supplier_id": "acc-2"}, id="one-warehouse-of-several"
+        ),
+    ],
+)
+@respx.mock
+def test_a_provider_command_can_name_one_supplier_of_several(
+    args: list[str],
+    query: dict[str, str],
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """An Amazon warehouse per Amazon store: the row is named, not guessed from the provider."""
+    route = respx.get(f"{fake_api_url}/agent/suppliers/amazon-fba/orders/sc-1/tracking").mock(
+        return_value=httpx.Response(200, json={"order_id": "sc-1", "tracking_number": ""})
+    )
+
+    result = runner.invoke(app, ["suppliers", "get-tracking", "amazon-fba", "sc-1", *args])
+
+    assert result.exit_code == 0, result.output
+    assert dict(route.calls.last.request.url.params) == query

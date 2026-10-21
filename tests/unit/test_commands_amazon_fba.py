@@ -65,31 +65,48 @@ def test_connecting_without_a_store_is_caught_before_the_request(
 
 
 @respx.mock
-def test_status_reports_the_linked_store(
+def test_status_lists_every_linked_warehouse(
     env_pointing_at_fake_api: None,  # noqa: ARG001
     fake_api_url: str,
 ) -> None:
+    """One warehouse per Amazon store — the list is what names them apart."""
+    other = "22222222-2222-2222-2222-222222222222"
     respx.get(f"{fake_api_url}{SUPPLIER}").mock(
-        return_value=httpx.Response(200, json={"id": "acc-1", "sales_channel_id": STORE})
+        return_value=httpx.Response(
+            200,
+            json=[
+                {"id": "acc-1", "sales_channel_id": STORE},
+                {"id": "acc-2", "sales_channel_id": other},
+            ],
+        )
     )
 
     result = runner.invoke(app, ["amazon-fba", "status"])
 
     assert result.exit_code == 0, result.output
-    assert STORE in result.output
+    assert STORE in result.output and other in result.output
 
 
+@pytest.mark.parametrize(
+    ("args", "query"),
+    [
+        pytest.param([], {}, id="the-only-warehouse"),
+        pytest.param(["--store-id", STORE], {"sales_channel_id": STORE}, id="one-store-of-several"),
+    ],
+)
 @respx.mock
 def test_disconnect_deletes_the_link_and_not_the_store(
+    args: list[str],
+    query: dict[str, str],
     env_pointing_at_fake_api: None,  # noqa: ARG001
     fake_api_url: str,
 ) -> None:
     route = respx.delete(f"{fake_api_url}{SUPPLIER}").mock(return_value=httpx.Response(204))
 
-    result = runner.invoke(app, ["amazon-fba", "disconnect"])
+    result = runner.invoke(app, ["amazon-fba", "disconnect", *args])
 
     assert result.exit_code == 0, result.output
-    assert route.called
+    assert dict(route.calls.last.request.url.params) == query
 
 
 @respx.mock
@@ -177,7 +194,18 @@ def test_preview_binding_refuses_an_impossible_limit_locally(
 
 
 @respx.mock
+@pytest.mark.parametrize(
+    "body",
+    [
+        pytest.param({"product_ids": ["p-1", "p-2"]}, id="matched-products"),
+        pytest.param(
+            {"product_ids": ["p-1"], "sales_channel_id": STORE},
+            id="an-ambiguous-one-with-the-owners-store",
+        ),
+    ],
+)
 def test_bind_sends_exactly_the_products_it_was_handed(
+    body: dict[str, object],
     env_pointing_at_fake_api: None,  # noqa: ARG001
     fake_api_url: str,
 ) -> None:
@@ -186,19 +214,17 @@ def test_bind_sends_exactly_the_products_it_was_handed(
         return_value=httpx.Response(
             200,
             json={
-                "sales_channel_id": STORE,
+                "sales_channel_ids": [STORE],
                 "items": [{"product_id": "p-1", "outcome": "matched", "message": "…"}],
                 "bound_product_ids": ["p-1"],
             },
         )
     )
 
-    result = runner.invoke(
-        app, ["amazon-fba", "bind", "-b", json.dumps({"product_ids": ["p-1", "p-2"]})]
-    )
+    result = runner.invoke(app, ["amazon-fba", "bind", "-b", json.dumps(body)])
 
     assert result.exit_code == 0, result.output
-    assert json.loads(route.calls.last.request.content) == {"product_ids": ["p-1", "p-2"]}
+    assert json.loads(route.calls.last.request.content) == body
 
 
 def test_binding_nothing_is_caught_before_the_request(

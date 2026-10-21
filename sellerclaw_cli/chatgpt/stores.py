@@ -209,7 +209,7 @@ ACTIONS = (
     action(
         "get_fba_status",
         "Get FBA status",
-        "Which Amazon store, if any, ships other channels' orders through Amazon's warehouses. "
+        "Which Amazon stores' warehouses ship other channels' orders — one per store. "
         "None is the usual state.",
         (),
         runs("amazon-fba", "status"),

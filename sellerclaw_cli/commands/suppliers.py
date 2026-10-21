@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import typer
 
 from sellerclaw_cli._command_group import (
@@ -12,7 +14,7 @@ from sellerclaw_cli._command_group import (
 
 NAME = "suppliers"
 
-SPECS = (
+_BASE_SPECS = (
     Cmd(
         "list-accounts",
         "GET",
@@ -697,6 +699,28 @@ SPECS = (
         summary="Get tracking for a supplier order.",
     ),
 )
+
+#: Which of the owner's suppliers of this provider a call is about. Needed only for a provider they
+#: hold several of — an Amazon warehouse per Amazon store; with one, the provider alone names it.
+_SUPPLIER_ID = flag(
+    "supplier_id",
+    param="supplier_id",
+    help=(
+        "The supplier (its `id` in `list-accounts`, or in `amazon-fba status` for a warehouse) "
+        "when the owner holds several of this provider. An order created with "
+        "`internal_order_id` finds its own."
+    ),
+)
+
+
+def _addressable(cmd: Cmd) -> Cmd:
+    """A per-provider command, able to name one supplier of that provider."""
+    if not cmd.path.startswith("/agent/suppliers/{provider}"):
+        return cmd
+    return replace(cmd, flags=(*cmd.flags, _SUPPLIER_ID))
+
+
+SPECS = tuple(_addressable(cmd) for cmd in _BASE_SPECS)
 
 app = build_group(
     NAME,
