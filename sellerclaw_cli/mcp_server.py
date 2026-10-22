@@ -319,6 +319,7 @@ MCP_VISIBLE_GROUPS: frozenset[str] = frozenset(
         "sellercart-pages",
         "sellercart-products",
         "sellercart-menus",
+        "sellercart-messages",
         "sellercart-media",
         "sellercart-domain",
         "sellercart-payouts",

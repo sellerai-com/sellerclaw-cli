@@ -32,13 +32,13 @@
   {
     "topic": "storefront",
     "skill": "sellerclaw-storefront",
-    "description": "Use when the user wants to work on their own SellerCart storefront — create the shop, change its look, pages, menus or images, put products on its shelves, set delivery and Stripe payouts, connect a domain they own, preview it, or publish it live.",
+    "description": "Use when the user wants to work on their own SellerCart storefront — create the shop, change its look, pages, menus or images, put products on its shelves, set delivery and Stripe payouts, connect a domain they own, preview it, publish it live or close it for a while, or answer a buyer who wrote to the shop (its contact form or its address).",
     "file": "storefront.md"
   },
   {
     "topic": "email",
     "skill": "sellerclaw-email",
-    "description": "Use when the user wants to read their connected mailbox or send a message through SellerClaw — reply to a buyer by email or Instagram/WhatsApp DM, draft a message, or check what arrived.",
+    "description": "Use when the user wants to read their connected mailbox or send a message through SellerClaw — reply to a buyer by email or Instagram/WhatsApp DM, draft a message, or check what arrived. Messages buyers send to the seller's SellerCart shop are in storefront.",
     "file": "email.md"
   },
   {

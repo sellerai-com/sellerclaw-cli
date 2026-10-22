@@ -1,6 +1,6 @@
 ---
 name: sellerclaw-email
-description: "Use when the user wants to read their connected mailbox or send a message through SellerClaw — reply to a buyer by email or Instagram/WhatsApp DM, draft a message, or check what arrived."
+description: "Use when the user wants to read their connected mailbox or send a message through SellerClaw — reply to a buyer by email or Instagram/WhatsApp DM, draft a message, or check what arrived. Messages buyers send to the seller's SellerCart shop are in storefront."
 ---
 
 # SellerClaw — email

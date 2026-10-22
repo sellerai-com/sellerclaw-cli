@@ -335,8 +335,8 @@ SPECS = (
             "approved_queued when the owner's Autopilot answers it). If the owner asked for this "
             "publish, their message is the answer: hand it to `action-requests confirm` instead of "
             "asking them again. Refused before asking: nothing_to_publish, home_page_required, "
-            "payments_required, domain_required (a shop opens only on the owner's own domain, "
-            "once it is live), publish_already_pending."
+            "payments_required, domain_required (first opening requires the owner's live custom "
+            "domain; reopening a deliberately closed shop does not), publish_already_pending."
         ),
         body=(
             body_field(
@@ -352,11 +352,21 @@ SPECS = (
         "POST",
         "/agent/sellercart/unpublish",
         summary=(
-            "Ask the owner to take the live shop off the air: answers 202 with status "
-            "pending_approval, and the shop closes once they approve. Pages, images and products "
-            "survive; buyers stop seeing it. A shop already closed answers 200 with nothing asked. "
-            "Closing a shop for good is the seller's own button in SellerClaw and has no command "
-            "here."
+            "Ask the owner to close the shop temporarily: answers 202 pending_approval, or "
+            "approved_queued under Autopilot. Buyers see a temporarily closed page with the owner's "
+            "message and can still write to the shop. Pages, images and products survive. "
+            "On a closed shop it changes the notice under approval: a field left out keeps its "
+            "value, null clears it; with nothing to change it answers 200 with nothing asked. "
+            "publish reopens it without requiring a custom "
+            "domain; Stripe must still be verified. The reopening date is display only. "
+            "Deleting the shop is the owner's own button in SellerClaw."
+        ),
+        body=(
+            body_field('buyer_note', option='--buyer-note', nullable=True,
+                       help='What buyers read on the closed shop, up to 280 characters. null removes it.'),
+            body_field('reopens_on', option='--reopens-on', nullable=True,
+                       help='The day the owner plans to reopen, YYYY-MM-DD. Shown to buyers only. '
+                            'null removes it.'),
         ),
     ),
     Cmd(

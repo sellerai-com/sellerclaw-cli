@@ -1,6 +1,6 @@
 ---
 name: sellerclaw-storefront
-description: "Use when the user wants to work on their own SellerCart storefront — create the shop, change its look, pages, menus or images, put products on its shelves, set delivery and Stripe payouts, connect a domain they own, preview it, or publish it live."
+description: "Use when the user wants to work on their own SellerCart storefront — create the shop, change its look, pages, menus or images, put products on its shelves, set delivery and Stripe payouts, connect a domain they own, preview it, publish it live or close it for a while, or answer a buyer who wrote to the shop (its contact form or its address)."
 ---
 
 # SellerClaw — storefront (SellerCart)
@@ -175,8 +175,27 @@ Publishing is gated: it answers `pending_approval` or, on a connection the owner
 lands in the shop's version history (`versions`). `unpublish` closes the shop and is gated the same
 way.
 
+While closed, `status` carries `closed_at`, `closed_note` and `reopens_on`. Buyers see a temporarily
+closed page and can still write to the shop; its basket and checkout refuse orders. Close with
+`sellerclaw sellercart unpublish --buyer-note "On holiday" --reopens-on 2026-11-03`. On a closed
+shop the same command changes the notice under approval: a field left out keeps its value, `null`
+clears it. The date is shown only and never opens the shop automatically. `publish` reopens it without requiring a custom domain; Stripe must still
+be verified.
+
 A shop opens only on a domain the owner owns, once that domain is live: until then the first
 `publish` answers `domain_required`. Connect the domain early (below) — DNS takes time.
+
+## Buyers' messages
+
+Command `sellerclaw sellercart-messages list --waiting` lists conversations waiting for an answer.
+Command `sellerclaw sellercart-messages get <conversation_id>` reads every message and attachment
+metadata. Neither clears the owner's unread mark.
+
+Command `sellerclaw sellercart-messages reply <conversation_id> --text "<answer>"` proposes an answer
+under the owner's `CUSTOMER_REPLY` policy. `pending_approval` waits for the owner;
+`approved_queued` means the answer is going out from the shop's address. `reply_already_pending`
+means an answer is already waiting: do not propose another. If the owner answers first, the pending
+agent answer stays unsent.
 
 ## A domain they own
 

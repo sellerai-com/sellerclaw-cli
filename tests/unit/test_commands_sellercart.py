@@ -21,6 +21,50 @@ def _data(stdout: str) -> Any:
     return json.loads(stdout)["data"]
 
 
+@pytest.mark.parametrize(('command', 'path', 'flags', 'query'), [
+    pytest.param('list', '/conversations',
+        ['--waiting', '--order-id', 'order-1', '--limit', '7', '--offset', '2'],
+        {'waiting': 'true', 'order_id': 'order-1', 'limit': '7', 'offset': '2'}, id='waiting-list'),
+    pytest.param('get', '/conversations/thread-1', ['thread-1'], {}, id='thread'),
+])
+@respx.mock
+def test_messages_reads(
+    env_pointing_at_fake_api: None, fake_api_url: str,
+    command: str, path: str, flags: list[str], query: dict[str, str],
+) -> None:
+    route = respx.get(f'{fake_api_url}/agent/sellercart{path}').mock(
+        return_value=httpx.Response(200, json={'ok': True}))
+    result = runner.invoke(app, ['sellercart-messages', command, *flags])
+    assert result.exit_code == 0, result.stderr
+    assert dict(route.calls.last.request.url.params) == query
+    assert _data(result.stdout) == {'ok': True}
+
+
+@pytest.mark.parametrize(('http_status', 'status'), [
+    pytest.param(202, 'pending_approval', id='ask-owner'),
+    pytest.param(200, 'approved_queued', id='autopilot'),
+])
+@respx.mock
+def test_messages_reply_text_option(
+    env_pointing_at_fake_api: None, fake_api_url: str, http_status: int, status: str,
+) -> None:
+    route = respx.post(f'{fake_api_url}/agent/sellercart/conversations/thread-1/replies').mock(
+        return_value=httpx.Response(http_status, json={'status': status}))
+    result = runner.invoke(app, ['sellercart-messages', 'reply', 'thread-1', '--text', 'Your order shipped.'])
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {'text': 'Your order shipped.'}
+    assert _data(result.stdout)['status'] == status
+
+
+@respx.mock
+def test_unpublish_sends_notice_options(env_pointing_at_fake_api: None, fake_api_url: str) -> None:
+    route = respx.post(f'{fake_api_url}/agent/sellercart/unpublish').mock(
+        return_value=httpx.Response(202, json={'status': 'pending_approval'}))
+    result = runner.invoke(app, ['sellercart', 'unpublish', '--buyer-note', 'On holiday', '--reopens-on', '2026-11-03'])
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {'buyer_note': 'On holiday', 'reopens_on': '2026-11-03'}
+
+
 @pytest.fixture
 def env_pointing_at_fake_api(
     monkeypatch: pytest.MonkeyPatch,
