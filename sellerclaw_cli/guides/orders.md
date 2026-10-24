@@ -47,6 +47,29 @@ Every field is optional — an order the channel marked sent without a number is
 Repeating the call is safe. Do **not** close the order with `orders update` instead: that leaves the
 status where it was.
 
+## Ship it yourself: buy a courier label
+
+For an order the seller ships themselves (their own stock, an offline supplier's warehouse) and only
+when they connected Shippo: `orders get` → `shipping_label_offer.available` says whether a label can
+be bought, and `reason` why not. CJ and Amazon FBA orders are shipped by the supplier — no label.
+
+```text
+# The rates, with the label drafted from the order — warehouse, address, weight and box.
+sellerclaw_read(group="shipping-labels", command="quote", positionals={"order_id": ORDER_ID})
+# Change only what is wrong, in millimetres and grams:
+sellerclaw_read(group="shipping-labels", command="quote", positionals={"order_id": ORDER_ID},
+  body={"parcel": {"weight_grams": 1250}, "signature": "ADULT"})
+# Buy by the chosen rate — goes to the owner for approval (money).
+sellerclaw_write(group="shipping-labels", command="buy", positionals={"order_id": ORDER_ID},
+  body={"rate_id": RATE_ID})
+```
+
+Prefer the rate with `buyer_chose: true` (what the buyer paid for), else the cheapest that arrives in
+time. A 422 from `quote` lists `details.missing` — ask the owner for exactly that (a missing sender
+name goes into `shipping-labels update-sender`). Once bought, the order is marked shipped and the
+store gets the tracking: do **not** run `set-shipped` or a channel's fulfillment for it. The label —
+file link, tracking, delivery status — is `shipping_label` in `orders get`.
+
 ## eBay & Amazon
 
 ```text

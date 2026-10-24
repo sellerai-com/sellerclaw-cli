@@ -724,6 +724,20 @@ def _summarize_order(payload: dict[str, Any]) -> str:
     if tracking:
         carrier = order.get("tracking_carrier")
         lines.append(f"Tracking {tracking}" + (f" ({carrier})." if carrier else "."))
+    label = order.get("shipping_label") or {}
+    if label:
+        title = f"{label.get('carrier_name') or ''} {label.get('service_name') or ''}".strip()
+        state = {"purchasing": "being issued", "failed": "not bought"}.get(label.get("status") or "")
+        price = _money(label.get("amount"), label.get("currency"))
+        lines.append(
+            f"Shipping label {title}"
+            + (f" ({price})" if price and not state else "")
+            + (f", {state}" if state else "")
+            + (", a Shippo test label" if label.get("test") else "")
+            + "."
+        )
+    elif (order.get("shipping_label_offer") or {}).get("available"):
+        lines.append("The seller ships it themselves; a label can be bought (shipping-labels quote).")
     if order.get("has_unresolved_items"):
         lines.append("Some items are not matched to a supplier yet.")
     if order.get("id"):

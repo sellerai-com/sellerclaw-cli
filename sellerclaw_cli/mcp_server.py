@@ -338,6 +338,7 @@ MCP_VISIBLE_GROUPS: frozenset[str] = frozenset(
         # Internal catalog, orders, analytics
         "catalog",
         "shipping-boxes",
+        "shipping-labels",
         "orders",
         "listings",
         "analytics",

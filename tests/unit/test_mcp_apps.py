@@ -1873,6 +1873,41 @@ def test_one_order_is_named_by_its_marketplace_number() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("order", "expected"),
+    [
+        pytest.param(
+            {
+                "shipping_label": {
+                    "status": "purchased",
+                    "carrier_name": "UPS",
+                    "service_name": "Ground",
+                    "amount": "12.40",
+                    "currency": "USD",
+                    "test": False,
+                }
+            },
+            "Shipping label UPS Ground (12.40 USD).",
+            id="bought",
+        ),
+        pytest.param(
+            {"shipping_label": {"status": "purchasing", "carrier_name": "USPS", "service_name": "Priority Mail"}},
+            "Shipping label USPS Priority Mail, being issued.",
+            id="being-issued",
+        ),
+        pytest.param(
+            {"shipping_label_offer": {"available": True}},
+            "The seller ships it themselves; a label can be bought (shipping-labels quote).",
+            id="can-be-bought",
+        ),
+    ],
+)
+def test_one_order_says_what_became_of_its_shipping_label(order: dict, expected: str) -> None:
+    summary = mcp_apps._summarize_order({"order": {"remote_order_name": "#1042", **order}})
+
+    assert expected in summary
+
+
 def test_one_order_names_its_sellerclaw_id_so_a_follow_up_needs_no_search() -> None:
     summary = mcp_apps._summarize_order({"order": {"id": ORDER_ID, "remote_order_name": "#1001"}})
 

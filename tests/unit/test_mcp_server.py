@@ -667,6 +667,7 @@ _POST_READS = frozenset(
         ("price-list", "preview"),
         ("sellercart", "preview"),
         ("sellercart", "screenshot"),
+        ("shipping-labels", "quote"),
         ("suppliers", "calculate-shipping"),
         ("suppliers", "check-stock-batch"),
         ("suppliers", "inspect-batch"),

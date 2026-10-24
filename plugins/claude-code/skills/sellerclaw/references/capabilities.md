@@ -47,6 +47,7 @@ Many groups take an id as the **first positional** (e.g. a store id for `shopify
 | --- | --- |
 | `catalog` | Internal SellerClaw product catalog. |
 | `shipping-boxes` | The seller's standard boxes — a parcel's size and the box's own weight; products and listings name one by `box_id`. |
+| `shipping-labels` | Courier labels for orders the seller ships, bought through their own Shippo account: `quote` the rates, `buy` one (the owner approves), the sender on every label. |
 | `orders` | Internal SellerClaw orders. |
 | `listings` | Marketplace listings across all stores, by SellerClaw id. |
 | `categories` / `attributes` | Place a product in a marketplace category and fill the item specifics that category demands — the two things a refused publish is usually missing. |
