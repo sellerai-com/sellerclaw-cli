@@ -162,10 +162,11 @@ SPECS = (
         summary=(
             "Ask the owner to put these articles out — up to 10 in one approval, each on its "
             "publish_at or at once. The blog's own approval: the shop's draft is not needed and not "
-            "touched. Answers pending_approval (buyers see nothing until the owner says yes), "
-            "approved_queued (their setting answered it: say what came out) or published (the shop "
-            "is closed, so the articles come out when it reopens). preview_urls has each article's "
-            "link for the owner."
+            "touched. The first approved article is how the shop's blog starts, and one approved "
+            "after the owner turned the blog off brings it back — the ask says so. Answers "
+            "pending_approval (buyers see nothing until the owner says yes) or approved_queued "
+            "(their setting answered it: say what came out). preview_urls has each article's link "
+            "for the owner. shop_not_open: no blog before the shop opens."
         ),
         body=(
             body_field(
@@ -189,8 +190,7 @@ SPECS = (
         "POST",
         "/agent/sellercart/blog/posts/{slug}/unpublish",
         summary=(
-            "Ask the owner to take an article off the blog. Its text stays as a draft. Done at once "
-            "on a closed shop."
+            "Ask the owner to take an article off the blog. Its text stays as a draft."
         ),
     ),
     Cmd(
@@ -198,9 +198,9 @@ SPECS = (
         "POST",
         "/agent/sellercart/blog/enable",
         summary=(
-            "Turn the shop's blog on — only when the owner asked for it; they also have a button "
-            "in the shop's Blog window. A blog turns on once the shop is open (shop_not_open "
-            "before). While it is off, every write to the blog answers blog_off."
+            "Turn the blog back on after the owner turned it off — only when they asked for it; "
+            "they also have a button in the shop's Blog window. Never needed to start a blog: it "
+            "starts by itself with the first approved article (blog_has_no_articles until then)."
         ),
     ),
     Cmd(
@@ -210,7 +210,8 @@ SPECS = (
         summary=(
             "Turn the shop's blog off — only when the owner asked for it. Buyers lose the blog, "
             "its articles and the menu items leading to it at once; the articles and the plan are "
-            "kept for when it is back on. Asks about it the owner has not answered are withdrawn."
+            "kept, and the next approved article — or `enable` — brings it back. Asks about it the "
+            "owner has not answered are withdrawn."
         ),
     ),
 )
