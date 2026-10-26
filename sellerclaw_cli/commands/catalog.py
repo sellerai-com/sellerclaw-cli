@@ -60,6 +60,16 @@ SPECS = (
                 ),
             ),
             flag("q", help="Free text: substring of the name or any variation SKU."),
+            flag(
+                "sort",
+                choices=("newest", "cost_desc", "cost_asc", "stock_asc", "stock_desc"),
+                help=(
+                    "Order of the whole match, applied before --limit: cost = the highest unit cost "
+                    "among the variations, stock = their total; products without the figure come "
+                    "last. 'cost_desc' --limit 5 is the five most expensive; 'stock_asc' shows what "
+                    "runs out first. Default newest."
+                ),
+            ),
             flag("limit", type=int, minimum=1, maximum=500, help="Max results (default: no cap)."),
             flag("offset", type=int, minimum=0, default=0, help="Results to skip (paging)."),
         ),

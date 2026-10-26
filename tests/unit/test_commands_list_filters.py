@@ -57,6 +57,12 @@ def env_pointing_at_fake_api(
             id="catalog-one-supplier",
         ),
         pytest.param(
+            ["catalog", "list", "--sort", "cost_desc", "--limit", "5"],
+            "/agent/products",
+            [("limit", "5"), ("sort", "cost_desc")],
+            id="catalog-five-most-expensive",
+        ),
+        pytest.param(
             ["listings", "search", "--sku", "A", "--sku", "B", "--remote-id", "R1", "--not-in-catalog"],
             "/agent/listings/search",
             [("not_in_catalog", "true"), ("remote_id", "R1"), ("sku", "A"), ("sku", "B")],
