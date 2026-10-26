@@ -181,7 +181,8 @@ SPECS = (
         "/agent/sellercart",
         summary=(
             "Rename or move the shop, change the language it speaks, propose the markup its prices "
-            "are computed from, or stop it selling online. Moving is real — the old address stops "
+            "are computed from, set its delivery margin or its Shippo prices, or stop it selling "
+            "online. Moving is real — the old address stops "
             "answering and every product link is rewritten — and the currency only moves while the "
             "shop has priced nothing, because a shelf price is a number *in* one."
         ),
@@ -320,6 +321,32 @@ SPECS = (
                     "at once, like delivery; null removes it. Rewrite the Returns page to match."
                 ),
                 example={"accepted": True, "days": 30, "fees": "free"},
+            ),
+            body_field(
+                "delivery_margin_percent",
+                type=float,
+                help=(
+                    "The shop's margin on what CJ, Amazon or the seller's Shippo charge to deliver "
+                    "a parcel: a share of it (0-1000). Added only when the buyer pays for that "
+                    "delivery at all, never on the seller's own prices. Only what the owner asked "
+                    "for. Applies at once."
+                ),
+                example=10,
+            ),
+            body_field(
+                "delivery_margin_amount",
+                type=float,
+                help="With it: an amount per parcel, in the shop's currency.",
+                example=1,
+            ),
+            body_field(
+                "shippo_rates",
+                type=bool,
+                help=(
+                    "true: the checkout prices the goods the seller sends themselves through their "
+                    "connected Shippo account — only on the owner's own yes; 409 "
+                    "shippo_not_connected without one. false stops it. Applies at once."
+                ),
             ),
             body_field("note", help=_NOTE_HELP, example="Led with free delivery, as you asked"),
         ),

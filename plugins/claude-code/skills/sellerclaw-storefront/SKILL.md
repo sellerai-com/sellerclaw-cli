@@ -133,36 +133,46 @@ Checkout opens only when Stripe is connected and cleared **and** delivery is set
 Stripe onboarding is identity verification — the owner does it themselves and nobody can do it for
 them.
 
-## Delivery — zones, and the methods priced in each
+## Delivery — who prices each parcel, zones, and the seller's own methods
 
 ```text
 sellerclaw_read(group="sellercart-delivery", command="list")
 sellerclaw_write(group="sellercart-delivery", command="set-zone", positionals={"zone": "North America"},
   body={"countries": ["US", "CA"], "free_over": 75})
 sellerclaw_write(group="sellercart-delivery", command="set-method",
-  positionals={"zone": "North America", "method": "Standard"}, body={"price": 0})
-sellerclaw_write(group="sellercart-delivery", command="set-method",
-  positionals={"zone": "North America", "method": "Express"},
-  body={"price": 15, "calculated": True, "pick": "fastest", "extra_percent": 10})
+  positionals={"zone": "North America", "method": "Standard"},
+  body={"price": 6.95, "days_min": 3, "days_max": 5,
+        "weight_bands": [{"up_to_grams": 500, "price": 4}, {"up_to_grams": 2000, "price": 7}, {"price": 12}],
+        "origins": [{"country": "CN", "price": 3, "days_min": 10, "days_max": 20}]})
+sellerclaw_write(group="sellercart", command="update",
+  body={"delivery_margin_percent": 10, "delivery_margin_amount": 1})
+sellerclaw_write(group="sellercart", command="update", body={"shippo_rates": True})   # owner's yes only
 ```
 
-A zone is a group of countries priced alike; a country is in one zone only, and
-`everywhere_else: true` makes a zone for every country no other zone names. A zone delivers nowhere
-until it has a method. Ask the owner which countries and what each option costs — never invent a
-delivery price.
+An order is split into parcels by who sends them, and the buyer picks an option for each:
 
-- **Fixed** method: the buyer pays `price`, raised to the real delivery cost when that is higher —
-  the seller never pays for delivery. `price: 0` is free delivery.
-- **Calculated** method: the buyer pays the real cost from the supplier (CJ, Amazon, Shippo, the
-  warehouse's rates) plus `extra_percent` / `extra_amount`, and `price` when no cost can be had.
-- `pick` is the supplier service the method stands for — `cheapest` or `fastest` — and the one to buy
-  when the order is placed. `free_over` makes the zone's cheapest method free from that goods total.
-- `list` says whether product prices already include the supplier's delivery
-  (`shipping_included_in_price`): then a method charges only the cost beyond that. Read its
-  `warnings` out to the owner.
+- **CJ and Amazon** goods go only with the supplier, at its price: CJ's cheapest ("Standard") and its
+  fastest ("Express", when really faster), Amazon's own speeds. Nothing to set for them.
+- **The seller's own goods** go at their Shippo account's live rates when the shop agreed to it
+  (`shippo_rates: true`) and the product has a weight and a box — otherwise at the zone's methods.
+  `list` shows the `shippo` state and a `breakdown` of the shelf, with the products Shippo can't
+  price for want of a weight (`no_weight`) or a box (`no_box`).
+
+A zone is a group of countries; a country is in one zone only, and `everywhere_else: true` makes a
+zone for every country no other zone names. A method prices only the seller's own goods: `price`
+(required, `0` is free), optional `weight_bands` (parcel weight = goods + box, or the box by volume
+when that weighs more; the last step has no `up_to_grams`), the promised `days_min`/`days_max`, and
+`origins` — its own line for parcels leaving from a country. Ask the owner which countries and what
+each option costs — never invent a delivery price.
+
+`free_over` makes a parcel's cheapest option free from that goods total, counted per parcel. The
+margin (`delivery_margin_percent`, `delivery_margin_amount` per parcel) rides only on CJ's, Amazon's
+and Shippo's prices, and only when the buyer pays for that delivery. `list` says whether product
+prices already include the supplier's delivery (`shipping_included_in_price`): then a supplier's
+parcel charges only the cost beyond that. Read its `warnings` out to the owner.
 
 Changes reach buyers at once, with no publish. Fields left out of `set-zone` / `set-method` keep
-their value; `null` clears one (`free_over`, the days).
+their value; `null` clears one (`free_over`, the days); a list sent replaces the whole list.
 
 ## Going live
 

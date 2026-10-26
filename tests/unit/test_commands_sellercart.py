@@ -879,7 +879,12 @@ def test_money_is_a_number_across_the_shop_commands() -> None:
     """
     method = _data(runner.invoke(app, ["describe", "sellercart-delivery", "set-method"]).stdout)
     fields = {f["field"]: f for f in method["body_fields"]}
-    assert {fields[name]["type"] for name in ("price", "extra_amount", "extra_percent")} == {"float"}
+    assert fields["price"]["type"] == "float"
+    update = _data(runner.invoke(app, ["describe", "sellercart", "update"]).stdout)
+    margins = {f["field"]: f for f in update["body_fields"]}
+    assert {margins[name]["type"] for name in ("delivery_margin_percent", "delivery_margin_amount")} == {
+        "float"
+    }
 
     products = _data(runner.invoke(app, ["describe", "sellercart-products", "add"]).stdout)
     prices = {f["field"]: f for f in products["body_fields"]}["prices"]
@@ -963,40 +968,66 @@ def test_a_free_delivery_offer_is_withdrawn_with_null(
 
 
 @respx.mock
-def test_a_method_is_sent_to_its_zone_with_its_terms(
+def test_a_method_is_sent_to_its_zone_with_its_steps_and_its_lines_by_country(
     env_pointing_at_fake_api: None,  # noqa: ARG001
     fake_api_url: str,
 ) -> None:
-    route = respx.put(f"{fake_api_url}/agent/sellercart/delivery/zones/US/methods/Express").mock(
+    route = respx.put(f"{fake_api_url}/agent/sellercart/delivery/zones/US/methods/Standard").mock(
         return_value=httpx.Response(200, json={"zones": []})
     )
     body = {
-        "price": 20,
-        "calculated": True,
-        "extra_percent": 10,
-        "pick": "fastest",
-        "days_min": 2,
-        "days_max": 4,
+        "price": 6.95,
+        "weight_bands": [{"up_to_grams": 500, "price": 4}, {"price": 12}],
+        "days_min": 3,
+        "days_max": 5,
+        "origins": [{"country": "CN", "price": 3, "days_min": 10, "days_max": 20}],
     }
 
     result = runner.invoke(
-        app, ["sellercart-delivery", "set-method", "US", "Express", "-b", json.dumps(body)]
+        app, ["sellercart-delivery", "set-method", "US", "Standard", "-b", json.dumps(body)]
     )
 
     assert result.exit_code == 0, result.stderr or result.stdout
     assert json.loads(route.calls.last.request.content) == body
 
 
-def test_a_pick_the_api_does_not_know_is_refused_locally(
+@pytest.mark.parametrize(
+    "field",
+    [
+        pytest.param("calculated", id="calculated"),
+        pytest.param("pick", id="pick"),
+        pytest.param("extra_percent", id="extra-percent"),
+        pytest.param("service", id="service"),
+    ],
+)
+def test_the_retired_method_fields_are_refused_locally(
     env_pointing_at_fake_api: None,  # noqa: ARG001
+    field: str,
 ) -> None:
+    """A method prices only the seller's own goods now; the supplier knobs went with that."""
     result = runner.invoke(
         app,
-        ["sellercart-delivery", "set-method", "US", "Express", "-b", json.dumps({"pick": "slowest"})],
+        ["sellercart-delivery", "set-method", "US", "Express", "-b", json.dumps({field: 1})],
     )
 
     assert result.exit_code != 0
-    assert "pick" in (result.stderr or result.stdout)
+    assert field in (result.stderr or result.stdout)
+
+
+@respx.mock
+def test_the_delivery_margin_and_the_shippo_consent_go_with_the_shop_update(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.patch(f"{fake_api_url}/agent/sellercart").mock(
+        return_value=httpx.Response(200, json={"name": "Acme"})
+    )
+    body = {"delivery_margin_percent": 10, "delivery_margin_amount": 1, "shippo_rates": True}
+
+    result = runner.invoke(app, ["sellercart", "update", "-b", json.dumps(body)])
+
+    assert result.exit_code == 0, result.stderr or result.stdout
+    assert json.loads(route.calls.last.request.content) == body
 
 
 @pytest.mark.parametrize(

@@ -22,11 +22,14 @@ SPECS = (
         "GET",
         "/agent/sellercart/delivery",
         summary=(
-            "Every delivery zone of the shop — its countries, its methods and their prices — and "
-            "'warnings' naming what still stops buyers checking out. Read it before changing "
-            "anything, and repeat the warnings to the owner. 'shipping_included_in_price' true means "
-            "product prices already hold the supplier's delivery, so a method charges only the cost "
-            "beyond that and a method priced 0 is free at no loss."
+            "How the shop's checkout prices delivery, and where it delivers. Each parcel is priced "
+            "by whoever sends it: CJ's and Amazon's goods at the supplier's own price (CJ's cheapest "
+            "and fastest, Amazon's speeds), the goods the seller sends themselves through their "
+            "Shippo when the shop agreed to it ('shippo'), otherwise at the zone's methods — which "
+            "price only those. 'breakdown' counts the shelf that way, with the products Shippo "
+            "cannot price for want of a weight or a box. The margin — 'margin_percent' of the price, "
+            "then 'margin_amount' added to each parcel — rides on the suppliers' and Shippo's prices "
+            "only. Read it before changing anything, and repeat the 'warnings' to the owner."
         ),
     ),
     Cmd(
@@ -35,8 +38,9 @@ SPECS = (
         "/agent/sellercart/delivery/zones/{zone}",
         summary=(
             "Open a delivery zone — a group of countries priced alike — or change one. A new zone "
-            "needs 'countries' (or 'everywhere_else') and delivers nowhere until `set-method` gives "
-            f"it a method. A country can be in one zone only. {_ZONE} {_KEEP}"
+            "needs 'countries' (or 'everywhere_else'); CJ's and Amazon's goods are delivered there at "
+            "once, the seller's own goods once `set-method` prices them. A country can be in one "
+            f"zone only. {_ZONE} {_KEEP}"
         ),
         body=(
             body_field(
@@ -58,8 +62,8 @@ SPECS = (
                 type=float,
                 nullable=True,
                 help=(
-                    "Goods total, in the shop's currency, from which the zone's cheapest method is "
-                    "free. null withdraws the offer."
+                    "Goods total, in the shop's currency, from which a parcel's cheapest option is "
+                    "free — each parcel of an order counts its own goods. null withdraws the offer."
                 ),
                 example=75,
             ),
@@ -80,67 +84,58 @@ SPECS = (
         "PUT",
         "/agent/sellercart/delivery/zones/{zone}/methods/{method}",
         summary=(
-            "Add a delivery method to a zone — \"Standard\", \"Express\" — or change one; up to 5 "
-            "per zone. Fixed: the buyer pays 'price', raised to the real delivery cost when that is "
-            "higher, so the seller never pays for delivery. Calculated: the buyer pays the real cost "
-            "from the supplier (CJ, Amazon, Shippo, the warehouse's rates) plus the extras, and "
-            "'price' when no cost can be had. Ask the owner for prices — never invent them. "
-            f"{_ZONE} {_METHOD} {_KEEP}"
+            "Add a delivery method for the goods the seller sends themselves — \"Standard\", "
+            "\"Express\" — or change one; up to 5 per zone. The buyer pays 'price', or the "
+            "'weight_bands' step their parcel's weight falls in (goods and box, or the box by volume "
+            "when that weighs more), with no margin on top. A parcel leaving from a country in "
+            "'origins' goes by that line instead. CJ's and Amazon's goods never go by these. Ask the "
+            f"owner for prices — never invent them. {_ZONE} {_METHOD} {_KEEP}"
         ),
         body=(
             body_field(
                 "price",
                 type=float,
                 help=(
-                    "In the shop's currency. Fixed: its price (0 = free), required for a new one. "
-                    "Calculated: what the buyer pays when no cost can be worked out — left out on "
-                    "a new one, there is none, and such an order is not offered this method."
+                    "In the shop's currency, 0 = free; required for a new method. With "
+                    "'weight_bands', what a parcel of unknown weight costs."
                 ),
-                example=9.99,
+                example=6.95,
             ),
             body_field(
-                "calculated",
-                type=bool,
-                help="true: priced from the real delivery cost plus the extras. Default false.",
-            ),
-            body_field(
-                "pick",
-                choices=("cheapest", "fastest"),
+                "weight_bands",
+                type=list,
                 help=(
-                    "Which of the supplier's services this method stands for — and the one bought "
-                    "when the order is placed. Default cheapest; Express is fastest."
+                    "Prices by parcel weight, ascending: objects with 'up_to_grams' and 'price'; "
+                    "the last has no 'up_to_grams' (\"and heavier\"). Replaces the whole list; [] "
+                    "drops it."
                 ),
-            ),
-            body_field(
-                "extra_percent",
-                type=float,
-                help="Calculated only: a share of the real cost added on top, e.g. 10.",
-            ),
-            body_field(
-                "extra_amount",
-                type=float,
-                help="Calculated only: a flat amount added once per order, in the shop's currency.",
+                example=[
+                    {"up_to_grams": 500, "price": 4},
+                    {"up_to_grams": 2000, "price": 7},
+                    {"price": 12},
+                ],
             ),
             body_field(
                 "days_min",
                 type=int,
                 nullable=True,
                 help=(
-                    "The seller's promised term in business days, with days_max. Leave both out to "
-                    "show the supplier's own estimate; null for both drops a promise."
+                    "The seller's promised term in business days, with days_max — both or neither; "
+                    "null for both drops it."
                 ),
-                example=2,
+                example=3,
             ),
-            body_field("days_max", type=int, nullable=True, help="See days_min.", example=4),
+            body_field("days_max", type=int, nullable=True, help="See days_min.", example=5),
             body_field(
-                "service",
-                nullable=True,
+                "origins",
+                type=list,
                 help=(
-                    "A supplier's own service this method stands for, by name — Amazon's "
-                    "Standard, Expedited or Priority. A parcel offering it goes by it; others by "
-                    "'pick'. null drops it."
+                    "Lines for parcels leaving from one country: objects with 'country' (two "
+                    "letters), 'price', and optionally 'weight_bands', 'days_min', 'days_max'. "
+                    "Every other parcel goes by the method's own line. Replaces the whole list; [] "
+                    "drops them."
                 ),
-                example="Expedited",
+                example=[{"country": "CN", "price": 3, "days_min": 10, "days_max": 20}],
             ),
             body_field("name", help="Rename the method.", example="Express"),
         ),
@@ -158,7 +153,7 @@ SPECS = (
 
 app = build_group(
     NAME,
-    "Where the shop delivers: zones of countries, and the methods priced in each.",
+    "Where the shop delivers: zones of countries, and the seller's own methods priced in each.",
     SPECS,
 )
 
