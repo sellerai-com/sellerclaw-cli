@@ -40,6 +40,8 @@ FONTS = (
 _HEADER_STYLES = ("classic", "centered", "compact", "split", "bold")
 _CARD_STYLES = ("classic", "portrait", "dense", "framed", "deal")
 _PRODUCT_PAGE_STYLES = ("classic", "stacked", "specs", "editorial", "focus")
+#: How much of a product page the photos take — `auto` is the layout's own size.
+_PRODUCT_PHOTO_SIZES = ("auto", "small", "medium", "large")
 
 SPECS = (
     Cmd(
@@ -582,6 +584,17 @@ SPECS = (
                 "product_page",
                 help="One part of the layout: how a product's own page is arranged.",
                 choices=_PRODUCT_PAGE_STYLES,
+            ),
+            body_field(
+                "product_photo_size",
+                help=(
+                    "How much of a product page the photos take on a computer: small, medium or "
+                    "large (two fifths, a half or three fifths of the row beside the buy box), or "
+                    "auto — the size the layout draws them at. Phones always show them full width; "
+                    "neither a look nor a layout changes it. The way to resize product photos — "
+                    "not custom_css."
+                ),
+                choices=_PRODUCT_PHOTO_SIZES,
             ),
             body_field("note", help=_NOTE_HELP, example="Led with free delivery, as you asked"),
         ),

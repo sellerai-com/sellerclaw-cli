@@ -48,7 +48,8 @@ sellerclaw_write(group="sellercart", command="theme", body={"accent": "#0f7b6c"}
 ```
 
 `apply-preset` overwrites every style token (the logo and favicon survive); `theme` patches
-individual ones. Images live in `sellercart-media` — `add` copies one in by URL and returns a
+individual ones. How much of a product page the photos take is `theme`'s `product_photo_size`
+(`small`, `medium`, `large`, or `auto` for the layout's own) — the way to make them smaller or bigger. Images live in `sellercart-media` — `add` copies one in by URL and returns a
 permanent link, which is what a block or a theme field should point at, never someone else's server.
 
 ## Pages, blocks and navigation
@@ -151,7 +152,8 @@ An order is split into parcels by who sends them, and the buyer picks an option 
 - **The seller's own goods** go at their Shippo account's live rates when the shop agreed to it
   (`shippo_rates: true`) and the product has a weight and a box — otherwise at the zone's methods.
   `list` shows the `shippo` state and a `breakdown` of the shelf, with the products Shippo can't
-  price for want of a weight (`no_weight`) or a box (`no_box`).
+  price for want of a weight (`no_weight`), a box (`no_box`), or a sender address in the country
+  their warehouse is in (`abroad` — Shippo never prices goods kept abroad from an address at home).
 
 A zone is a group of countries; a country is in one zone only, and `everywhere_else: true` makes a
 zone for every country no other zone names. A method prices only the seller's own goods: `price`
