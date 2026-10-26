@@ -654,6 +654,14 @@ _BASE_SPECS = (
                 "internal_order_id",
                 help="SellerClaw order this fulfills (UUID); makes the call idempotent.",
             ),
+            body_field(
+                "shipment_id",
+                help=(
+                    "The parcel of internal_order_id this purchase is for, when the order leaves in "
+                    "several ('shipments' on 'orders get'). Optional when only one of them is this "
+                    "supplier's and not yet bought. Items must be that parcel's lines."
+                ),
+            ),
         ),
     ),
     Cmd(

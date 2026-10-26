@@ -38,6 +38,7 @@ SPECS = (
                     "purchasing",
                     "purchased",
                     "awaiting_payment",
+                    "partially_shipped",
                     "shipped",
                     "fulfilled",
                     "cancelled",
@@ -82,7 +83,10 @@ SPECS = (
         "/agent/orders/{order_id}",
         summary=(
             "Get one order by its id, its whole order number (#1001, the # optional) or the "
-            "marketplace's order id. A number two stores share answers 409 naming both."
+            "marketplace's order id. A number two stores share answers 409 naming both. "
+            "'shipments' lists the parcels it leaves in: one for most orders; several when its "
+            "goods leave from different suppliers or places — then buy, label and ship each "
+            "parcel by its id."
         ),
     ),
     Cmd(
@@ -108,6 +112,7 @@ SPECS = (
                     "purchasing",
                     "purchased",
                     "awaiting_payment",
+                    "partially_shipped",
                     "shipped",
                     "fulfilled",
                     "cancelled",
@@ -125,7 +130,9 @@ SPECS = (
         "/agent/orders/{order_id}",
         summary=(
             "Update order status, supplier info or tracking, or fill in buyer details the store did "
-            "not send (some marketplaces share only the town and postcode). Only what you send changes."
+            "not send (some marketplaces share only the town and postcode). Only what you send changes. "
+            "Status, supplier and tracking belong to a parcel: pass shipment_id for an order that "
+            "leaves in several (the answer lists them when it is missing)."
         ),
         body=(
             body_field(
@@ -163,6 +170,38 @@ SPECS = (
             ),
             body_field("customer_name", help="The buyer's name."),
             body_field("customer_email", help="The buyer's email address."),
+            body_field(
+                "shipment_id",
+                help=(
+                    "The parcel (from the order's 'shipments') the status, supplier and tracking "
+                    "fields are about. Needed only for an order that leaves in several."
+                ),
+            ),
+        ),
+    ),
+    Cmd(
+        "move-lines",
+        "POST",
+        "/agent/orders/{order_id}/shipments/move",
+        summary=(
+            "Regroup an order's parcels: move lines into another parcel, or into a new parcel of "
+            "their own — e.g. goods from two places packed in one box, or one parcel sent in two. "
+            "Only between parcels nothing has happened to yet (new, nothing bought, no tracking, no "
+            "label). A parcel left empty goes away; the first parcel cannot be emptied."
+        ),
+        body=(
+            body_field(
+                "line_indexes",
+                type=int,
+                repeatable=True,
+                required=True,
+                help="Indexes into the order's line_items (each parcel lists its own as line_indexes).",
+                example=[1],
+            ),
+            body_field(
+                "into_shipment_id",
+                help="The parcel they go into; left out, they leave in a new parcel of their own.",
+            ),
         ),
     ),
     Cmd(
@@ -185,6 +224,13 @@ SPECS = (
             ),
             body_field("tracking_carrier", help="Carrier name, e.g. 'UPS'.", example="UPS"),
             body_field("tracking_url", help="Public tracking URL, if the channel gives one."),
+            body_field(
+                "shipment_id",
+                help=(
+                    "The one parcel of a split order the channel shipped. Left out, the channel is "
+                    "taken to have shipped the whole order and every open parcel is closed."
+                ),
+            ),
         ),
     ),
 )

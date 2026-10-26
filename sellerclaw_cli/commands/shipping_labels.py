@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typer
 
-from sellerclaw_cli._command_group import Cmd, body_field, build_group
+from sellerclaw_cli._command_group import Cmd, body_field, build_group, flag
 
 NAME = "shipping-labels"
 
@@ -38,6 +38,15 @@ _ADDRESS_FIELDS = (
     body_field("email", help="Sender's email."),
 )
 
+#: The parcel of a split order a label is for (the order's 'shipments'); its only one otherwise.
+_SHIPMENT_FLAG = flag(
+    "shipment_id",
+    help=(
+        "The parcel the label ships, for an order that leaves in several ('shipments' on "
+        "'orders get'). Leave it out for an order that ships as one."
+    ),
+)
+
 SPECS = (
     Cmd(
         "quote",
@@ -58,6 +67,7 @@ SPECS = (
         ),
         read_only=True,
         timeout=60,
+        flags=(_SHIPMENT_FLAG,),
         body=(
             body_field(
                 "sender_address_id",
@@ -141,6 +151,7 @@ SPECS = (
             "(shipping_label). A second ask for an order that already has one waiting is refused."
         ),
         timeout=60,
+        flags=(_SHIPMENT_FLAG,),
         body=(
             body_field(
                 "rate_id",

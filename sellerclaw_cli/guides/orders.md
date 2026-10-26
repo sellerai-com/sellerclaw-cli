@@ -74,6 +74,41 @@ status — is `shipping_label` in `orders get`. The rates come from the carriers
 the shop's checkout: `shipping-labels get-sender` → `couriers` (each `enabled` or not); change it
 only on the owner's word with `update-sender` and `enabled_couriers`.
 
+## Orders that leave in several parcels
+
+An order whose goods leave from different suppliers or places — CJ, an offline supplier's warehouse,
+the seller's own shelf — is split: `orders get` → `shipments` lists the parcels (`id`, `position`,
+`status`, `provider`, `line_indexes`, tracking, `shipping_label`, `shipping_label_offer`). The order's
+own status is then their summary (`partially_shipped` while some have left). Work each parcel by its
+`id`:
+
+```text
+# The CJ parcel: buy only its lines, naming the parcel.
+sellerclaw_write(group="suppliers", command="create-order", positionals={"provider": "cj"},
+  body={"internal_order_id": ORDER_ID, "shipment_id": SHIPMENT_ID, "items": [...], "shipping_address": {...}})
+# The seller's own parcel: its label.
+sellerclaw_read(group="shipping-labels", command="quote", positionals={"order_id": ORDER_ID},
+  flags={"shipment_id": SHIPMENT_ID})
+sellerclaw_write(group="shipping-labels", command="buy", positionals={"order_id": ORDER_ID},
+  flags={"shipment_id": SHIPMENT_ID}, body={"rate_id": RATE_ID})
+# A supplier's tracking for one parcel; a channel shipment of one parcel.
+sellerclaw_write(group="orders", command="update", positionals={"order_id": ORDER_ID},
+  body={"shipment_id": SHIPMENT_ID, "status": "shipped", "tracking_number": "YT123", "tracking_carrier": "YunExpress"})
+sellerclaw_write(group="orders", command="set-shipped", positionals={"order_id": ORDER_ID},
+  body={"shipment_id": SHIPMENT_ID, "tracking_number": "1Z999AA10123456784"})
+# Regroup parcels on the owner's word, while nothing has happened to them yet.
+sellerclaw_write(group="orders", command="move-lines", positionals={"order_id": ORDER_ID},
+  body={"line_indexes": [1], "into_shipment_id": SHIPMENT_ID})
+```
+
+A status, supplier or tracking write to a split order without `shipment_id` answers 409
+`shipment_required` listing the parcels — pick one, never guess. The exception is `set-shipped`:
+without `shipment_id` it records that the channel shipped the *whole* order and closes every open
+parcel, a supplier's parcel nobody bought included. A channel's own fulfillment for one parcel names
+only that parcel's lines: the `remote_line_item_id` of each of its `line_indexes`, under the field the
+channel's body asks for (`lineItemId` on eBay, `orderItemId` on Amazon). Etsy keeps
+tracking for the whole order: each parcel adds its number, and Etsy writes to the buyer each time.
+
 ## eBay & Amazon
 
 ```text
