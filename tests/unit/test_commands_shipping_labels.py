@@ -128,3 +128,98 @@ def test_the_sender_is_read_and_saved(
     assert put.exit_code == 0, put.stderr
     assert read.call_count == 1
     assert json.loads(saved.calls.last.request.content) == {"name": "Nest Supply Co.", "email": "a@b.co"}
+
+
+ADDRESS_ID = "5d5d5d5d-0000-4000-8000-000000000002"
+
+
+@respx.mock
+def test_quote_ships_from_the_sender_address_named(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.post(f"{fake_api_url}/agent/orders/{ORDER_PATH}/shipping-label/quote").mock(
+        return_value=httpx.Response(200, json={"rates": []})
+    )
+
+    result = runner.invoke(
+        app, ["shipping-labels", "quote", ORDER, "-b", json.dumps({"sender_address_id": ADDRESS_ID})]
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {"sender_address_id": ADDRESS_ID}
+
+
+@respx.mock
+def test_sender_addresses_are_listed_added_finished_made_default_and_removed(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    base = f"{fake_api_url}/agent/shipping/sender-addresses"
+    listed = respx.get(base).mock(
+        return_value=httpx.Response(200, json={"addresses": [{"id": ADDRESS_ID, "missing": ["phone"]}], "ready": False})
+    )
+    added = respx.post(base).mock(return_value=httpx.Response(201, json={"id": "new"}))
+    finished = respx.patch(f"{base}/{ADDRESS_ID}").mock(return_value=httpx.Response(200, json={"missing": []}))
+    made_default = respx.post(f"{base}/{ADDRESS_ID}/default").mock(
+        return_value=httpx.Response(200, json={"is_default": True})
+    )
+    removed = respx.delete(f"{base}/{ADDRESS_ID}").mock(return_value=httpx.Response(204))
+    warehouse = {"warehouse_id": "7e7e7e7e-0000-4000-8000-000000000003", "phone": "+1 718 555 0100"}
+
+    results = [
+        runner.invoke(app, ["shipping-labels", "list-addresses"]),
+        runner.invoke(app, ["shipping-labels", "add-address", "-b", json.dumps({**warehouse, "make_default": True})]),
+        runner.invoke(app, ["shipping-labels", "update-address", ADDRESS_ID, "-b", json.dumps({"phone": "555"})]),
+        runner.invoke(app, ["shipping-labels", "set-default-address", ADDRESS_ID]),
+        runner.invoke(app, ["shipping-labels", "remove-address", ADDRESS_ID]),
+    ]
+
+    assert [result.exit_code for result in results] == [0] * 5, [result.stderr for result in results]
+    assert json.loads(results[0].stdout)["data"]["ready"] is False
+    assert json.loads(added.calls.last.request.content) == {**warehouse, "make_default": True}
+    assert json.loads(finished.calls.last.request.content) == {"phone": "555"}
+    assert (listed.call_count, made_default.call_count, removed.call_count) == (1, 1, 1)
+
+
+def test_an_address_field_the_api_does_not_take_is_refused_before_sending(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+) -> None:
+    result = runner.invoke(
+        app, ["shipping-labels", "update-address", ADDRESS_ID, "-b", json.dumps({"postcode": "11201"})]
+    )
+
+    assert result.exit_code != 0
+    assert "postcode" in (result.stderr or result.stdout)
+
+
+@respx.mock
+def test_the_carriers_the_owner_named_are_saved_without_the_profile(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    saved = respx.put(f"{fake_api_url}/agent/shipping/sender").mock(
+        return_value=httpx.Response(200, json={"couriers": [{"id": "ups-1", "name": "UPS", "enabled": True}]})
+    )
+
+    result = runner.invoke(
+        app, ["shipping-labels", "update-sender", "-b", json.dumps({"enabled_couriers": ["ups-1"]})]
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(saved.calls.last.request.content) == {"enabled_couriers": ["ups-1"]}
+
+
+@respx.mock
+def test_the_label_format_is_saved_without_a_name(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    saved = respx.put(f"{fake_api_url}/agent/shipping/sender").mock(
+        return_value=httpx.Response(200, json={"label_file_type": "ZPLII"})
+    )
+
+    result = runner.invoke(app, ["shipping-labels", "update-sender", "-b", json.dumps({"label_file_type": "ZPLII"})])
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(saved.calls.last.request.content) == {"label_file_type": "ZPLII"}

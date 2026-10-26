@@ -59,7 +59,7 @@ when they connected Shippo: `orders get` → `shipping_label_offer.available` sa
 be bought, and `reason` why not. CJ and Amazon FBA orders are shipped by the supplier — no label.
 
 ```text
-# The rates, with the label drafted from the order — warehouse, address, weight and box.
+# The rates, with the label drafted from the order — sender address, order address, weight, box.
 sellerclaw_read(group="shipping-labels", command="quote", positionals={"order_id": ORDER_ID})
 # Change only what is wrong, in millimetres and grams:
 sellerclaw_read(group="shipping-labels", command="quote", positionals={"order_id": ORDER_ID},
@@ -70,10 +70,14 @@ sellerclaw_write(group="shipping-labels", command="buy", positionals={"order_id"
 ```
 
 Prefer the rate with `buyer_chose: true` (what the buyer paid for), else the cheapest that arrives in
-time. A 422 from `quote` lists `details.missing` — ask the owner for exactly that (a missing sender
-name goes into `shipping-labels update-sender`). Once bought, the order is marked shipped and the
-store gets the tracking: do **not** run `set-shipped` or a channel's fulfillment for it. The label —
-file link, tracking, delivery status — is `shipping_label` in `orders get`.
+time. A 422 from `quote` lists `details.missing` — ask the owner for exactly that. A 409
+`shippo_sender_address_required` means no sender address is complete: `shipping-labels
+list-addresses` shows what each one misses — ask the owner, then save it with `update-address` (or
+`add-address`). Once bought, the order is marked shipped and the store gets the tracking: do **not**
+run `set-shipped` or a channel's fulfillment for it. The label — file link, tracking, delivery
+status — is `shipping_label` in `orders get`. The rates come from the carriers SellerClaw uses — the same set that prices
+the shop's checkout: `shipping-labels get-sender` → `couriers` (each `enabled` or not); change it
+only on the owner's word with `update-sender` and `enabled_couriers`.
 
 ## eBay & Amazon
 
