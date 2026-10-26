@@ -52,9 +52,9 @@ SPECS = (
         "/agent/products/catalog-file/preview",
         summary=(
             "What this file would do, doing none of it: which products it would create, which it "
-            "would change and how, which rows could not be read (with row numbers), which groups "
-            "were refused and why, and which catalog products it never mentioned. Show this "
-            "before applying."
+            "would change and how, which it matched with nothing to change (plan.unchanged), "
+            "which rows could not be read (with row numbers), which groups were refused and why, "
+            "and which catalog products it never mentioned. Show this before applying."
         ),
         body=(
             body_field("file_id", required=True, help="Uploaded file to read."),
