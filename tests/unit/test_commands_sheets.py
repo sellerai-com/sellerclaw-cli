@@ -137,6 +137,35 @@ def test_write_sends_the_body_as_written(
     assert json.loads(route.calls.last.request.content) == body
 
 
+@respx.mock
+def test_write_inserts_rows_above_a_given_row(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """mode=insert carries the row the new rows go above; nothing else about the body changes."""
+    route = respx.post(f"{fake_api_url}{BASE}/values").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "spreadsheet_id": "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789",
+                "title": "test people",
+                "tab": "Sheet1",
+                "mode": "insert",
+                "rows_written": 1,
+                "headers_written": False,
+                "created_tab": False,
+                "url": SHEET_LINK,
+            },
+        )
+    )
+    body = {"link": SHEET_LINK, "mode": "insert", "before_row": 24, "rows": [["Kamil Bagaviev", "", ""]]}
+
+    result = runner.invoke(app, ["sheets", "write", "-b", json.dumps(body)])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(route.calls.last.request.content) == body
+
+
 def test_write_refuses_an_unknown_mode_before_calling_the_api() -> None:
     """``replace`` wipes a tab, so a typo'd mode must fail locally, not be guessed at server-side."""
     body = {"link": SHEET_LINK, "mode": "overwrite", "rows": [["A1"]]}

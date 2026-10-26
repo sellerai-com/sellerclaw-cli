@@ -56,16 +56,20 @@ SPECS = (
         summary=(
             "Write rows into a tab. mode=replace wipes the whole tab first and mirrors exactly "
             "what is sent; mode=append adds after the last filled row and skips the header when "
-            "the tab already has one. A write with no headers and no rows is refused rather than "
-            "silently wiping the tab."
+            "the tab already has one; mode=insert pushes the rows in above before_row, moving that "
+            "row and everything below it down and overwriting nothing. A write with no headers and "
+            "no rows is refused rather than silently wiping the tab."
         ),
         body=(
             body_field("link", required=True, help=_LINK_HELP),
             body_field("tab", help="Tab title. Defaults to the tab in the link, else the first one."),
             body_field(
                 "mode",
-                choices=("replace", "append"),
-                help="replace = wipe the tab and write; append = add after the last filled row. Default replace.",
+                choices=("replace", "append", "insert"),
+                help=(
+                    "replace = wipe the tab and write; append = add after the last filled row; "
+                    "insert = push the rows in above before_row. Default replace."
+                ),
             ),
             body_field(
                 "headers",
@@ -84,6 +88,15 @@ SPECS = (
                 "create_tab",
                 type=bool,
                 help="Create the tab named in 'tab' when the spreadsheet has no such tab.",
+            ),
+            body_field(
+                "before_row",
+                type=int,
+                help=(
+                    "mode=insert only: the sheet row the new rows go above. Row 1 is the header, so "
+                    "the data row read at offset N is sheet row N + 2."
+                ),
+                example=5,
             ),
         ),
     ),
