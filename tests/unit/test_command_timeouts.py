@@ -56,6 +56,7 @@ _SLOW_WRITES = (
     pytest.param("tiktok-shop-listings", "publish", id="tiktok-publish"),
     pytest.param("files", "upload", id="files-upload"),
     pytest.param("files", "from-url", id="files-from-url"),
+    pytest.param("sellercart-media", "add", id="sellercart-media-add"),
 )
 #: Slow for the same reason, but nothing is saved: drafting a preview runs the same model calls and
 #: hands the drafts back instead of storing them.
