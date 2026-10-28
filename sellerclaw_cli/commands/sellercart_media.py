@@ -35,6 +35,20 @@ SPECS = (
         timeout=LONG_TIMEOUT_SECONDS,
     ),
     Cmd(
+        "upload",
+        "POST",
+        "/agent/sellercart/media",
+        summary=(
+            "Upload an image — or a video for a page, up to 20 MB — from a local file into the "
+            "storefront, and get back its permanent link, as `add` does for a URL. Pass the local "
+            "path as the positional argument. Needs a path this machine can read; a remote "
+            "connector has none and uses `add` with a link instead."
+        ),
+        # The file itself travels in the request, as multipart — never as a JSON body.
+        upload_file=True,
+        timeout=LONG_TIMEOUT_SECONDS,
+    ),
+    Cmd(
         "delete",
         "DELETE",
         "/agent/sellercart/media/{media_id}",

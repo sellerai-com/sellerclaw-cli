@@ -90,6 +90,27 @@ def test_upload_image_can_rename_the_stored_file(
     assert request.url.params["filename"] == "square-1080.png"
 
 
+@respx.mock
+def test_a_storefront_picture_goes_up_from_a_local_file(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+    image: Path,
+) -> None:
+    """The shop's library takes a file as well as a link: a link back to our own storage is the one
+    the server may not be able to fetch."""
+    route = respx.post(f"{fake_api_url}/agent/sellercart/media").mock(
+        return_value=httpx.Response(201, json={"url": "https://media.example/earbuds.png"})
+    )
+
+    result = runner.invoke(app, ["sellercart-media", "upload", str(image)])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["data"]["url"] == "https://media.example/earbuds.png"
+    request = route.calls[0].request
+    assert request.headers["content-type"].startswith("multipart/form-data")
+    assert _PNG in request.content
+
+
 def test_upload_image_no_longer_takes_a_json_body(image: Path) -> None:
     """The old spelling has to fail as a usage error, not as a crash on the image's first byte."""
     result = runner.invoke(app, ["facebook-ads", "upload-image", "-b", f"@{image}"])

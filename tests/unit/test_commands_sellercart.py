@@ -758,20 +758,54 @@ def test_apply_layout_without_a_layout_is_refused_before_the_call(
 
 
 @respx.mock
-def test_theme_mixes_one_part_of_a_layout(
+@pytest.mark.parametrize(
+    "part",
+    [
+        pytest.param({"product_card": "portrait"}, id="a-part-a-layout-is-built-on"),
+        pytest.param({"product_page": "longform"}, id="a-part-only-mixed-in"),
+    ],
+)
+def test_theme_mixes_in_any_part_the_shop_can_draw(
     env_pointing_at_fake_api: None,  # noqa: ARG001
     fake_api_url: str,
+    part: dict[str, str],
 ) -> None:
     route = respx.patch(f"{fake_api_url}/agent/sellercart/theme").mock(
-        return_value=httpx.Response(200, json={"theme": {"product_card": "portrait"}})
+        return_value=httpx.Response(200, json={"theme": part})
     )
 
-    result = runner.invoke(
-        app, ["sellercart", "theme", "-b", json.dumps({"product_card": "portrait"})]
-    )
+    result = runner.invoke(app, ["sellercart", "theme", "-b", json.dumps(part)])
 
     assert result.exit_code == 0, result.stderr
-    assert json.loads(route.calls.last.request.content) == {"product_card": "portrait"}
+    assert json.loads(route.calls.last.request.content) == part
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    "change",
+    [
+        pytest.param({"analytics": {"consent_banner": True}}, id="cookie-banner"),
+        pytest.param(
+            {"analytics": {"ga4_measurement_id": "G-ABC1234567", "meta_pixel_id": ""}},
+            id="tags-set-and-removed",
+        ),
+        pytest.param({"analytics_secrets": {"ga4_api_secret": ""}}, id="secret-revoked"),
+    ],
+)
+def test_update_sends_the_measurement_tags_as_given(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+    change: dict[str, Any],
+) -> None:
+    """The agent's own instructions set tags this way; the strict body check must not refuse it."""
+    route = respx.patch(f"{fake_api_url}/agent/sellercart").mock(
+        return_value=httpx.Response(200, json={"slug": "acme"})
+    )
+
+    result = runner.invoke(app, ["sellercart", "update", "-b", json.dumps(change)])
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == change
 
 
 @respx.mock

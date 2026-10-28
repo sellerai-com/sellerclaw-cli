@@ -39,7 +39,7 @@ FONTS = (
 #: arranged. Mirrors the API's own lists, so a wrong one is refused locally. Keep in step with it.
 _HEADER_STYLES = ("classic", "centered", "compact", "split", "bold")
 _CARD_STYLES = ("classic", "portrait", "dense", "framed", "deal")
-_PRODUCT_PAGE_STYLES = ("classic", "stacked", "specs", "editorial", "focus")
+_PRODUCT_PAGE_STYLES = ("classic", "stacked", "specs", "editorial", "focus", "longform")
 #: How much of a product page the photos take — `auto` is the layout's own size.
 _PRODUCT_PHOTO_SIZES = ("auto", "small", "medium", "large")
 
@@ -342,6 +342,31 @@ SPECS = (
                 example=1,
             ),
             body_field(
+                "analytics",
+                type=dict,
+                help=(
+                    "The shop's measurement tags, changed key by key: ga4_measurement_id "
+                    "(G-XXXXXXXXXX), google_ads_conversion_id (AW-123456789) with "
+                    "google_ads_purchase_label, google_tag_manager_id (GTM-XXXXXXX), meta_pixel_id "
+                    "(digits), google_site_verification (the content value of Search Console's meta "
+                    "tag) and consent_banner (true asks buyers before anything measures them — what "
+                    "a shop selling into the EU needs). A key left out stays; an empty string "
+                    "removes one. Applies at once. A wrong shape comes back as invalid_analytics."
+                ),
+                example={"ga4_measurement_id": "G-ABC1234567", "consent_banner": True},
+            ),
+            body_field(
+                "analytics_secrets",
+                type=dict,
+                help=(
+                    "Keys that report the shop's sales from our server too: meta_capi_access_token "
+                    "(minted against the pixel above) and ga4_api_secret (Measurement Protocol, "
+                    "against the GA4 id above) — set the identifier first. Write-only, never read "
+                    "back; an empty string revokes one."
+                ),
+                example={"ga4_api_secret": "…"},
+            ),
+            body_field(
                 "shippo_rates",
                 type=bool,
                 help=(
@@ -582,7 +607,12 @@ SPECS = (
             ),
             body_field(
                 "product_page",
-                help="One part of the layout: how a product's own page is arranged.",
+                help=(
+                    "One part of the layout: how a product's own page is arranged. `longform` is "
+                    "on no ready-made layout — the classic page with the description and the "
+                    "specifications moved under the photos, for products with a lot to say; only "
+                    "on the owner's request."
+                ),
                 choices=_PRODUCT_PAGE_STYLES,
             ),
             body_field(
