@@ -354,6 +354,20 @@ def test_client_name_of(ctx: Any, expected: str | None) -> None:
             id="api-code-wins-over-the-cli-class",
         ),
         pytest.param(
+            {
+                "isError": True,
+                "content": [
+                    {
+                        "type": "text",
+                        "text": 'Error executing tool sellerclaw_read: {"error":{"code":"api_error","message":"x",'
+                        '"status":429,"details":{"error_code":"supplier_rate_limited","detail":"cj: slow down"}}}',
+                    }
+                ],
+            },
+            ("supplier_rate_limited", 429),
+            id="a-domain-refusal-code-at-the-top-of-the-body-wins-too",
+        ),
+        pytest.param(
             {"content": [{"type": "text", "text": '{"error":{"code":"server_error","status":503,"message":"m"}}'}]},
             ("server_error", 503),
             id="no-api-code-falls-back-to-the-cli-class",

@@ -189,6 +189,10 @@ def failure_of(result: Any) -> Failure:
     details = error.get("details")
     detail = details.get("detail") if isinstance(details, Mapping) else None
     api_code = detail.get("code") if isinstance(detail, Mapping) else None
+    if api_code is None and isinstance(details, Mapping):
+        # An expected domain refusal carries its code at the top of the body (``{"error_code",
+        # "detail": "<sentence>"}``) rather than inside ``detail``.
+        api_code = details.get("error_code")
     code = _shaped_name(api_code) or _shaped_name(error.get("code"))
     status = error.get("status")
     valid_status = status if isinstance(status, int) and not isinstance(status, bool) and 100 <= status <= 599 else None
