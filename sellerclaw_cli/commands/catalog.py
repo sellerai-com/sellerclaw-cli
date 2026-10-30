@@ -113,9 +113,13 @@ SPECS = (
                 required=True,
                 help=(
                     "Array of products to create. Each item: name*, description*, category*, "
-                    "variations* (array of {supplier_variant_id, sku, name, available_quantity, "
-                    "shipping_cost, purchase_price?, images?, attributes?, barcode?, "
-                    "weight_grams?, box_id?}), and optional images, brand, country_of_origin "
+                    "variations* (array of {sku?, barcode?, supplier_variant_id?, name?, "
+                    "available_quantity?, shipping_cost?, purchase_price?, images?, attributes?, "
+                    "weight_grams?, box_id?}; each option needs a sku, a barcode or a "
+                    "supplier_variant_id; the seller's own goods need just a sku or a barcode: the "
+                    "option is keyed by its sku (else barcode) and named by its attributes or the product's "
+                    "name, and stock and shipping_cost default to 0), and optional images, brand, "
+                    "country_of_origin "
                     "(two-letter code), weight_grams, box_id and attributes — the product's own "
                     'characteristics, e.g. {"Material": "100% Cotton", "Care": "Machine wash '
                     'cold"}; marketplace item '
