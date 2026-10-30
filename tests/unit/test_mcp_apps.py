@@ -2381,8 +2381,7 @@ def test_the_plan_is_told_with_the_figures_it_has_and_nothing_it_does_not(
 
 
 _NOT_SOLD_HERE = (
-    "The plan and credits are managed on the SellerClaw website, not sold in this app; the card "
-    "links there. Don't quote prices or suggest a plan."
+    "The plan and credits are managed in SellerClaw, not in this app. Don't quote prices or suggest a plan."
 )
 
 
@@ -2398,17 +2397,26 @@ def _inside_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
             _billing(
                 "active",
                 _period(*_PRO, "7640.5"),
+                categories=(("Images", "1200"),),
                 preferences={"exhaustion_strategy": "auto_top_up", "auto_top_up_max_per_period": 3},
                 pack={"credits": "5000", "price_usd": "50"},
             ),
-            "On the Pro plan. 12,360 credits left of 20,000 (7,640 used); they reset 2026-06-15. When "
-            "credits run out, 5,000 more are bought, up to 3 times a period.",
-            id="working-plan-without-its-price-or-the-packs",
+            "12,360 credits left of 20,000 (7,640 used); they reset 2026-06-15. Spent this period: Images 1,200.",
+            id="credits-without-the-plan-its-price-or-the-top-up",
+        ),
+        pytest.param(
+            _billing(
+                "active",
+                _period(*_PRO, "20000"),
+                scheduled_change={"tier_id": "starter", "tier_name": "Starter", "effective_at": "2026-06-15"},
+            ),
+            "0 credits left of 20,000 (20,000 used); they reset 2026-06-15. Credits are used up.",
+            id="used-up-without-the-plan-it-switches-to",
         ),
         pytest.param(
             _billing("no_plan", _period("free", "Free", "0", "0", "0"), intro_offer={"price_usd": "1"}),
-            "No plan yet, so no credits.",
-            id="no-first-month-offer",
+            "No credits on this account.",
+            id="no-plan-without-the-first-month-offer",
         ),
         pytest.param(
             _billing(
@@ -2420,19 +2428,23 @@ def _inside_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                     "plan": {"name": "Your Own AI", "price_usd": "10"},
                 },
             ),
-            "The free trial for AI assistants is over, so SellerClaw is paused here until the owner "
-            "subscribes to a SellerClaw plan.",
-            id="trial-over-without-the-plans-price",
+            "The free trial for AI assistants is over, so SellerClaw is paused here. No credits on this account.",
+            id="trial-over-without-a-plan-to-subscribe-to",
+        ),
+        pytest.param(
+            _billing("frozen", _period(*_PRO, "100")),
+            "SellerClaw is paused for this account because the last payment failed. 19,900 credits left of "
+            "20,000 (100 used); they reset 2026-06-15.",
+            id="paused-without-a-payment-page",
         ),
     ],
 )
-def test_inside_chatgpt_the_plan_is_told_without_prices_or_offers(
-    payload: dict[str, Any], expected: str
-) -> None:
+def test_inside_chatgpt_only_the_credits_are_told(payload: dict[str, Any], expected: str) -> None:
     summary = mcp_apps._summarize_billing(_inside_chatgpt(payload))
 
     assert summary == f"{expected} {_NOT_SOLD_HERE} {mcp_apps._SHOWN_TO_THE_OWNER}"
-    assert "$" not in summary
+    for sold in ("$", "Pro", "plan moves", "bought", "subscribe", "Starter", "link"):
+        assert sold not in summary
 
 
 @pytest.mark.parametrize(

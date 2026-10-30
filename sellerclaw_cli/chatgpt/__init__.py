@@ -19,6 +19,7 @@ from typing import Any
 from sellerclaw_cli import mcp_apps
 from sellerclaw_cli.chatgpt import ads, catalog, insights, listings, media, orders, research, stores, suppliers
 from sellerclaw_cli.chatgpt._action import Action, register
+from sellerclaw_cli.chatgpt._cards import shape_payload
 
 #: Where ChatGPT reaches this surface, on the same host as ``/mcp``.
 CHATGPT_MCP_PATH = "/chatgpt/mcp"
@@ -35,12 +36,13 @@ ACTIONS: tuple[Action, ...] = (
     *insights.ACTIONS,
 )
 
-#: How a card's summary ends here. ChatGPT always draws the card and shows its model the full data
-#: behind it, which the model then tends to lay out again as tables of its own under the card.
+#: How a card's summary ends here. ChatGPT always draws the card and shows its model the data behind
+#: it — exactly what the card draws (``_cards``) — which the model then tends to lay out again as
+#: tables of its own under the card.
 _CARD_SHOWN = (
     "The owner is looking at this card and can act on it there, so do not repeat its rows or "
     "figures as tables, lists or cards of your own. Answer in a few sentences: the short answer to "
-    "what they asked, what stands out and what to do next. The full data is in the structured "
+    "what they asked, what stands out and what to do next. What the card shows is in the structured "
     "result, for your own reasoning."
 )
 
@@ -54,7 +56,7 @@ INSTRUCTIONS = (
     "to do next. The cards: what needs them today (`sellerclaw_attention`), how a store is doing "
     "(`sellerclaw_store_summary`), orders (`sellerclaw_orders`), listings (`sellerclaw_listings`), a "
     "product with its supplier and stores (`sellerclaw_products`), ads (`sellerclaw_ads`), "
-    "connections (`sellerclaw_connections`), plan and credits (`sellerclaw_billing`), a request "
+    "connections (`sellerclaw_connections`), credits left (`sellerclaw_billing`), a request "
     "waiting on them (`sellerclaw_approval`), generated media (`sellerclaw_media`) and the media "
     "studio (`sellerclaw_media_studio`). Use them for those questions, passing the owner's own words "
     "— an order number, a title, a SKU, a store's name — without looking up an id first. Gather what "
@@ -111,8 +113,20 @@ _CARD_DESCRIPTION_EDITS: dict[str, tuple[str, str, str]] = {
 }
 
 
+#: The billing card here tells the credits alone: OpenAI's rules forbid a plugin to show plans,
+#: prices or a way to buy.
+_CREDITS_DESC = """\
+The owner's SellerClaw credits as an interactive card: how many are left, when they reset, and what
+this period's credits went on.
+
+Use it for "how many credits do I have" or "what is using my credits", and to check the balance
+before starting something that spends many credits, such as a video. The plan and credits are
+managed in SellerClaw, not in this app: do not quote prices or suggest a plan.\
+"""
+
+
 def _card_descriptions() -> dict[str, str]:
-    descriptions: dict[str, str] = {}
+    descriptions: dict[str, str] = {"sellerclaw_billing": _CREDITS_DESC}
     for tool, (constant, old, new) in _CARD_DESCRIPTION_EDITS.items():
         text = getattr(mcp_apps, constant)
         if old not in text:
@@ -130,6 +144,7 @@ def card_wording() -> mcp_apps.CardWording:
         read_media_job="list_media_jobs",
         descriptions=_card_descriptions(),
         shown_to_the_owner=_CARD_SHOWN,
+        shape_payload=shape_payload,
     )
 
 

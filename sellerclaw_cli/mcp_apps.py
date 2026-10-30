@@ -306,6 +306,9 @@ class CardWording:
     descriptions: Mapping[str, str] = field(default_factory=dict)
     #: The sentence every summary ends with: what the owner already sees and what is left to say.
     shown_to_the_owner: str = _SHOWN_TO_THE_OWNER
+    #: Card tool name and its full payload -> the payload this server hands over, where it hands over
+    #: less than everything. The summary is still worked out from the full payload.
+    shape_payload: Callable[[str, dict[str, Any]], dict[str, Any]] | None = None
 
 
 #: The cards as the read/write runners' server words them.
@@ -1003,15 +1006,71 @@ _WHEN_OUT = {
 }
 
 
+def _spent(billing: dict[str, Any]) -> list[str]:
+    """This period's biggest credit spends, as "Images 1,200"."""
+    return [
+        f"{item.get('label')} {_credits(item.get('credits'))}"
+        for item in (billing.get("usage") or {}).get("categories") or []
+        if _credits(item.get("credits")) not in (None, "0")
+    ][:3]
+
+
+def _summarize_credits(billing: dict[str, Any]) -> str:
+    """The billing summary where our plans may not be sold (ChatGPT): the credits and nothing else.
+
+    OpenAI's rules forbid a plugin to show plans, prices or upgrades — so no plan name, no price, no
+    automatic top-up and no "subscribe": what the account has, never what it could buy.
+    """
+    balance = billing.get("balance") or {}
+    period = balance.get("active_period")
+    trial = balance.get("assistant_trial") or {}
+    lines: list[str] = []
+    if trial.get("status") == "active":
+        ends = _day(trial.get("ends_at"))
+        lines.append("SellerClaw is on its free trial for AI assistants" + (f" until {ends}" if ends else "") + ".")
+    elif trial.get("status") == "ended":
+        lines.append("The free trial for AI assistants is over, so SellerClaw is paused here.")
+    if balance.get("subscription_state") == "frozen":
+        lines.append("SellerClaw is paused for this account because the last payment failed.")
+
+    left, limit, used = (
+        _credits(period.get(key)) if isinstance(period, dict) else None
+        for key in ("balance", "credit_limit", "credits_used")
+    )
+    if isinstance(period, dict) and left is not None and (_decimal(period.get("credit_limit")) or 0) > 0:
+        credit_line = f"{left} credits left of {limit}" + (f" ({used} used)" if used is not None else "")
+        if _day(period.get("period_end")):
+            credit_line += f"; they reset {_day(period.get('period_end'))}"
+        lines.append(credit_line + ".")
+        if period.get("is_exhausted"):
+            lines.append("Credits are used up.")
+    else:
+        lines.append("No credits on this account.")
+
+    spent = _spent(billing)
+    if spent:
+        lines.append(f"Spent this period: {', '.join(spent)}.")
+    lines.append(_NOT_SOLD_HERE)
+    lines.append(_SHOWN_TO_THE_OWNER)
+    return " ".join(lines)
+
+
+#: The last word of a billing summary inside ChatGPT.
+_NOT_SOLD_HERE = (
+    "The plan and credits are managed in SellerClaw, not in this app. Don't quote prices or suggest a plan."
+)
+
+
 def _summarize_billing(payload: dict[str, Any]) -> str:
     billing = payload.get("billing") or {}
+    # Inside ChatGPT the server says ``in_app_offers: false``: OpenAI's rules forbid naming plans,
+    # prices or a way to buy there.
+    if billing.get("in_app_offers") is False:
+        return _summarize_credits(billing)
     balance = billing.get("balance") or {}
     stage = balance.get("subscription_state")
     period = balance.get("active_period")
-    # Inside ChatGPT the server says ``in_app_offers: false``: OpenAI's rules forbid naming plans,
-    # prices or a way to buy there, so the summary carries no price and the model is told why.
-    offers = billing.get("in_app_offers") is not False
-    offer = (balance.get("intro_offer") or {}) if offers else {}
+    offer = balance.get("intro_offer") or {}
     lines: list[str] = []
 
     # A free period with no allowance is an account without a plan, not an empty plan: the web
@@ -1025,9 +1084,7 @@ def _summarize_billing(payload: dict[str, Any]) -> str:
     ):
         trial = balance.get("assistant_trial") or {}
         plan_offer = trial.get("plan") or {}
-        if not offers:
-            plan_line = "a SellerClaw plan"
-        elif plan_offer.get("name") and plan_offer.get("price_usd") is not None:
+        if plan_offer.get("name") and plan_offer.get("price_usd") is not None:
             plan_line = f"the {plan_offer.get('name')} plan (${plan_offer.get('price_usd')}/month)"
         else:
             plan_line = "a plan"
@@ -1072,7 +1129,7 @@ def _summarize_billing(payload: dict[str, Any]) -> str:
             plan = "a free trial"
         else:
             plan = f"the {_plan_name(period.get('tier_name'), period.get('tier_id'))} plan"
-            if offers and period.get("tier_price_usd") is not None:
+            if period.get("tier_price_usd") is not None:
                 plan += f" (${period['tier_price_usd']}/month)"
         state = {
             "frozen": "paused because the last payment failed; paying brings it back",
@@ -1104,22 +1161,18 @@ def _summarize_billing(payload: dict[str, Any]) -> str:
                 + (f" from {when}." if when else " next period.")
             )
 
-        spent = [
-            f"{item.get('label')} {_credits(item.get('credits'))}"
-            for item in (billing.get("usage") or {}).get("categories") or []
-            if _credits(item.get("credits")) not in (None, "0")
-        ]
+        spent = _spent(billing)
         if spent:
-            lines.append(f"Spent this period: {', '.join(spent[:3])}.")
+            lines.append(f"Spent this period: {', '.join(spent)}.")
 
         if stage == "active" and not _is_free_tier(period.get("tier_id")):
             preferences = billing.get("preferences") or {}
             strategy = preferences.get("exhaustion_strategy")
             pack = billing.get("auto_top_up_pack")
             if strategy == "auto_top_up" and pack:
-                price = f" for ${pack.get('price_usd')}" if offers else ""
                 lines.append(
-                    f"When credits run out, {_credits(pack.get('credits'))} more are bought{price}, "
+                    f"When credits run out, {_credits(pack.get('credits'))} more are bought for "
+                    f"${pack.get('price_usd')}, "
                     f"up to {preferences.get('auto_top_up_max_per_period')} times a period."
                 )
             elif strategy in _WHEN_OUT:
@@ -1129,9 +1182,6 @@ def _summarize_billing(payload: dict[str, Any]) -> str:
     lines.append(
         "Buying credits, changing the plan or settling a payment happens on the SellerClaw website; "
         "the card links there."
-        if offers
-        else "The plan and credits are managed on the SellerClaw website, not sold in this app; the "
-        "card links there. Don't quote prices or suggest a plan."
     )
     lines.append(_SHOWN_TO_THE_OWNER)
     return " ".join(lines)
@@ -1295,6 +1345,24 @@ def _answer_paused(tool: Callable[..., Any]) -> Callable[..., Any]:
             return tool(*args, **kwargs)
         except _PausedForPlan as paused:
             return _result({"paywall": paused.paywall}, paused.relay)
+
+    return _tool
+
+
+def _shaped(
+    tool: Callable[..., Any], name: str, shape: Callable[[str, dict[str, Any]], dict[str, Any]] | None
+) -> Callable[..., Any]:
+    """Hand over the payload as ``shape`` cuts it, where this server cuts it at all."""
+    if shape is None:
+        return tool
+    from mcp.types import CallToolResult
+
+    @functools.wraps(tool)
+    def _tool(*args: Any, **kwargs: Any) -> Any:
+        result = tool(*args, **kwargs)
+        if not isinstance(result, CallToolResult) or not isinstance(result.structured_content, dict):
+            return result
+        return result.model_copy(update={"structured_content": shape(name, result.structured_content)})
 
     return _tool
 
@@ -1576,7 +1644,11 @@ def build_extension(client_for_tool: ClientFactory, wording: CardWording = RUNNE
         options["description"] = wording.descriptions.get(options["name"], options["description"])
 
         def register(tool: Callable[..., Any]) -> Any:
-            answered = _ending_in(_answer_paused(tool), wording.shown_to_the_owner)
+            answered = _shaped(
+                _ending_in(_answer_paused(tool), wording.shown_to_the_owner),
+                options["name"],
+                wording.shape_payload,
+            )
             if options.get("visibility") == ["app"]:
                 return apps.card_only_tool(
                     **{key: value for key, value in options.items() if key not in {"resource_uri", "visibility"}}

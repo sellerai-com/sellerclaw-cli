@@ -308,12 +308,24 @@ def per_platform(kind: str, command: str, platforms: Sequence[str]) -> dict[str,
 
 
 def _tool_function(action: Action) -> Callable[..., Any]:
-    """A function the SDK can call and validate: keyword parameters exactly as the schema has them."""
+    """A function the SDK can call and validate: keyword parameters exactly as the schema has them.
+
+    Its answer and its refusals leave cut down to what the request needs (:mod:`._answers`).
+    """
+    from sellerclaw_cli._errors import CliError
+    from sellerclaw_cli.chatgpt._answers import refusal_details, refusal_message, shape_answer
+
     required = {p.name for p in action.params if p.required}
 
     def call(**kwargs: Any) -> Any:
         values = {k: v for k, v in kwargs.items() if v is not None or k in required}
-        return action.run(values)
+        try:
+            result = action.run(values)
+        except CliError as exc:
+            exc.message = refusal_message(exc.message, exc.details)
+            exc.details = refusal_details(exc.details)
+            raise
+        return shape_answer(action.name, result)
 
     parameters = [
         inspect.Parameter(

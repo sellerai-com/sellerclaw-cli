@@ -30,7 +30,7 @@ These tools draw an interactive card the owner reads and acts on:
 | A product, its supplier and stores | `sellerclaw_products` |
 | The ads | `sellerclaw_ads` |
 | The connections | `sellerclaw_connections` |
-| Plan and credits | `sellerclaw_billing` |
+| Credits left | `sellerclaw_billing` |
 | A request waiting on the owner | `sellerclaw_approval` |
 | Generated images and videos | `sellerclaw_media` |
 | Make an image or a video | `sellerclaw_media_studio` |

@@ -17,7 +17,7 @@ import sellerclaw_cli.cli  # noqa: F401 — registers every command group
 from sellerclaw_cli import chatgpt, mcp_apps, mcp_usage
 from sellerclaw_cli._command_group import positionals_of
 from sellerclaw_cli._errors import UserInputError
-from sellerclaw_cli.chatgpt import ACTIONS, _action, research
+from sellerclaw_cli.chatgpt import ACTIONS, _action, _answers, research
 from sellerclaw_cli.chatgpt._action import Action
 from sellerclaw_cli.mcp_server import (
     _client_for_tool,
@@ -186,24 +186,32 @@ def test_cards_name_this_surface_s_tools_instead_of_commands() -> None:
 @respx.mock
 @pytest.mark.usefixtures("env_pointing_at_fake_api")
 @pytest.mark.parametrize(
-    ("wording", "ending", "never"),
+    ("wording", "ending", "never", "handed_over"),
     [
         pytest.param(
             chatgpt.card_wording(),
             chatgpt._CARD_SHOWN,
             mcp_apps._SHOWN_TO_THE_OWNER,
+            {
+                "billing": {
+                    "in_app_offers": False,
+                    "balance": {"subscription_state": "no_plan"},
+                    "usage": {"categories": []},
+                }
+            },
             id="chatgpt-is-told-the-owner-sees-it-and-asked-for-a-takeaway",
         ),
         pytest.param(
             mcp_apps.RUNNER_WORDING,
             mcp_apps._SHOWN_TO_THE_OWNER,
             chatgpt._CARD_SHOWN,
+            {"billing": {"balance": {"subscription_state": "no_plan"}, "usage": {"categories": []}}},
             id="clients-that-may-draw-no-card-keep-the-conditional",
         ),
     ],
 )
 def test_a_card_s_summary_ends_with_what_this_surface_says_about_the_card(
-    fake_api_url: str, wording: mcp_apps.CardWording, ending: str, never: str
+    fake_api_url: str, wording: mcp_apps.CardWording, ending: str, never: str, handed_over: dict[str, Any]
 ) -> None:
     overview = {"balance": {"subscription_state": "no_plan"}, "usage": {"categories": []}}
     respx.get(f"{fake_api_url}/agent/billing/overview").mock(return_value=httpx.Response(200, json=overview))
@@ -214,7 +222,7 @@ def test_a_card_s_summary_ends_with_what_this_surface_says_about_the_card(
     text = result.content[0].text
     assert text.endswith(ending)
     assert never not in text
-    assert result.structured_content == {"billing": overview}
+    assert result.structured_content == handed_over
 
 
 def test_the_rule_about_cards_is_in_the_part_of_the_instructions_chatgpt_weighs_most() -> None:
@@ -581,6 +589,36 @@ def test_every_action_runs_and_its_read_only_hint_tells_the_truth(fake_api_url: 
         assert all(_reads(cmd) for cmd in made), [c.name for c in made]
     else:
         assert any(not _reads(cmd) for cmd in made), [c.name for c in made]
+
+
+def _keys(value: Any) -> set[str]:
+    if isinstance(value, dict):
+        return set(value) | {key for item in value.values() for key in _keys(item)}
+    if isinstance(value, list):
+        return {key for item in value for key in _keys(item)}
+    return set()
+
+
+def _poisoned() -> dict[str, Any]:
+    """An answer carrying every field ChatGPT must never get, at the top, in its rows and deeper."""
+    leak = dict.fromkeys(_answers._NEVER, "leak")
+    return {**leak, "ok": True, "items": [{**leak, "nested": dict(leak)}], "result": {"deep": [dict(leak)]}}
+
+
+@respx.mock
+@pytest.mark.parametrize("action", ACTIONS, ids=lambda a: a.name)
+@pytest.mark.usefixtures("env_pointing_at_fake_api")
+def test_no_action_hands_chatgpt_our_ids_raw_payloads_or_buyer_contacts(fake_api_url: str, action: Action) -> None:
+    """Whatever the API answers, the registered tool hands none of :data:`_answers._NEVER` over."""
+    platform = _PLATFORM_FOR.get(action.name, "ebay")
+    respx.get(f"{fake_api_url}/agent/sales-channels/{STORE_ID}").mock(
+        return_value=httpx.Response(200, json={"id": STORE_ID, "platform": platform})
+    )
+    respx.route(host="api.test.sellerclaw.ai").mock(return_value=httpx.Response(200, json=_poisoned()))
+
+    answer = _action._tool_function(action)(**_arguments(action))
+
+    assert not _keys(answer) & _answers._NEVER
 
 
 # --------------------------------------------------------------------------- over HTTP

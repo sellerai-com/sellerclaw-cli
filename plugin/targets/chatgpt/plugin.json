@@ -72,7 +72,7 @@
               "description": "Orders that still need to ship",
               "prompt": "Show my orders that still need to ship.",
               "tools_triggered": "sellerclaw_orders",
-              "expected_behavior": "Shows the order board (a card where it is drawn) for the connected stores narrowed to orders waiting to ship, oldest wait first, with order numbers, buyers and totals. Changes nothing."
+              "expected_behavior": "Shows the order board (a card where it is drawn) for the connected stores narrowed to orders waiting to ship, oldest wait first, with order numbers, buyer names with their city and country, and totals; no buyer email or phone. Changes nothing."
             },
             {
               "description": "How a store is doing",
