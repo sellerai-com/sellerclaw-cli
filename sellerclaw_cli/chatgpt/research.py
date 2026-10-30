@@ -14,7 +14,7 @@ _NETWORK = Param(
     choices=("instagram", "tiktok", "youtube", "x", "threads", "facebook", "linkedin"),
 )
 _HANDLE = Param("handle", "string", "The account's handle, without @.")
-_URL = Param("url", "string", "The profile's or page's URL (Facebook, LinkedIn, YouTube).")
+_URL = Param("url", "string", "The profile's or page's URL (Facebook, a LinkedIn company page, YouTube).")
 
 
 def _search_marketplace(values: dict[str, Any], params: tuple[Param, ...]) -> Any:
@@ -55,8 +55,11 @@ def _social_profile(values: dict[str, Any]) -> Any:
         body = _who(values, by_url=True)
         if network == "facebook":
             return execute("research-social", "facebook-profile", None, None, body)
-        command = "linkedin-company" if "/company/" in body["url"] else "linkedin-profile"
-        return execute("research-social", command, None, None, body)
+        # A LinkedIn profile that is not a company page is a private person's career; research here
+        # is about brands, so it is never read.
+        if "/company/" not in body["url"]:
+            raise UserInputError("LinkedIn here reads company pages only: pass a linkedin.com/company/ URL.")
+        return execute("research-social", "linkedin-company", None, None, body)
     commands = {
         "instagram": "instagram-profile",
         "tiktok": "tiktok-profile",
@@ -208,8 +211,8 @@ ACTIONS = (
     action(
         "get_social_profile",
         "Get a social profile",
-        "A public profile on Instagram, TikTok, YouTube, X, Threads, Facebook or LinkedIn: "
-        "followers, bio, links and activity. Uses credits.",
+        "A public profile on Instagram, TikTok, YouTube, X, Threads, Facebook or a LinkedIn company "
+        "page: followers, bio, links and activity. Uses credits.",
         (_NETWORK, _HANDLE, _URL),
         _social_profile,
         read_only=True,
