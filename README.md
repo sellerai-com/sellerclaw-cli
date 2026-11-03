@@ -749,7 +749,7 @@ The header is not decoration: the cloud reads a call that names no agent as the 
 
 ### Session identification
 
-Inside an OpenClaw run, SellerClaw's channel plugin sets `SELLERCLAW_SESSION_KEY` in the shell every `exec` command runs in. When it is present, the CLI sends it as `X-Session-Key` on every request. The server uses it to tie a team task to the conversation it was created in, and an executor's task to the run doing it — so a result, a question or a stall notice about a job reaches the chat where the job was asked for.
+Inside an OpenClaw run, SellerClaw's channel plugin sets `SELLERCLAW_SESSION_KEY` in the shell every `exec` command runs in. When it is present, the CLI sends it as `X-Session-Key` on every request. The server uses it to tie a team task to the conversation it was created in, and an executor's task to the run doing it — so a result, a question or a stall notice about a job reaches the chat where the job was asked for. For `scheduled-tasks draft` it is how the server finds the scheduled-task wizard chat whose draft card the call fills; outside that chat the call is refused.
 
 The value must look like an OpenClaw session key (`agent:<agent id>:…`, at most 256 characters); anything else is dropped silently. A CLI run from a terminal has no session and sends no header.
 

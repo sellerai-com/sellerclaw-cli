@@ -176,6 +176,22 @@ class BodyField:
     # trouble again.
     item_key: str | None = None
 
+    @property
+    def toggle(self) -> bool:
+        """A yes/no field with an option: spelled ``--x`` / ``--no-x``, never ``--x true``.
+
+        Unset sends nothing, so a partial update leaves the stored value alone; ``--no-x`` is how a
+        caller turns the thing off, which a lone ``--x`` switch could never say.
+        """
+        return self.option is not None and self.type is bool and not self.repeatable and not self.item_key
+
+    @property
+    def option_spelling(self) -> str | None:
+        """How the option reads on a command line — both halves for a toggle."""
+        if self.option is None or not self.toggle:
+            return self.option
+        return f"{self.option}/--no-{self.option.removeprefix('--')}"
+
 
 def body_field(
     name: str,
@@ -897,12 +913,18 @@ def _make_callback(group: str, cmd: Cmd):
         option = field.option
         if option is None:
             continue
-        field_annotation: Any = list[str] if (field.item_key or field.repeatable) else str | None
-        field_default = (
-            typer.Option([], option, help=_body_option_help(field))
-            if (field.item_key or field.repeatable)
-            else typer.Option(None, option, help=_body_option_help(field))
-        )
+        field_annotation: Any
+        if field.toggle:
+            field_annotation = bool | None
+            field_default = typer.Option(
+                None, field.option_spelling or option, help=_body_option_help(field)
+            )
+        elif field.item_key or field.repeatable:
+            field_annotation = list[str]
+            field_default = typer.Option([], option, help=_body_option_help(field))
+        else:
+            field_annotation = str | None
+            field_default = typer.Option(None, option, help=_body_option_help(field))
         parameters.append(
             inspect.Parameter(
                 field.name,

@@ -61,10 +61,10 @@ def _url(fake_api_url: str, group: str, command: str, **positionals: str) -> str
 
 # The only groups the MCP server hides, and the whole reason it hides them: they are the machinery
 # of *our* agent (sellerclaw-agent) — its supervisor/subagent task tree, the goals that drive it,
-# the roster it works with, the chats it holds with the owner, and the models it routes to. An MCP
-# client is the owner themselves, and on the MCP-only plan that agent is switched off entirely.
-# Everything else they run their business with is visible. All of these exist in the CLI registry;
-# none may reach `sellerclaw_groups`.
+# the roster it works with, the chats it holds with the owner, the models it routes to, and the
+# draft card of its scheduled-task wizard chat. An MCP client is the owner themselves, and on the
+# MCP-only plan that agent is switched off entirely. Everything else they run their business with
+# is visible. All of these exist in the CLI registry; none may reach `sellerclaw_groups`.
 _HIDDEN_FROM_MCP = {
     "chats",
     "goals",
@@ -72,6 +72,7 @@ _HIDDEN_FROM_MCP = {
     "team-tasks",
     "subagent-tasks",
     "models",
+    "scheduled-tasks",
 }
 
 

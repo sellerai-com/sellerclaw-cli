@@ -77,6 +77,7 @@ from sellerclaw_cli.commands import (
     research_social,
     research_trends,
     reviews,
+    scheduled_tasks,
     sellercart,
     sellercart_blog,
     sellercart_delivery,
@@ -255,6 +256,7 @@ _GROUPS = (
     subagent_tasks,
     team,
     team_tasks,
+    scheduled_tasks,
     action_requests,
     support_requests,
     email,
@@ -417,7 +419,12 @@ def _emit_usage_error(exc: click.exceptions.UsageError) -> int:
         bad = (exc.option_name or "").lstrip("-")
         if spec is not None and bad in positionals_of(spec.path):
             parts.append(f"`{bad}` is a positional argument — pass it without `--`, in path order.")
-        if spec is not None and spec.body:
+        if spec is not None and spec.body_options:
+            # The body is reachable as options here, so "not --options" would be false — and it
+            # sends the caller off to hand-write JSON for a call it nearly had right.
+            options = ", ".join(f.option_spelling or "" for f in spec.body_options)
+            parts.append(f"Accepted options: {options} (or the whole JSON body via -b).")
+        elif spec is not None and spec.body:
             fields = ", ".join(f.name for f in spec.body)
             parts.append(f"This command takes a JSON body via -b, not --options (fields: {fields}).")
         elif spec is not None and (spec.body_freeform or spec.has_body):

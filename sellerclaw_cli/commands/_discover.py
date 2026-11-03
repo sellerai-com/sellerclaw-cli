@@ -91,7 +91,7 @@ def _body_repr(cmd: Cmd) -> list[dict[str, object]]:
         # can pass this value on the command line instead of building JSON inside shell quotes —
         # which is where an apostrophe in the value ends the call before the CLI sees it.
         if f.option:
-            item["option"] = f.option
+            item["option"] = f.option_spelling
             if f.item_key:
                 item["option_item_key"] = f.item_key
         repr_.append(item)
@@ -143,10 +143,16 @@ def _body_option_example(cmd: Cmd) -> str:
     needed = [f for f in cmd.body if f.required]
     if any(f.option is None for f in needed):
         return ""
-    shown = needed or list(options)
+    # Nothing required: the options that carry an example, when some do. Where the fields are all
+    # optional but not all combinable — one schedule form per call — passing every option at once
+    # is a call the server refuses, and the example is what gets copied.
+    shown = needed or [f for f in options if f.example is not None] or list(options)
     parts: list[str] = []
     for f in shown:
         if f.option is None:
+            continue
+        if f.toggle:
+            parts.append(f.option)
             continue
         value = f.choices[0] if f.choices else f"<{f.item_key or f.name}>"
         parts.append(f"{f.option} '{value}'")

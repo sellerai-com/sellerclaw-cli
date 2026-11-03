@@ -82,6 +82,16 @@ def _option_body_app() -> typer.Typer:
                 ),
             ),
         ),
+        Cmd(
+            "settings",
+            "PATCH",
+            "/agent/things/{thing_id}/settings",
+            summary="Partial update with a yes/no switch.",
+            body=(
+                body_field("label", option="--label", help="Display label."),
+                body_field("alerts", type=bool, option="--alerts", help="Send alerts."),
+            ),
+        ),
     )
     group = build_group("things", "Synthetic body-option group.", specs)
     root = typer.Typer()
@@ -606,3 +616,28 @@ def test_body_options_never_leak_into_the_query_string(
     result = runner.invoke(_option_body_app(), ["things", "check", "t1", "--item-id", "3"])
     assert result.exit_code == 0, result.stderr
     assert dict(route.calls.last.request.url.params) == {}
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    ("argv", "body"),
+    [
+        pytest.param(["--alerts"], {"alerts": True}, id="switched-on"),
+        pytest.param(["--no-alerts"], {"alerts": False}, id="switched-off"),
+        pytest.param(["--label", "Main"], {"label": "Main"}, id="left-alone"),
+    ],
+)
+def test_a_yes_no_field_is_a_switch_with_both_halves(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+    argv: list[str],
+    body: dict[str, object],
+) -> None:
+    """`--x` / `--no-x`, never `--x true`: a partial update has to be able to turn a thing off, and
+    to leave it alone — which is why the switch sends nothing when it is not given."""
+    route = respx.patch(f"{fake_api_url}/agent/things/t1/settings").mock(
+        return_value=httpx.Response(200, json={"ok": True})
+    )
+    result = runner.invoke(_option_body_app(), ["things", "settings", "t1", *argv])
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == body

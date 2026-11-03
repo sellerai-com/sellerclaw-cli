@@ -127,7 +127,8 @@ SERVER_INSTRUCTIONS = (
     "0. `sellerclaw_guide(topic)` — read `start` once first, for the rules every job shares; then "
     "the guide for the job, with ready-to-run calls: listings, orders, the catalog, suppliers, the "
     "seller's own SellerCart storefront, mail and DMs, ads and campaigns, market research, how the "
-    "business is doing, or images and videos. Call it with no topic for the list. Prefer running a "
+    "business is doing, or images, videos and voice (voiceovers, a video dubbed into another language). "
+    "Call it with no topic for the list. Prefer running a "
     "guide's example over re-deriving the call.\n"
     "For anything the guides do not cover, discover it:\n"
     "1. `sellerclaw_groups` — list command groups and their commands.\n"
@@ -224,7 +225,8 @@ _GUIDE_TOOL_DESC = (
     "products, dropship orders), `storefront` (the owner's own SellerCart shop), `email` (mailbox, "
     "sending, social DMs), `ads` (Google, Meta, eBay Promoted, Klaviyo campaigns), `research` "
     "(keywords, trends, competitors, social), `analytics` (how the business is doing), `media` "
-    "(generate and edit images and videos, pick the model and its settings). Each guide is short "
+    "(generate and edit images and videos, voice texts, dub videos; pick the model and its settings). "
+    "Each guide is short "
     "and carries "
     "ready-to-run examples — read the relevant one before a multi-step job instead "
     "of deriving the calls from schemas. Omit `topic` to list them."
@@ -259,7 +261,9 @@ _GUIDE_TOOL_DESC = (
 # All five describe an agent the MCP owner is not using — and for the ones who do run it alongside,
 # steering it belongs in the app where they can read the conversation, not in a second assistant.
 # `support-requests` (passing a problem or wish to the SellerClaw team) is hidden for now by the
-# owner's decision: for the time being only our own agent files those.
+# owner's decision: for the time being only our own agent files those. `scheduled-tasks` fills the
+# draft card in our agent's scheduled-task wizard chat, which only that agent works in; managing
+# scheduled tasks from a connector is not offered for now (owner's decision).
 MCP_VISIBLE_GROUPS: frozenset[str] = frozenset(
     {
         # Stores, integrations, account

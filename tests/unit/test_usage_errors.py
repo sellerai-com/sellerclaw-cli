@@ -50,6 +50,20 @@ def test_unknown_option_lists_the_accepted_ones(
     assert "--product-id" in msg
 
 
+def test_unknown_option_on_a_command_driven_by_options_names_them(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Its body is built from options, so "takes a JSON body via -b, not --options" would be false
+    and would send the caller off to hand-write JSON for a call it nearly had right."""
+    code, _out, err = _run(monkeypatch, capsys, ["scheduled-tasks", "draft", "--weekly", "mon"])
+    assert code == 1
+    msg = _err(err)
+    assert "not --options" not in msg
+    assert "Accepted options:" in msg
+    assert "--weekly-on" in msg
+    assert "--email-report/--no-email-report" in msg
+
+
 @respx.mock
 @pytest.mark.parametrize(
     "spelling",
