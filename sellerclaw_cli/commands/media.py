@@ -24,6 +24,17 @@ _CHAT_ID_HELP = (
     "Chat to post the result into. Only for the SellerClaw agent answering in a chat; other "
     "callers leave it out and read the result by job id."
 )
+_VOICE_MODEL_HELP = "Speech model id (task `speech` in `media models`). Omit for the owner's default."
+_VOICE_HELP = (
+    "Voice id from the speech model's `voices` (each has a sample_url to listen to). A voice belongs to "
+    "one model, so naming it alone picks that model."
+)
+_STYLE_HELP = "How to say it, in a few words ('warm and unhurried'); only models whose params list style."
+_LANGUAGE_HELP = "ISO 639-1 code of the words (e.g. de); refused if the voice does not speak it."
+_DUB_NOTE = (
+    "Never dub without the owner's explicit yes to the whole draft: every phrase (time, original, "
+    "translation), each speaker's voice and the soundtrack preview, at the price shown."
+)
 _DELIVERY_NOTE = (
     "The response's `note` says where the result goes: into the SellerClaw chat, or left for you "
     "to read with `job-status <job_id> --wait-seconds 25`. Do not send the request again — that "
@@ -36,9 +47,17 @@ SPECS = (
         "GET",
         "/agent/media/models",
         summary=(
-            "Models the owner can use for each task (image, image_edit, video, video_from_image): "
-            "id, price in credits, which one is the default, and the settings each one takes. "
-            "Read it before passing model or params."
+            "Models the owner can use for each task (image, image_edit, video, video_from_image, speech, "
+            "lipsync): id, price in credits, which one is the default, and the settings each one takes. "
+            "Speech models list their voices with a sample to listen to and the languages they speak. "
+            "Read it before passing model or params; --task gives one task (the full list is long)."
+        ),
+        flags=(
+            flag(
+                "task",
+                choices=("image", "image_edit", "video", "video_from_image", "speech", "lipsync"),
+                help="Only this task's models, e.g. speech for the voices.",
+            ),
         ),
     ),
     Cmd(
@@ -142,6 +161,109 @@ SPECS = (
         ),
     ),
     Cmd(
+        "generate-speech",
+        "POST",
+        "/agent/media/speech",
+        summary=(
+            "Voice a text (up to 2000 characters) and return the MP3's URL and job id in this call; it is "
+            'kept in the Library. Body: {"text": "...", "voice"?, "model"?, "style"?, "language"?}.'
+        ),
+        body=(
+            body_field("text", required=True, help="The words to voice, exactly as they should be said."),
+            body_field("voice", help=_VOICE_HELP),
+            body_field("model", help=_VOICE_MODEL_HELP),
+            body_field("style", help=_STYLE_HELP),
+            body_field("language", help=_LANGUAGE_HELP),
+        ),
+        timeout=_IMAGE_TIMEOUT_SECONDS,
+    ),
+    Cmd(
+        "voice-over",
+        "POST",
+        "/agent/media/voice-over-jobs",
+        summary=(
+            "Lay a voice over a video (up to a minute, 100 MB) in the background: the clip's own sound dips "
+            "under it, and a voice longer than the clip holds its last frame. Pass the words (text) or a voice "
+            'made with generate-speech (audio_url). Body: {"video_url": "...", "text"? | "audio_url"?, "voice"?, '
+            '"model"?, "style"?, "language"?, "chat_id"?}. ' + _DELIVERY_NOTE
+        ),
+        body=(
+            body_field("video_url", required=True, help="The video: a Library file or a direct link to MP4/MOV/WEBM."),
+            body_field("text", help="The words to voice over it. Either this or audio_url."),
+            body_field("audio_url", help="A voice made earlier with generate-speech (its audio_url), instead of text."),
+            body_field("voice", help=_VOICE_HELP),
+            body_field("model", help=_VOICE_MODEL_HELP),
+            body_field("style", help=_STYLE_HELP),
+            body_field("language", help=_LANGUAGE_HELP),
+            body_field("chat_id", help=_CHAT_ID_HELP),
+        ),
+    ),
+    Cmd(
+        "prepare-dub",
+        "POST",
+        "/agent/media/dub-drafts",
+        summary=(
+            "Start dubbing a seller's video (up to a minute, 100 MB) into another language: the speech is "
+            "transcribed with who says what, translated phrase by phrase to fit where each was said, voiced in "
+            "catalog voices with the background kept, and a soundtrack preview made. Returns a job id; the "
+            "finished job's `draft` is what the owner checks. "
+            'Body: {"video_url": "...", "target_language": "de", "source_language"?, "model"?, "voices"?, '
+            '"chat_id"?}. ' + _DUB_NOTE + " " + _DELIVERY_NOTE
+        ),
+        body=(
+            body_field("video_url", required=True, help="The video: a Library file or a direct link to MP4/MOV/WEBM."),
+            body_field("target_language", required=True, help="ISO 639-1 code to dub into, e.g. de, es, ja."),
+            body_field("source_language", help="ISO 639-1 code of the speech; omit to detect it."),
+            body_field("model", help=_VOICE_MODEL_HELP),
+            body_field(
+                "voices",
+                type=dict,
+                help='Voices chosen up front by speaker letter, e.g. {"A": "Vincent"}. Usually omitted: voices are suggested.',
+            ),
+            body_field("chat_id", help=_CHAT_ID_HELP),
+        ),
+    ),
+    Cmd(
+        "revise-dub",
+        "POST",
+        "/agent/media/dub-drafts/{draft_id}/revisions",
+        summary=(
+            "Make a new draft from a dubbing draft with the owner's changes: new wording for phrases (their "
+            "words are voiced as written, never shortened) and new voices for speakers. Only what changed is "
+            'voiced again. Body: {"phrases"?: [{"index": 0, "text": "..."}], "voices"?: {"A": "Maya"}, '
+            '"chat_id"?} — a phrase\'s index is its number in the draft minus one. ' + _DUB_NOTE
+        ),
+        body=(
+            body_field(
+                "phrases",
+                type=dict,
+                repeatable=True,
+                help="Phrases to reword: array of {index*, text*}; index = the phrase's number in the draft minus one.",
+            ),
+            body_field("voices", type=dict, help='New voices by speaker letter, e.g. {"A": "Maya"}.'),
+            body_field("chat_id", help=_CHAT_ID_HELP),
+        ),
+    ),
+    Cmd(
+        "dub-video",
+        "POST",
+        "/agent/media/dub-jobs",
+        summary=(
+            "Dub the video from a draft the owner said yes to: the speaker's lips moved to the new voice, the "
+            "soundtrack laid over, and subtitles (.srt) — result_url and subtitles_url on the job. Takes several "
+            'minutes and costs the lip-sync price the draft shows. Body: {"draft_id": "...", "model"?, '
+            '"chat_id"?}. ' + _DUB_NOTE + " " + _DELIVERY_NOTE
+        ),
+        body=(
+            body_field("draft_id", required=True, help="The finished draft's job id."),
+            body_field(
+                "model",
+                help="Lip-sync model (task `lipsync` in `media models`); omit for the owner's default. Pro suits close-ups.",
+            ),
+            body_field("chat_id", help=_CHAT_ID_HELP),
+        ),
+    ),
+    Cmd(
         "job-status",
         "GET",
         "/agent/media/jobs/{job_id}",
@@ -176,7 +298,11 @@ SPECS = (
     ),
 )
 
-app = build_group(NAME, "Generate and edit images and videos, pick the model and its settings.", SPECS)
+app = build_group(
+    NAME,
+    "Generate and edit images and videos, voice texts and dub videos; pick the model and its settings.",
+    SPECS,
+)
 
 
 def register(parent: typer.Typer) -> None:

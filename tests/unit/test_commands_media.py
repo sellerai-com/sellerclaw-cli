@@ -190,6 +190,26 @@ def test_models_reads_the_owners_models_per_task(env: str) -> None:
     assert "recraft-v3" in result.stdout
 
 
+@pytest.mark.parametrize(
+    ("args", "exit_ok", "task_param"),
+    [
+        pytest.param(["--task", "speech"], True, "speech", id="the-voices-alone"),
+        pytest.param([], True, None, id="every-task"),
+        pytest.param(["--task", "music"], False, None, id="no-such-task"),
+    ],
+)
+@respx.mock
+def test_models_narrows_to_one_task(env: str, args: list[str], exit_ok: bool, task_param: str | None) -> None:
+    route = respx.get(f"{env}/agent/media/models").mock(return_value=httpx.Response(200, json={"tasks": []}))
+
+    result = runner.invoke(app, ["media", "models", *args])
+
+    assert (result.exit_code == 0) is exit_ok, result.stderr
+    assert route.called is exit_ok
+    if exit_ok:
+        assert route.calls.last.request.url.params.get("task") == task_param
+
+
 @respx.mock
 def test_job_status_asks_the_server_to_hold_until_the_job_finishes(env: str) -> None:
     route = respx.get(f"{env}/agent/media/jobs/{JOB_ID}").mock(
@@ -227,9 +247,86 @@ def test_jobs_reads_the_named_jobs_in_the_order_given(env: str) -> None:
         # call that is still working — and still billed.
         pytest.param("generate-image", 120.0, id="image"),
         pytest.param("edit-image", 120.0, id="edit"),
+        # A text voiced in pieces of 1000 characters, joined, inside the request.
+        pytest.param("generate-speech", 120.0, id="speech"),
         # Held up to 25 s by the server, plus the answer itself.
         pytest.param("job-status", 40.0, id="job-status"),
     ],
 )
 def test_commands_that_wait_inside_the_request_have_room_to(command: str, budget: float) -> None:
     assert _media_command(command).effective_timeout == budget
+
+
+DRAFT_ID = "5d0e3a8b-0c3f-4e8e-9d2a-6c1b2f7e9a10"
+
+
+@pytest.mark.parametrize(
+    ("command", "path", "body", "positionals"),
+    [
+        pytest.param(
+            "generate-speech",
+            "/agent/media/speech",
+            {"text": "Hallo zusammen.", "voice": "Kore", "style": "warmly", "language": "de"},
+            [],
+            id="speech",
+        ),
+        pytest.param(
+            "voice-over",
+            "/agent/media/voice-over-jobs",
+            {"video_url": "https://x/v.mp4", "text": "Our mug keeps it hot.", "voice": "James", "chat_id": CHAT_ID},
+            [],
+            id="voice-over",
+        ),
+        pytest.param(
+            "prepare-dub",
+            "/agent/media/dub-drafts",
+            {"video_url": "https://x/v.mp4", "target_language": "de", "voices": {"A": "Vincent"}},
+            [],
+            id="prepare-dub",
+        ),
+        pytest.param(
+            "revise-dub",
+            f"/agent/media/dub-drafts/{DRAFT_ID}/revisions",
+            {"phrases": [{"index": 1, "text": "Und ich bin Anna."}], "voices": {"A": "Maya"}},
+            [DRAFT_ID],
+            id="revise-dub",
+        ),
+        pytest.param(
+            "dub-video",
+            "/agent/media/dub-jobs",
+            {"draft_id": DRAFT_ID, "model": "sync-lipsync-2-pro"},
+            [],
+            id="dub-video",
+        ),
+    ],
+)
+@respx.mock
+def test_voice_and_dubbing_requests_reach_the_api_untouched(
+    env: str, command: str, path: str, body: dict[str, object], positionals: list[str]
+) -> None:
+    route = respx.post(f"{env}{path}").mock(return_value=_queued_response())
+
+    result = runner.invoke(app, ["media", command, *positionals, "-b", json.dumps(body)])
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == body
+
+
+@pytest.mark.parametrize(
+    ("command", "body"),
+    [
+        pytest.param("prepare-dub", {"video_url": "https://x/v.mp4"}, id="dub-without-a-language"),
+        pytest.param("dub-video", {"model": "sync-lipsync-2"}, id="dub-without-a-draft"),
+        pytest.param("generate-speech", {"voice": "Maya"}, id="speech-without-words"),
+    ],
+)
+@respx.mock
+def test_voice_and_dubbing_requests_missing_what_they_need_are_refused_locally(
+    env: str, command: str, body: dict[str, object]
+) -> None:
+    route = respx.post(url__startswith=env).mock(return_value=_queued_response())
+
+    result = runner.invoke(app, ["media", command, "-b", json.dumps(body)])
+
+    assert result.exit_code != 0
+    assert not route.called

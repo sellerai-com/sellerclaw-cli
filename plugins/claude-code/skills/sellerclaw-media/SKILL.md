@@ -1,11 +1,12 @@
 ---
 name: sellerclaw-media
-description: "Use when the user wants an image or a video made or changed through SellerClaw — a product photo, a new background, a banner or ad creative, a short clip from text or from a photo — or wants to pick the model and its settings, see what was generated, or browse their images and videos."
+description: "Use when the user wants an image or a video made or changed through SellerClaw — a product photo, a new background, a banner or ad creative, a short clip from text or from a photo — a voiceover of a text or over a video, or their own video dubbed into another language with the lips matched; or wants to pick the model, voice and settings, see what was generated, or browse their images and videos."
 ---
 
-# SellerClaw — images and video
+# SellerClaw — images, video and voice
 
-Product photos, banners, ad creatives and short clips, made with the `media` command group. Everything
+Product photos, banners, ad creatives, short clips, voiceovers and a seller's own video dubbed into
+another language, made with the `media` command group. Everything
 below is `sellerclaw_read`, `sellerclaw_write` or a card tool; run the examples directly.
 
 ## Pick the path
@@ -114,12 +115,76 @@ sellerclaw_write(group="media", command="generate-image",
 - The default model for a task is the owner's setting: they change it on the studio card or in
   SellerClaw's settings.
 
+## Voice a text, or lay a voice over a video
+
+```text
+sellerclaw_write(group="media", command="generate-speech",
+  body={"text": "Our ceramic mug keeps your coffee hot for hours.", "voice": "Maya"})
+sellerclaw_write(group="media", command="voice-over",
+  body={"video_url": VIDEO_URL, "text": "Our ceramic mug keeps your coffee hot for hours."})
+```
+
+- `generate-speech` (up to 2000 characters) answers in the same call with `audio_url`, kept in the
+  owner's files. Give the owner the link.
+- `voice-over` lays a voice over a video of up to a minute: the clip's own sound dips under it, and a
+  voice longer than the clip holds its last frame. Pass `text`, or `audio_url` for a voice already made.
+  It answers with a job id; read the job for `result_url`.
+- Voices belong to a speech model: `models`, task `speech`, lists each voice with its manner and a
+  `sample_url` to listen to — offer a few when the owner has not chosen. ElevenLabs is the default;
+  Gemini takes a `style` in words ("warm and unhurried").
+- The video must be the file itself: a Library file or a direct link to an MP4, MOV or WEBM — a page
+  on YouTube or TikTok is not a file.
+
+## Dub a seller's video into another language
+
+Two steps, and the owner says yes in between — nothing is dubbed before they do.
+
+```text
+sellerclaw_write(group="media", command="prepare-dub",
+  body={"video_url": VIDEO_URL, "target_language": "de"})
+sellerclaw_read(group="media", command="job-status",
+  positionals={"job_id": DRAFT_ID}, flags={"wait_seconds": 25})
+```
+
+- `prepare-dub` transcribes the video's speech with who says what, translates it phrase by phrase so
+  each fits where it was said, voices it in catalog voices matched to each speaker, keeps the
+  background, and makes a soundtrack preview. A minute or two; read the job until it finishes.
+- Show the owner the job's whole `draft`: every phrase with its time, the original and the
+  translation; each speaker's voice with its `sample_url`; the `preview_url` to listen to; the
+  `warnings`; and the `lipsync_estimates` (the price of each lip-sync model for this video).
+- On changes, make a new draft — only what changed is voiced again, and the owner's own words are
+  voiced as written, never shortened:
+
+```text
+sellerclaw_write(group="media", command="revise-dub", positionals={"draft_id": DRAFT_ID},
+  body={"phrases": [{"index": 1, "text": "Und ich bin Anna."}], "voices": {"A": "Vincent"}})
+```
+
+- A phrase's `index` is its number in the draft minus one; speakers are letters (A, B…).
+- On the owner's explicit yes to the draft and its price, dub it — several minutes, then `result_url`
+  (the video) and `subtitles_url` (.srt) are on the job:
+
+```text
+sellerclaw_write(group="media", command="dub-video", body={"draft_id": DRAFT_ID})
+sellerclaw_read(group="media", command="job-status",
+  positionals={"job_id": DUB_ID}, flags={"wait_seconds": 25})
+```
+
+- `model` in `dub-video` picks the lip-sync: the default is the standard one, `sync-lipsync-2-pro`
+  keeps teeth and faces finer on close-ups and costs more.
+- The lips follow best when one face is in the frame at a time; with two faces on screen the wrong one
+  may move. Say so when the video shows several people at once.
+- A draft's files are kept for a week after its last change; an older draft must be prepared again.
+- No card shows voice or dubbing yet: give the owner links and text, and do not open `sellerclaw_media`
+  for these jobs.
+
 ## Credits and limits
 
 - Every generation spends the owner's credits, and a video costs far more than an image; the prices
-  are in `models`.
-- At most 15 images and 4 videos generate at once; a call that would pass that is refused whole,
-  until some finish.
+  are in `models`. A voice is priced per 1000 characters; a dub is mostly the lip-sync, priced per
+  minute of the video and shown in the draft before the owner says yes.
+- At most 15 images and 4 videos generate at once, 10 voice-overs, and 2 dubbing drafts and dubs
+  together; a call that would pass that is refused whole, until some finish.
 - A request that answered with a job id is already running. Sending it again starts, and bills, a
   second one.
 
