@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import click
 import httpx
 import pytest
 import respx
@@ -347,7 +348,8 @@ def test_storyboard_needs_the_video(env: str) -> None:
     result = runner.invoke(app, ["media", "storyboard"])
 
     assert result.exit_code != 0
-    assert "--url" in (result.stdout + result.stderr)
+    # Rich colours the usage error where it sees a terminal (CI does): unstyle before reading it.
+    assert "--url" in click.unstyle(result.stdout + result.stderr)
 
 
 @pytest.mark.parametrize(
