@@ -1,7 +1,8 @@
 # SellerClaw — images, video and voice
 
-Product photos, banners, ad creatives, short clips, voiceovers and a seller's own video dubbed into
-another language, made with the `media` command group. Everything
+Product photos, banners, ad creatives, short clips, voiceovers, a seller's own video dubbed into
+another language, clips and photos edited into one video, and videos rendered from a page you write, made with
+the `media` command group. Everything
 below is `sellerclaw_read`, `sellerclaw_write` or a card tool; run the examples directly.
 
 ## Pick the path
@@ -124,8 +125,8 @@ sellerclaw_write(group="media", command="voice-over",
 - `voice-over` lays a voice over a video of up to a minute: the clip's own sound dips under it, and a
   voice longer than the clip holds its last frame. Pass `text`, or `audio_url` for a voice already made.
   It answers with a job id; read the job for `result_url`.
-- Voices belong to a speech model: `models`, task `speech`, lists each voice with its manner and a
-  `sample_url` to listen to — offer a few when the owner has not chosen. ElevenLabs is the default;
+- Voices belong to a speech model: `models` with the flag `task: speech` lists each voice with its manner
+  and a `sample_url` to listen to — offer a few when the owner has not chosen. ElevenLabs is the default;
   Gemini takes a `style` in words ("warm and unhurried").
 - The video must be the file itself: a Library file or a direct link to an MP4, MOV or WEBM — a page
   on YouTube or TikTok is not a file.
@@ -173,13 +174,128 @@ sellerclaw_read(group="media", command="job-status",
 - No card shows voice or dubbing yet: give the owner links and text, and do not open `sellerclaw_media`
   for these jobs.
 
+## Edit a video: cut clips and photos into one
+
+One description of the whole video — scenes, each with its shots — made in the background. Editing is
+free; only the narrator's words (`say`) are paid, as voiced text.
+
+```text
+sellerclaw_write(group="media", command="edit-video", body={"scenes": [
+  {"shots": [{"video_url": CLIP_1}]}, {"shots": [{"video_url": CLIP_2}]}, {"shots": [{"video_url": CLIP_3}]}]})
+```
+
+A vertical ad with a narrator the picture follows, captions, a price and the owner's music:
+
+```text
+sellerclaw_write(group="media", command="edit-video", body={
+  "frame": "9:16", "voice": "Maya", "captions": true,
+  "music": {"url": LIBRARY_MP3, "volume": 0.4}, "logo": LIBRARY_PNG,
+  "scenes": [
+    {"say": "Warm light for every room.", "text": {"text": "−20% this week", "style": "price"},
+     "shots": [{"video_url": CLIP_1, "start": 1.5, "end": 3.0}, {"image_url": PHOTO_1, "focus": "top"}]},
+    {"say": "Order yours today.", "transition": "slide_left", "shots": [{"video_url": CLIP_2}]}]})
+```
+
+Before and after, from two photos, then a photo slideshow:
+
+```text
+{"frame": "1:1", "scenes": [
+  {"shots": [{"split": [PHOTO_BEFORE, PHOTO_AFTER], "labels": ["Before", "After"], "seconds": 3}]},
+  {"shots": [{"image_url": PHOTO_1}, {"image_url": PHOTO_2, "motion": "pan_left"}]}]}
+```
+
+- Add `"dry_run": true` to check a body first: it answers at once, free, with each scene's start and
+  length, the total, every problem with its place in the body (`scenes[1].shots[0].end: …`) and what
+  would be adjusted. Send the same body without it to make the video.
+- See a clip before cutting it: `storyboard` answers a picture of its frames, each stamped with its time,
+  and its length — open the `image_url`:
+
+```text
+sellerclaw_read(group="media", command="storyboard", flags={"url": CLIP_1, "frames": 12})
+```
+
+- A text is a string or `{"text", "style", "position", "size"}`: `style` `caption` / `title` / `price` /
+  `cta`, `position` `top` / `center` / `bottom`, `size` `small` / `medium` / `large` within its style.
+- A scene's shots play back to back; `transition` (`crossfade`, `fade`, `slide_left`, `slide_up`, `zoom`,
+  or `cut` for none) is only between scenes. A clip plays `start`–`end` of
+  its source (all of it by default); a photo plays `seconds` (3 by default) with a slow `motion`
+  towards its `focus`. A scene with `say` lasts at least its phrase: photos without `seconds` share the
+  phrase's time, and a clip shorter than it holds its last frame.
+- Texts stay inside the area TikTok, Reels and Shorts leave clear, whatever the frame; the sound is
+  levelled for social video, and music dips under the narrator by itself.
+- Music, a logo and subtitles come only from the owner's Library; clips and photos from the Library or
+  a direct link. A video from a photo (`generate-video` with `reference_image_url`) starts on that exact
+  photo, so a scene the photo does not show is made as a picture first (`edit-image`).
+- The finished job carries `result_url`, a `storyboard_url` of the result and `checks` — what was
+  adjusted (a trim pulled back, a clip that ran out, a phrase heard back unlike its script). To change
+  the video, send the same body with the change; phrases already voiced are not paid again.
+- Up to 20 scenes and a minute in all; 2 edits at once.
+
+## Make a video from a page: HTML animated in time
+
+`render-html` renders a page into an MP4 (up to a minute) in the background — for motion text, product
+cards, prices, layouts no edit field draws. Free. The page is HyperFrames' format:
+
+```html
+<!doctype html>
+<html><head>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+<style>#root { position: relative; overflow: hidden; background: #111; } #title { color: #fff; }</style>
+</head><body>
+<div id="root" data-composition-id="main" data-start="0" data-duration="6" data-width="1080" data-height="1920">
+  <img id="photo" src="assets/photo.jpg">
+  <div id="title">Lamp — 12 990 ₽</div>
+</div>
+<script>
+  const tl = gsap.timeline({ paused: true });
+  tl.from("#title", { y: 120, opacity: 0, duration: 1 }, 0.5);
+  window.__timelines = window.__timelines || {};
+  window.__timelines["main"] = tl;
+</script>
+</body></html>
+```
+
+- The root element carries `data-composition-id`, `data-duration` (seconds, 0.5–60), `data-width` and
+  `data-height` (even pixels, the longer side 240–1920: 1080×1920 vertical, 1920×1080 wide, 1080×1080
+  square). The video is that element.
+- The animation is a paused timeline registered as `window.__timelines["main"]`: the renderer seeks it frame by
+  frame, so time comes only from the timeline — not from `setTimeout`, CSS animations or `Date`.
+- A clip or a sound inside the page is an element with `data-start` and `data-duration` (seconds on the video's
+  timeline), plus `data-media-start` (where in the file to begin) and `data-volume` if needed.
+- Files the page shows go in `assets` — `{"name": "photo.jpg", "url": ...}` — and the page refers to them as
+  `assets/photo.jpg`. Photos and clips come from the Library or a direct link; fonts, sounds and SVG only from
+  the owner's Library.
+- The page may load nothing but public CDNs: `cdn.jsdelivr.net`, `unpkg.com`, `cdnjs.cloudflare.com`,
+  `fonts.googleapis.com`, `fonts.gstatic.com` (GSAP, fonts). Any other address is refused when checked, and
+  could not be reached while rendering anyway — pass the file as an asset instead.
+
+Write the page to a file and pass it by name, so it never has to be escaped:
+
+```text
+sellerclaw media render-html --html @video.html --assets '[{"name": "photo.jpg", "url": PHOTO_1}]' --dry-run
+```
+
+Through the tools the page goes in the body as it is:
+
+```text
+sellerclaw_write(group="media", command="render-html", body={"html": PAGE, "assets": [
+  {"name": "photo.jpg", "url": PHOTO_1}], "dry_run": true})
+```
+
+- `--dry-run` checks the page in a browser and answers every problem with its place, the warnings, and
+  `image_url` — a picture of its frames, each stamped with its time. Look at it, fix what is wrong, then run
+  the same command without `--dry-run`.
+- The finished job carries `result_url`, a `storyboard_url` of the video and `checks` (the warnings). The video
+  can be a shot in `edit-video` (`{"video_url": result_url}`) like any clip.
+- 2 HTML videos at once; the page up to 512 KB, up to 30 assets.
+
 ## Credits and limits
 
 - Every generation spends the owner's credits, and a video costs far more than an image; the prices
   are in `models`. A voice is priced per 1000 characters; a dub is mostly the lip-sync, priced per
   minute of the video and shown in the draft before the owner says yes.
-- At most 15 images and 4 videos generate at once, 10 voice-overs, and 2 dubbing drafts and dubs
-  together; a call that would pass that is refused whole, until some finish.
+- At most 15 images and 4 videos generate at once, 10 voice-overs, 2 dubbing drafts and dubs together,
+  2 video edits and 2 HTML videos; a call that would pass that is refused whole, until some finish.
 - A request that answered with a job id is already running. Sending it again starts, and bills, a
   second one.
 

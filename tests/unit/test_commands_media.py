@@ -330,3 +330,138 @@ def test_voice_and_dubbing_requests_missing_what_they_need_are_refused_locally(
 
     assert result.exit_code != 0
     assert not route.called
+
+
+@respx.mock
+def test_storyboard_asks_for_the_video_and_its_frames(env: str) -> None:
+    board = {"duration_seconds": 9.4, "has_sound": True, "image_url": "https://f/s.jpg", "times": [0.0]}
+    route = respx.get(f"{env}/agent/media/storyboard").mock(return_value=httpx.Response(200, json=board))
+
+    result = runner.invoke(app, ["media", "storyboard", "--url", "https://f/clip.mp4", "--frames", "8"])
+
+    assert result.exit_code == 0, result.stderr
+    assert dict(route.calls.last.request.url.params) == {"url": "https://f/clip.mp4", "frames": "8"}
+
+
+def test_storyboard_needs_the_video(env: str) -> None:
+    result = runner.invoke(app, ["media", "storyboard"])
+
+    assert result.exit_code != 0
+    assert "--url" in (result.stdout + result.stderr)
+
+
+@pytest.mark.parametrize(
+    ("body", "ok"),
+    [
+        pytest.param({"scenes": [{"shots": [{"video_url": "https://f/a.mp4"}]}]}, True, id="minimal"),
+        pytest.param(
+            {
+                "frame": "9:16",
+                "voice": {"voice": "Maya", "language": "ru"},
+                "logo": "https://f/logo.png",
+                "captions": True,
+                "dry_run": True,
+                "scenes": [{"say": "Тёплый свет.", "text": "−20%", "shots": [{"image_url": "https://f/p.jpg"}]}],
+            },
+            True,
+            id="shorthands-and-a-dry-run",
+        ),
+        pytest.param({"scenes": [], "frame": "3:2"}, False, id="unknown-frame"),
+        pytest.param({"frame": "9:16"}, False, id="no-scenes"),
+    ],
+)
+@respx.mock
+def test_edit_video_sends_the_whole_description(env: str, body: dict[str, object], ok: bool, tmp_path: Path) -> None:
+    route = respx.post(f"{env}/agent/media/edit-video-jobs").mock(return_value=_queued_response())
+    edit = tmp_path / "edit.json"
+    edit.write_text(json.dumps(body, ensure_ascii=False), encoding="utf-8")
+
+    result = runner.invoke(app, ["media", "edit-video", "-b", f"@{edit}"])
+
+    assert (result.exit_code == 0) is ok, result.stdout + result.stderr
+    assert route.called is ok
+    if ok:
+        assert json.loads(route.calls.last.request.content) == body
+
+
+@respx.mock
+def test_edit_video_checks_a_description_file_with_the_dry_run_option(env: str, tmp_path: Path) -> None:
+    """The call agents reach for: the description in a file, ``--dry-run`` and ``--chat-id`` on top of it."""
+    route = respx.post(f"{env}/agent/media/edit-video-jobs").mock(return_value=_queued_response())
+    body = {"scenes": [{"shots": [{"image_url": "https://f/p.jpg"}]}]}
+    edit = tmp_path / "edit.json"
+    edit.write_text(json.dumps(body), encoding="utf-8")
+
+    result = runner.invoke(app, ["media", "edit-video", "-b", f"@{edit}", "--dry-run", "--chat-id", "c1"])
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert json.loads(route.calls.last.request.content) == {**body, "dry_run": True, "chat_id": "c1"}
+
+
+PAGE = '<div id="root" data-composition-id="main" data-duration="3" data-width="1080" data-height="1920"></div>'
+
+
+@respx.mock
+def test_render_html_reads_the_page_from_its_file(env: str, tmp_path: Path) -> None:
+    """The page is written to disk and passed as a file: quotes in it never meet the shell or JSON."""
+    route = respx.post(f"{env}/agent/media/html-video-jobs").mock(return_value=_queued_response())
+    page = tmp_path / "video.html"
+    page.write_text(PAGE + "<script>const t = \"It's\";</script>", encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        [
+            "media", "render-html",
+            "--html", f"@{page}",
+            "--assets", '[{"name": "photo.jpg", "url": "https://f/p.jpg"}]',
+            "--fps", "25",
+            "--dry-run",
+            "--chat-id", CHAT_ID,
+        ],
+    )  # fmt: skip
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert json.loads(route.calls.last.request.content) == {
+        "html": PAGE + "<script>const t = \"It's\";</script>",
+        "assets": [{"name": "photo.jpg", "url": "https://f/p.jpg"}],
+        "fps": 25,
+        "dry_run": True,
+        "chat_id": CHAT_ID,
+    }
+
+
+@respx.mock
+def test_render_html_also_takes_the_whole_body_as_a_file(env: str, tmp_path: Path) -> None:
+    route = respx.post(f"{env}/agent/media/html-video-jobs").mock(return_value=_queued_response())
+    body = tmp_path / "video.json"
+    body.write_text(json.dumps({"html": PAGE, "assets": []}), encoding="utf-8")
+
+    result = runner.invoke(app, ["media", "render-html", "-b", f"@{body}"])
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert json.loads(route.calls.last.request.content) == {"html": PAGE, "assets": []}
+
+
+@pytest.mark.parametrize(
+    ("args", "fragment"),
+    [
+        pytest.param(["--html", "@/no/such/video.html"], "--html: cannot read /no/such/video.html", id="missing-file"),
+        pytest.param(["--html", PAGE, "--assets", '{"name": "a.jpg"}'], "--assets takes a JSON array", id="not-a-list"),
+        pytest.param(["--html", PAGE, "--assets", "[oops"], "--assets:", id="broken-json"),
+        pytest.param(["--fps", "30"], "html", id="no-page"),
+    ],
+)
+@respx.mock
+def test_render_html_mistakes_are_caught_before_the_call(env: str, args: list[str], fragment: str) -> None:
+    route = respx.post(f"{env}/agent/media/html-video-jobs").mock(return_value=_queued_response())
+
+    result = runner.invoke(app, ["media", "render-html", *args])
+
+    assert result.exit_code != 0
+    assert fragment in result.stdout + result.stderr
+    assert not route.called
+
+
+def test_render_html_has_room_to_check_and_take_frames() -> None:
+    """A dry run checks the page in a browser and takes its frames inside the request."""
+    assert _media_command("render-html").effective_timeout == 120.0

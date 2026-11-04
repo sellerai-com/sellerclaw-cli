@@ -264,6 +264,113 @@ SPECS = (
         ),
     ),
     Cmd(
+        "storyboard",
+        "GET",
+        "/agent/media/storyboard",
+        summary=(
+            "See a video at a glance: a picture of its frames taken evenly through it, each stamped with its time "
+            "(open image_url to look at it), plus its length, size and whether it has sound. Use it to choose "
+            "where to cut before edit-video. Takes seconds."
+        ),
+        flags=(
+            flag("url", required=True, help="The video: a Library file or a direct link to MP4/MOV/WEBM."),
+            flag("frames", type=int, minimum=4, maximum=24, default=12, help="How many frames to show."),
+        ),
+        timeout=_IMAGE_TIMEOUT_SECONDS,
+    ),
+    Cmd(
+        "edit-video",
+        "POST",
+        "/agent/media/edit-video-jobs",
+        summary=(
+            "Cut clips and photos into one video (up to a minute) in the background: scenes of shots, transitions, "
+            "a frame (9:16, 1:1, 16:9…), photos that zoom, before/after splits, texts, a narrator the picture "
+            "follows (say), captions in step, music, a logo, subtitles. Free; only the narrator's words are paid "
+            'as voiced text. Minimal body: {"scenes": [{"shots": [{"video_url": "..."}]}, {"shots": '
+            '[{"image_url": "..."}]}]}. Send "dry_run": true first: it answers the timeline and every problem at '
+            "once, free and without making anything. Pass the body as a file (-b @edit.json): quotes in texts "
+            "then cannot break the command. Each field: `sellerclaw describe media edit-video`; examples: "
+            "`sellerclaw guide media`. " + _DELIVERY_NOTE
+        ),
+        body=(
+            body_field(
+                "scenes",
+                type=list,
+                required=True,
+                help=(
+                    'The scenes in order (up to 20). A scene: {"shots": [...1-6 shots], "say"?: "the narrator\'s '
+                    'phrase over it", "text"?: "words on screen" | {"text", "style", "position", "size"}, '
+                    '"transition"?}. '
+                    'A shot: {"video_url", "start"?, "end"?, "seconds"?, "sound"?, "motion"?, "focus"?} | '
+                    '{"image_url", "seconds"?, "motion"?, "focus"?} | {"split": [two links], "labels"?, "seconds"?}.'
+                ),
+            ),
+            body_field("frame", choices=("9:16", "1:1", "4:5", "16:9", "source"), help="The video's shape (source)."),
+            body_field("fit", choices=("blur", "crop", "pad"), help="How a shot of another shape fills it (blur)."),
+            body_field(
+                "transition",
+                choices=("crossfade", "cut", "fade", "slide_left", "slide_up", "zoom"),
+                help="Between scenes (crossfade); a scene's own `transition` overrides it.",
+            ),
+            body_field("transition_seconds", type=float, help="Each transition's length, 0-2 (0.4)."),
+            body_field("voice", type=object, help="The narrator's voice for `say`: a voice id, or {voice, model, style, language}."),
+            body_field("captions", type=bool, help="Show the narrator's words on screen in step with the voice."),
+            body_field("music", type=dict, help='{"url": a Library file, "volume"?: 0-1}; dips under the narrator.'),
+            body_field("voice_track", type=dict, help='Instead of say: {"url": a generate-speech audio_url, "starts_at"?}.'),
+            body_field("logo", type=object, help="A Library PNG link, or {url, corner, size}."),
+            body_field("subtitles_url", help="An .srt from the Library, burned into the picture."),
+            body_field("fade_in", type=bool, help="Fade in from black (off: the first frame is the cover)."),
+            body_field("fade_out", type=bool, help="Fade out at the end (on)."),
+            body_field(
+                "dry_run",
+                type=bool,
+                option="--dry-run",
+                help="Check and lay out the timeline only — free, instant, nothing made.",
+            ),
+            body_field("chat_id", option="--chat-id", help=_CHAT_ID_HELP),
+        ),
+    ),
+    Cmd(
+        "render-html",
+        "POST",
+        "/agent/media/html-video-jobs",
+        summary=(
+            "Render a page you write — HTML animated in time (HyperFrames format: one root element with "
+            "data-composition-id, data-duration, data-width, data-height; a paused GSAP timeline in "
+            "window.__timelines) — into a video up to a minute, in the background. Free. Write the page to a file "
+            "and pass it: --html @video.html. Files it shows go in --assets as "
+            '[{"name": "photo.jpg", "url": "..."}] and the page uses them as assets/photo.jpg; it may load '
+            "nothing else but public CDNs (jsDelivr, unpkg, cdnjs, Google Fonts). Run with --dry-run first: it "
+            "answers every problem and a picture of the frames (image_url), free and without rendering. Each "
+            "field: `sellerclaw describe media render-html`; the format: `sellerclaw guide media`. "
+            + _DELIVERY_NOTE
+        ),
+        body=(
+            body_field(
+                "html",
+                required=True,
+                option="--html",
+                from_file=True,
+                help="The whole page (up to 512 KB).",
+            ),
+            body_field(
+                "assets",
+                type=list,
+                option="--assets",
+                help='Files the page shows: [{"name": "photo.jpg", "url": a Library file or direct link}], up to 30.',
+            ),
+            body_field("fps", type=int, option="--fps", help="Frame rate: 24, 25 or 30 (default)."),
+            body_field(
+                "dry_run",
+                type=bool,
+                option="--dry-run",
+                help="Check it and see its frames only — free, nothing is rendered.",
+            ),
+            body_field("chat_id", option="--chat-id", help=_CHAT_ID_HELP),
+        ),
+        timeout=_IMAGE_TIMEOUT_SECONDS,
+    ),
+    Cmd(
         "job-status",
         "GET",
         "/agent/media/jobs/{job_id}",
@@ -300,7 +407,7 @@ SPECS = (
 
 app = build_group(
     NAME,
-    "Generate and edit images and videos, voice texts and dub videos; pick the model and its settings.",
+    "Generate and edit images and videos, voice texts, dub and edit videos; pick the model and its settings.",
     SPECS,
 )
 
