@@ -70,7 +70,10 @@ SPECS = (
             body_field(
                 "monthly_on",
                 option="--monthly-on",
-                help="Every month on these days of the month (1-31), comma-separated, e.g. 1,15. Give the time with --at.",
+                help=(
+                    "Every month on these days of the month (1-28, so every month has them), "
+                    "comma-separated, e.g. 1,15. Give the time with --at."
+                ),
             ),
             body_field(
                 "at",
