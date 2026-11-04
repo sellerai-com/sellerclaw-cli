@@ -568,12 +568,11 @@ def test_body_options_are_checked_against_choices_before_the_call(
 
 
 @respx.mock
-def test_mixing_the_body_and_its_options_is_refused(
+def test_an_option_adds_its_field_to_the_body(
     env_pointing_at_fake_api: None,  # noqa: ARG001
     fake_api_url: str,
 ) -> None:
-    """Both build the same body, so a caller that sent both meant one of them. Guessing which
-    would send half a body and report success."""
+    """``-b @edit.json --dry-run`` is the edit, checked: the option fills a field the body leaves out."""
     route = respx.post(f"{fake_api_url}/agent/things/t1/check").mock(
         return_value=httpx.Response(200, json={"ok": True})
     )
@@ -581,10 +580,31 @@ def test_mixing_the_body_and_its_options_is_refused(
         _option_body_app(),
         ["things", "check", "t1", "--note", "hi", "-b", '{"item_id": "3"}'],
     )
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {"item_id": "3", "note": "hi"}
+
+
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        pytest.param('{"item_id": "3", "note": "bye"}', "--note and the -b body both set 'note'", id="conflict"),
+        pytest.param('["not", "an", "object"]', "the -b body is not one", id="not-an-object"),
+    ],
+)
+@respx.mock
+def test_an_option_that_contradicts_the_body_is_refused(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+    body: str,
+    expected: str,
+) -> None:
+    """A field set twice to different values would lose one of them without a word — refused instead."""
+    route = respx.post(f"{fake_api_url}/agent/things/t1/check").mock(
+        return_value=httpx.Response(200, json={"ok": True})
+    )
+    result = runner.invoke(_option_body_app(), ["things", "check", "t1", "--note", "hi", "-b", body])
     assert result.exit_code == 1
-    message = json.loads(result.stderr)["error"]["message"]
-    assert "not both" in message
-    assert "--note" in message
+    assert expected in json.loads(result.stderr)["error"]["message"]
     assert route.call_count == 0
 
 

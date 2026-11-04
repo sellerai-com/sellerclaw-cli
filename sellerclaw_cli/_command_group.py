@@ -175,6 +175,9 @@ class BodyField:
     # ``[{"text": ...}, ...]``, and asking a caller to spell that out is asking for the quoting
     # trouble again.
     item_key: str | None = None
+    # The option also reads its value from a file: ``--html @page.html`` sends the file's text. For a long
+    # text an agent writes to disk anyway (a whole HTML page), so it never has to be escaped into JSON.
+    from_file: bool = False
 
     @property
     def toggle(self) -> bool:
@@ -206,6 +209,7 @@ def body_field(
     clearable: bool = False,
     option: str | None = None,
     item_key: str | None = None,
+    from_file: bool = False,
 ) -> BodyField:
     """Concise constructor for a JSON body field inside a ``Cmd``."""
     return BodyField(
@@ -220,6 +224,7 @@ def body_field(
         clearable=clearable,
         option=option,
         item_key=item_key,
+        from_file=from_file,
     )
 
 
@@ -247,6 +252,10 @@ def _body_option_help(field: BodyField) -> str:
         parts.append(f"[one of: {', '.join(field.choices)}]")
     if field.item_key:
         parts.append("[repeat for each entry, in order]")
+    elif field.type in (list, dict):
+        parts.append("[JSON, or @file.json]")
+    if field.from_file:
+        parts.append("[or @path to read it from a file]")
     return " ".join(parts)
 
 
@@ -585,30 +594,33 @@ def _build_query_body(*, query: str | None, variables: str | None, raw_body: str
 
 
 def _build_option_body(cmd: Cmd, values: dict[str, Any], *, raw_body: str | None) -> Any:
-    """Assemble the body from the per-field ``--options``, or fall back to the literal ``-b``.
+    """Assemble the body from the per-field ``--options``, on top of the ``-b`` body when one is given.
 
-    Refuses the mix rather than guessing a precedence: a caller that sent both meant one of them,
-    and silently dropping half a body is the kind of "it ran, and did something else" an agent
-    cannot see. Same shape as the ``-q``/``-b`` refusal for GraphQL.
+    An option adds its field to the ``-b`` object: ``-b @edit.json --dry-run`` is the edit, checked. A field
+    both set with different values is refused rather than given a precedence — one of the two would be
+    dropped without a word, and "it ran, and did something else" is what an agent cannot see.
     """
     given = {f.name: values[f.name] for f in cmd.body_options if _option_given(f, values[f.name])}
     if not given:
         return parse_json_body(raw_body)
-    if raw_body is not None:
-        names = ", ".join(f.option or "" for f in cmd.body_options if f.name in given)
-        raise UserInputError(
-            f"pass either -b/--body or the field options ({names}), not both — "
-            f"they build the same body."
-        )
     body: dict[str, Any] = {}
+    if raw_body is not None:
+        base = parse_json_body(raw_body)
+        if not isinstance(base, dict):
+            names = ", ".join(f.option or "" for f in cmd.body_options if f.name in given)
+            raise UserInputError(f"{names} add fields to a JSON object; the -b body is not one.")
+        body = dict(base)
     for field in cmd.body_options:
         if field.name not in given:
             continue
-        value = given[field.name]
-        if field.item_key:
-            body[field.name] = [{field.item_key: item} for item in value]
-        else:
-            body[field.name] = _option_value(field, value)
+        raw = given[field.name]
+        value = [{field.item_key: item} for item in raw] if field.item_key else _option_value(field, raw)
+        if field.name in body and body[field.name] != value:
+            raise UserInputError(
+                f"{field.option} and the -b body both set {field.name!r} "
+                f"({value!r} and {body[field.name]!r}) — give it once."
+            )
+        body[field.name] = value
     return body
 
 
@@ -630,6 +642,21 @@ def _option_value(field: BodyField, raw: str) -> Any:
     text = raw.strip()
     if field.nullable and text.lower() in {"null", "none"}:
         return None
+    if field.type in (list, dict):
+        try:
+            value = parse_json_body(text)
+        except UserInputError as exc:
+            raise UserInputError(f"{field.option}: {exc}") from None
+        if not isinstance(value, field.type):
+            kind = "a JSON array" if field.type is list else "a JSON object"
+            raise UserInputError(f"{field.option} takes {kind}, got {type(value).__name__}.")
+        return value
+    if field.from_file and text.startswith("@"):
+        path = Path(text[1:]).expanduser()
+        try:
+            return path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise UserInputError(f"{field.option}: cannot read {path}: {exc.strerror or exc}") from None
     if field.type is int:
         try:
             return int(text)

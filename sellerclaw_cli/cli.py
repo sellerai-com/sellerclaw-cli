@@ -425,6 +425,10 @@ def _emit_usage_error(exc: click.exceptions.UsageError) -> int:
             options = ", ".join(f.option_spelling or "" for f in spec.body_options)
             parts.append(f"Accepted options: {options} (or the whole JSON body via -b).")
         elif spec is not None and spec.body:
+            named = bad.replace("-", "_")
+            if any(f.name == named for f in spec.body):
+                # The agent wrote the field it meant, only as a flag: say exactly where it goes.
+                parts.append(f'`{named}` is a body field — put it inside the -b JSON: {{"{named}": ...}}.')
             fields = ", ".join(f.name for f in spec.body)
             parts.append(f"This command takes a JSON body via -b, not --options (fields: {fields}).")
         elif spec is not None and (spec.body_freeform or spec.has_body):

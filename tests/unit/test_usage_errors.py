@@ -50,6 +50,28 @@ def test_unknown_option_lists_the_accepted_ones(
     assert "--product-id" in msg
 
 
+@pytest.mark.parametrize(
+    ("flag", "hint"),
+    [
+        pytest.param("--text", '`text` is a body field — put it inside the -b JSON: {"text": ...}.', id="field"),
+        pytest.param("--preview", None, id="not-a-field"),
+    ],
+)
+def test_a_body_field_passed_as_a_flag_is_pointed_into_the_body(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], flag: str, hint: str | None
+) -> None:
+    """A live agent sent `edit-video --dry-run` (that command has the option now): it knew the field, only not
+    that it lives in the body."""
+    body = '{"video_url": "https://f/v.mp4"}'
+    code, _out, err = _run(monkeypatch, capsys, ["media", "voice-over", "-b", body, flag, "hi"])
+    assert code == 1
+    msg = _err(err)
+    assert "This command takes a JSON body via -b, not --options" in msg
+    assert ("is a body field" in msg) is (hint is not None)
+    if hint is not None:
+        assert hint in msg
+
+
 def test_unknown_option_on_a_command_driven_by_options_names_them(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
