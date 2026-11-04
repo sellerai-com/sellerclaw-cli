@@ -159,6 +159,7 @@ ACTIONS = (
         ),
         runs("ebay-listings", "performance"),
         read_only=True,
+        open_world=True,
     ),
     action(
         "list_draft_listings",
@@ -195,6 +196,7 @@ ACTIONS = (
         ),
         runs("listings", "create-drafts"),
         read_only=False,
+        open_world=True,
     ),
     action(
         "check_listings_ready",
@@ -204,6 +206,7 @@ ACTIONS = (
         (_LISTING_IDS,),
         runs("listings", "readiness"),
         read_only=True,
+        open_world=True,
     ),
     action(
         "delete_draft_listings",
@@ -235,6 +238,7 @@ ACTIONS = (
         runs("listings", "bulk-update"),
         read_only=False,
         destructive=True,
+        open_world=True,
     ),
     action(
         "update_listing_stock",
@@ -253,6 +257,7 @@ ACTIONS = (
         ),
         read_only=False,
         destructive=True,
+        open_world=True,
     ),
     action(
         "publish_listings",
@@ -272,6 +277,7 @@ ACTIONS = (
         ),
         runs("listings", "bulk-publish", body={"kind": "publish"}),
         read_only=False,
+        destructive=True,
         open_world=True,
     ),
     action(
@@ -283,6 +289,7 @@ ACTIONS = (
         runs("listings", "bulk-publish", body={"kind": "withdraw"}),
         read_only=False,
         destructive=True,
+        open_world=True,
     ),
     action(
         "delete_listings",
@@ -293,6 +300,7 @@ ACTIONS = (
         _delete_listings,
         read_only=False,
         destructive=True,
+        open_world=True,
     ),
     action(
         "get_listing_job",
@@ -322,6 +330,7 @@ ACTIONS = (
         (_STORE,),
         runs("listings", "sync"),
         read_only=False,
+        open_world=True,
     ),
     action(
         "list_listing_problems",
@@ -380,6 +389,7 @@ ACTIONS = (
         ),
         runs("categories", "suggest"),
         read_only=True,
+        open_world=True,
     ),
     action(
         "confirm_category",
@@ -444,6 +454,7 @@ ACTIONS = (
         _save_category,
         read_only=False,
         destructive=True,
+        open_world=True,
     ),
     action(
         "get_category_attributes",
@@ -456,6 +467,7 @@ ACTIONS = (
         ),
         runs("attributes", "schema"),
         read_only=True,
+        open_world=True,
     ),
     action(
         "search_attribute_values",
@@ -470,6 +482,7 @@ ACTIONS = (
         ),
         runs("attributes", "values"),
         read_only=True,
+        open_world=True,
     ),
     action(
         "fill_listing_attributes",
@@ -490,5 +503,6 @@ ACTIONS = (
         runs("attributes", "map"),
         read_only=False,
         destructive=True,
+        open_world=True,
     ),
 )

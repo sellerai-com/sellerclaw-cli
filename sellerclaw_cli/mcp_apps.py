@@ -1705,13 +1705,14 @@ def build_extension(client_for_tool: ClientFactory, wording: CardWording = RUNNE
             open_world_hint=True,
         )
 
-    def _acts(title: str) -> ToolAnnotations:
+    def _acts(title: str, *, destructive: bool) -> ToolAnnotations:
         return ToolAnnotations(
             title=title,
             read_only_hint=False,
-            # Neither of these destroys anything, and repeating one is refused rather than doubled:
-            # a shipped order is already shipped, an answered request is already answered.
-            destructive_hint=False,
+            # An approval sets the approved change going — new prices, a payment, ad spend — which
+            # is hard to take back; picking a default model is not. Repeating either is refused or
+            # changes nothing: an answered request is already answered.
+            destructive_hint=destructive,
             idempotent_hint=True,
             open_world_hint=True,
         )
@@ -2221,7 +2222,7 @@ def build_extension(client_for_tool: ClientFactory, wording: CardWording = RUNNE
         name="sellerclaw_approval_decide",
         title="Record the owner's answer",
         description=_APPROVAL_DECIDE_DESC,
-        annotations=_acts("Record the owner's answer"),
+        annotations=_acts("Record the owner's answer", destructive=True),
     )
     def sellerclaw_approval_decide(
         request: str, decision: str, option: str | None = None
@@ -2499,7 +2500,7 @@ def build_extension(client_for_tool: ClientFactory, wording: CardWording = RUNNE
         name="sellerclaw_media_set_default",
         title="Make a model the default",
         description=_MEDIA_SET_DEFAULT_DESC,
-        annotations=_acts("Make a model the default"),
+        annotations=_acts("Make a model the default", destructive=False),
     )
     def sellerclaw_media_set_default(task: str, model: str) -> Any:
         chosen = _media_task(task)

@@ -180,6 +180,7 @@ ACTIONS = (
         ),
         _list_store_orders,
         read_only=True,
+        open_world=True,
     ),
     action(
         "ship_order",
@@ -210,8 +211,10 @@ ACTIONS = (
     action(
         "mark_order_shipped",
         "Mark an order shipped",
-        "Close an order in SellerClaw once it has shipped, with its tracking if known. Does not "
-        "contact the marketplace or the buyer; repeating it is safe.",
+        "Close an order in SellerClaw once it has shipped, with its tracking if known. It ships "
+        "nothing and changes nothing on the marketplace, only checks there that the shipment "
+        "exists; the buyer of an order from the owner's own storefront gets the shipping email. "
+        "Repeating it is safe.",
         (
             _ORDER,
             Param("tracking_number", "string", "Tracking number, if any."),
@@ -221,12 +224,15 @@ ACTIONS = (
         runs("orders", "set-shipped"),
         read_only=False,
         destructive=True,
+        open_world=True,
     ),
     action(
         "update_order",
         "Update an order",
         "Update an order in SellerClaw: status, the supplier's order, tracking, or buyer details "
-        "the marketplace did not send. Only the fields passed change; the marketplace is not contacted.",
+        "the marketplace did not send. Only the fields passed change; the marketplace is not "
+        "contacted, but the buyer of an order from the owner's own storefront is emailed when it "
+        "is marked shipped or gets tracking.",
         (
             _ORDER,
             Param("status", "string", "New status.", choices=_STATUSES[2:]),
@@ -246,6 +252,7 @@ ACTIONS = (
         runs("orders", "update"),
         read_only=False,
         destructive=True,
+        open_world=True,
     ),
     action(
         "cancel_order",
@@ -267,5 +274,6 @@ ACTIONS = (
         ),
         read_only=False,
         destructive=True,
+        open_world=True,
     ),
 )

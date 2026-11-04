@@ -104,6 +104,7 @@ ACTIONS = (
         ),
         runs("suppliers", "categories"),
         read_only=True,
+        open_world=True,
     ),
     action(
         "search_supplier_products",
@@ -126,6 +127,7 @@ ACTIONS = (
         ),
         _search,
         read_only=True,
+        open_world=True,
     ),
     action(
         "inspect_supplier_products",
@@ -145,6 +147,7 @@ ACTIONS = (
         ),
         _inspect,
         read_only=True,
+        open_world=True,
     ),
     action(
         "check_supplier_stock",
@@ -157,6 +160,7 @@ ACTIONS = (
         ),
         _stock,
         read_only=True,
+        open_world=True,
     ),
     action(
         "quote_supplier_shipping",
@@ -172,6 +176,7 @@ ACTIONS = (
         ),
         _shipping,
         read_only=True,
+        open_world=True,
     ),
     action(
         "get_supplier_balance",
@@ -180,6 +185,7 @@ ACTIONS = (
         (_PROVIDER,),
         runs("suppliers", "get-balance"),
         read_only=True,
+        open_world=True,
     ),
     action(
         "create_supplier_order",
@@ -205,6 +211,8 @@ ACTIONS = (
         ),
         runs("suppliers", "create-order"),
         read_only=False,
+        destructive=True,
+        open_world=True,
     ),
     action(
         "confirm_supplier_order",
@@ -213,6 +221,8 @@ ACTIONS = (
         (_PROVIDER, _SUPPLIER_ORDER),
         runs("suppliers", "confirm-order"),
         read_only=False,
+        destructive=True,
+        open_world=True,
     ),
     action(
         "pay_supplier_order",
@@ -222,6 +232,7 @@ ACTIONS = (
         runs("suppliers", "pay-order"),
         read_only=False,
         destructive=True,
+        open_world=True,
     ),
     action(
         "cancel_supplier_order",
@@ -236,6 +247,7 @@ ACTIONS = (
         runs("suppliers", "cancel-order"),
         read_only=False,
         destructive=True,
+        open_world=True,
     ),
     action(
         "get_supplier_order",
@@ -244,5 +256,6 @@ ACTIONS = (
         (_PROVIDER, _SUPPLIER_ORDER),
         _supplier_order,
         read_only=True,
+        open_world=True,
     ),
 )

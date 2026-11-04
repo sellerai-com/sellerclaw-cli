@@ -267,13 +267,13 @@ ACTIONS = (
     action(
         "scrape_web_page",
         "Read a web page",
-        "The content of one public web page, as text or HTML, optionally with a screenshot saved "
-        "to the owner's files. Uses credits.",
+        "The content of one public web page, as text or HTML. Uses credits.",
+        # No screenshot here: the command files the picture in the owner's library, and a tool that
+        # leaves something behind is not read-only — yet a read-only one runs without asking.
         (
             Param("url", "string", "The page's URL.", required=True, to="flag"),
             Param("format", "string", "markdown (text, default) or html.", to="flag", choices=("markdown", "html")),
             Param("max_chars", "integer", "Cut the content to this length.", to="flag"),
-            Param("screenshot", "boolean", "Also save a full-page picture (costs extra).", to="flag"),
         ),
         runs("web", "scrape"),
         read_only=True,

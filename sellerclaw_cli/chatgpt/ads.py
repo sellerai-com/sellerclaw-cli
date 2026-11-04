@@ -115,6 +115,7 @@ ACTIONS = (
         ),
         _list_campaigns,
         read_only=True,
+        open_world=True,
     ),
     action(
         "get_ad_metrics",
@@ -139,6 +140,7 @@ ACTIONS = (
         ),
         _metrics,
         read_only=True,
+        open_world=True,
     ),
     action(
         "pause_ad_campaign",
@@ -147,6 +149,8 @@ ACTIONS = (
         (_PLATFORM, _CAMPAIGN, _STORE_EBAY),
         lambda values: _set_status(values, running=False),
         read_only=False,
+        destructive=True,
+        open_world=True,
     ),
     action(
         "resume_ad_campaign",
@@ -156,6 +160,7 @@ ACTIONS = (
         (_PLATFORM, _CAMPAIGN, _STORE_EBAY),
         lambda values: _set_status(values, running=True),
         read_only=False,
+        destructive=True,
         open_world=True,
     ),
     action(
@@ -171,6 +176,7 @@ ACTIONS = (
         _set_budget,
         read_only=False,
         destructive=True,
+        open_world=True,
     ),
     action(
         "launch_google_ads_campaign",
@@ -202,6 +208,7 @@ ACTIONS = (
         ),
         _launch_google,
         read_only=False,
+        destructive=True,
         open_world=True,
     ),
     action(
@@ -234,6 +241,7 @@ ACTIONS = (
             },
         ),
         read_only=False,
+        destructive=True,
         open_world=True,
     ),
     action(
@@ -250,6 +258,7 @@ ACTIONS = (
         ),
         _update_ebay_listings,
         read_only=False,
+        destructive=True,
         open_world=True,
     ),
     action(
@@ -269,6 +278,7 @@ ACTIONS = (
         ),
         read_only=False,
         destructive=True,
+        open_world=True,
     ),
     action(
         "apply_approved_ebay_ad_action",
@@ -278,6 +288,7 @@ ACTIONS = (
         (_STORE, Param("action_id", "string", "The staged action's id.", required=True, to="path")),
         runs("ebay-promoted", "apply"),
         read_only=False,
+        destructive=True,
         open_world=True,
     ),
     action(
@@ -288,6 +299,7 @@ ACTIONS = (
         (Param("campaign_id", "string", "Only this campaign.", to="flag"),),
         runs("google-ads", "recommendations"),
         read_only=True,
+        open_world=True,
     ),
     action(
         "get_google_ads_search_terms",
@@ -303,6 +315,7 @@ ACTIONS = (
         ),
         runs("google-ads", "search-terms"),
         read_only=True,
+        open_world=True,
     ),
     action(
         "add_google_ads_negative_keywords",
@@ -315,5 +328,7 @@ ACTIONS = (
         ),
         runs("google-ads", "add-negative-keywords"),
         read_only=False,
+        destructive=True,
+        open_world=True,
     ),
 )

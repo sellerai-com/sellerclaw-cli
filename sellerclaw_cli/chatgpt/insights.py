@@ -69,6 +69,8 @@ ACTIONS = (
         (_REQUEST, Param("quote", "string", "The owner's own words, one sentence.", required=True)),
         runs("action-requests", "confirm"),
         read_only=False,
+        destructive=True,
+        open_world=True,
     ),
     action(
         "cancel_action_request",

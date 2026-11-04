@@ -153,25 +153,23 @@ def test_a_single_command_action_fits_its_command(action: Action) -> None:
     assert action.read_only == _reads(cmd)
 
 
-@pytest.mark.parametrize(
-    "name",
-    [
-        "delete_listings", "withdraw_listings", "cancel_order", "ship_order", "pay_supplier_order",
-        "reply_to_review", "update_listings", "update_store_settings", "set_product_cost",
-    ],
+#: The only writes that merely add something — a draft, a product, a file, a remembered choice — or
+#: hide what the owner can bring back. Every other write overwrites, deletes, cancels, spends the
+#: owner's money, changes what buyers see or sets an approved change going, and says so: OpenAI's
+#: review reads a write that does any of that without the destructive hint as a false label.
+_ADDS_ONLY = frozenset(
+    {
+        "create_draft_listings", "create_products", "add_supplier_product", "confirm_category",
+        "set_listing_problems_hidden", "refresh_store_listings", "generate_image", "generate_images",
+        "edit_image", "generate_video", "save_file_from_url",
+    }
 )
-def test_deleting_cancelling_paying_and_overwriting_are_destructive(name: str) -> None:
-    assert BY_NAME[name].destructive
 
 
-@pytest.mark.parametrize("name", ["publish_listings", "reply_to_review", "launch_google_ads_campaign", "keyword_ideas"])
-def test_what_reaches_the_public_is_open_world(name: str) -> None:
-    assert BY_NAME[name].open_world
+def test_every_write_but_the_purely_additive_ones_is_destructive() -> None:
+    gentle = {a.name for a in ACTIONS if not a.read_only and not a.destructive}
 
-
-@pytest.mark.parametrize("name", ["list_orders", "update_products", "get_store_metrics"])
-def test_the_owner_s_own_data_is_not_open_world(name: str) -> None:
-    assert not BY_NAME[name].open_world
+    assert gentle == _ADDS_ONLY
 
 
 def test_cards_name_this_surface_s_tools_instead_of_commands() -> None:
@@ -562,6 +560,23 @@ def _command_of(request: httpx.Request) -> Any:
     raise AssertionError(f"no command makes {request.method} {path}")
 
 
+def _requests_of(fake_api_url: str, action: Action) -> list[httpx.Request]:
+    """Run ``action`` against a fake API and return what it asked, beyond reading the store's platform."""
+    platform = _PLATFORM_FOR.get(action.name, "ebay")
+    respx.get(f"{fake_api_url}/agent/sales-channels/{STORE_ID}").mock(
+        return_value=httpx.Response(200, json={"id": STORE_ID, "platform": platform})
+    )
+    respx.route(host="api.test.sellerclaw.ai").mock(return_value=httpx.Response(200, json={"ok": True}))
+
+    action.run(_arguments(action))
+
+    return [
+        call.request
+        for call in respx.calls
+        if (call.request.method, call.request.url.path) != ("GET", f"/agent/sales-channels/{STORE_ID}")
+    ]
+
+
 @respx.mock
 @pytest.mark.parametrize("action", ACTIONS, ids=lambda a: a.name)
 @pytest.mark.usefixtures("env_pointing_at_fake_api")
@@ -571,24 +586,93 @@ def test_every_action_runs_and_its_read_only_hint_tells_the_truth(fake_api_url: 
     A read-only hint lets ChatGPT run the tool without asking the owner, so one that wrote anything
     would act behind their back; a write marked as one would ask for nothing.
     """
-    platform = _PLATFORM_FOR.get(action.name, "ebay")
-    respx.get(f"{fake_api_url}/agent/sales-channels/{STORE_ID}").mock(
-        return_value=httpx.Response(200, json={"id": STORE_ID, "platform": platform})
-    )
-    respx.route(host="api.test.sellerclaw.ai").mock(return_value=httpx.Response(200, json={"ok": True}))
-
-    action.run(_arguments(action))
-
-    made = [
-        _command_of(call.request)
-        for call in respx.calls
-        if (call.request.method, call.request.url.path) != ("GET", f"/agent/sales-channels/{STORE_ID}")
-    ]
+    made = [_command_of(request) for request in _requests_of(fake_api_url, action)]
     assert made, "the action reached no command"
     if action.read_only:
         assert all(_reads(cmd) for cmd in made), [c.name for c in made]
     else:
         assert any(not _reads(cmd) for cmd in made), [c.name for c in made]
+
+
+#: Agent API calls whose answer, or whose effect, involves a system SellerClaw does not control: a
+#: marketplace, an ad platform, a supplier, a research, AI or media provider, the open web. That
+#: counts the calls that read live (or fall back to a live read), and the writes the cloud carries
+#: onward by itself — a cost, markup or stock change reprices and restocks live listings within
+#: minutes, a weight edit is pushed as a parcel change, an approval runs the approved action.
+_OUTSIDE = tuple(
+    re.compile(pattern)
+    for pattern in (
+        r"GET /agent/amazon/stores/[^/]+/fba/inbound$",
+        r"POST /agent/amazon/stores/[^/]+/catalog/search$",
+        r"\w+ /agent/ebay/stores/[^/]+/(feedback|finances|listing-performance|orders|promoted)(/|$)",
+        r"\w+ /agent/ads/",
+        r"\w+ /agent/suppliers/(?!price-list/)[^/]+/",
+        r"POST /agent/suppliers/price-list/out-of-sale$",
+        r"\w+ /agent/(research|web|store-audit)/",
+        r"POST /agent/media/(images|images/edit|image-jobs|video-jobs)$",
+        r"POST /agent/files/from-url$",
+        r"PATCH /agent/sales-channels/[^/]+$",
+        r"POST /agent/stores/[^/]+/(create-drafts|bulk-listing-jobs|listings/sync-stock|listings/sync)$",
+        r"POST /agent/stores/[^/]+/orders/[^/]+/cancel$",
+        r"DELETE /agent/stores/[^/]+/ebay-listings/[^/]+$",
+        r"POST /agent/categories/(suggest|create)$",
+        r"POST /agent/attributes/(schema|values)$",
+        r"POST /agent/listings/(readiness|bulk-update)$",
+        r"POST /agent/products/(bulk-update|markup|source-from-supplier|catalog-file/apply)$",
+        r"PATCH /agent/products/[^/]+/(prices|variations|supplier)$",
+        r"POST /agent/goals/action-requests/[^/]+/confirm-from-chat$",
+        # Closing an order checks the channel for the shipment; on the owner's own storefront a
+        # shipped status or new tracking emails the buyer.
+        r"PATCH /agent/orders/[^/]+$",
+        r"POST /agent/orders/[^/]+/shipped$",
+    )
+)
+#: Calls that read or write only the owner's SellerClaw records, mirrors of marketplace data included.
+_OURS = tuple(
+    re.compile(pattern)
+    for pattern in (
+        r"GET /agent/(sales-channels|ad-accounts|supplier-accounts|integrations)(/[^/]+)?$",
+        r"GET /agent/(overview|billing/overview)$",
+        r"GET /agent/stores/[^/]+/(locations|policies|listings/summary|bulk-listing-jobs/[^/]+)$",
+        r"GET /agent/amazon/stores/[^/]+/(fba/inventory|listings/[^/]+/publish-status)$",
+        r"GET /agent/listings/",
+        r"POST /agent/listings/delete-drafts$",
+        r"\w+ /agent/listing-problems(/hide)?$",
+        r"(GET|POST) /agent/categories/(confirm|search|used|children|trees)$",
+        r"GET /agent/orders(/|$)",
+        r"GET /agent/products(/|$)",
+        r"POST /agent/products$",
+        r"DELETE /agent/products/[^/]+$",
+        r"POST /agent/products/catalog-file/(check|preview)$",
+        r"GET /agent/media/(models|jobs)$",
+        r"GET /agent/files/$",
+        r"\w+ /agent/goals/action-requests(/[^/]+/cancel)?$",
+        r"GET /agent/analytics/",
+    )
+)
+
+
+def _reaches_outside(request: httpx.Request) -> bool:
+    call = f"{request.method} {request.url.path}"
+    outside = any(pattern.match(call) for pattern in _OUTSIDE)
+    ours = any(pattern.match(call) for pattern in _OURS)
+    assert outside != ours, f"say whether {call} reaches outside SellerClaw: in _OUTSIDE or in _OURS, once"
+    return outside
+
+
+@respx.mock
+@pytest.mark.parametrize("action", ACTIONS, ids=lambda a: a.name)
+@pytest.mark.usefixtures("env_pointing_at_fake_api")
+def test_every_action_s_open_world_hint_matches_where_its_calls_land(fake_api_url: str, action: Action) -> None:
+    """Open-world exactly when a call it makes involves a system SellerClaw does not control.
+
+    OpenAI's review flagged tools that changed a marketplace or called a media provider while
+    claiming a closed world. A new endpoint fails here until it is placed on one side.
+    """
+    # Every call is classified, not just the first one that lands outside.
+    landed = [_reaches_outside(request) for request in _requests_of(fake_api_url, action)]
+
+    assert action.open_world == any(landed)
 
 
 def _keys(value: Any) -> set[str]:

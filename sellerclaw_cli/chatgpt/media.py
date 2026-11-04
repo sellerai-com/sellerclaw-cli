@@ -55,6 +55,7 @@ ACTIONS = (
         ),
         runs("media", "generate-image"),
         read_only=False,
+        open_world=True,
     ),
     action(
         "generate_images",
@@ -72,6 +73,7 @@ ACTIONS = (
         ),
         _queued("media", "generate-images"),
         read_only=False,
+        open_world=True,
     ),
     action(
         "edit_image",
@@ -87,6 +89,7 @@ ACTIONS = (
         ),
         runs("media", "edit-image"),
         read_only=False,
+        open_world=True,
     ),
     action(
         "generate_video",
@@ -104,6 +107,7 @@ ACTIONS = (
         ),
         _queued("media", "generate-video"),
         read_only=False,
+        open_world=True,
     ),
     action(
         "list_media_jobs",
@@ -141,5 +145,6 @@ ACTIONS = (
         ),
         runs("files", "from-url"),
         read_only=False,
+        open_world=True,
     ),
 )

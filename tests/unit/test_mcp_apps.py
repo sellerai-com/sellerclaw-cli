@@ -165,6 +165,17 @@ def test_the_cards_that_only_show_things_are_read_only() -> None:
     }
 
 
+def test_only_the_approval_button_is_destructive() -> None:
+    """An approval sets the approved change going — new prices, a payment, ad spend; the studio's
+    presses only add the owner's own files or change a default they can change back.
+    """
+    by_name = {tool.name: tool for tool in asyncio.run(build_server().list_tools())}
+
+    destructive = {name for name in mcp_apps.tool_names() if by_name[name].annotations.destructive_hint}
+
+    assert destructive == {"sellerclaw_approval_decide"}
+
+
 def test_every_screen_tool_points_at_a_resource_that_exists() -> None:
     """A tool advertising a ``ui://`` that 404s renders nothing and explains nothing.
 

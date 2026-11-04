@@ -147,6 +147,7 @@ ACTIONS = (
         runs("catalog", "bulk-update"),
         read_only=False,
         destructive=True,
+        open_world=True,
     ),
     action(
         "delete_product",
@@ -170,6 +171,7 @@ ACTIONS = (
         runs("catalog", "set-prices"),
         read_only=False,
         destructive=True,
+        open_world=True,
     ),
     action(
         "add_supplier_product",
@@ -184,6 +186,7 @@ ACTIONS = (
         ),
         runs("catalog", "source-from-supplier"),
         read_only=False,
+        open_world=True,
     ),
     action(
         "get_product_markup",
@@ -213,6 +216,7 @@ ACTIONS = (
         runs("catalog", "set-markup"),
         read_only=False,
         destructive=True,
+        open_world=True,
     ),
     action(
         "set_product_variations",
@@ -238,6 +242,7 @@ ACTIONS = (
         runs("catalog", "set-variations"),
         read_only=False,
         destructive=True,
+        open_world=True,
     ),
     action(
         "set_product_supplier",
@@ -259,6 +264,7 @@ ACTIONS = (
         runs("catalog", "set-supplier"),
         read_only=False,
         destructive=True,
+        open_world=True,
     ),
     action(
         "preview_import",
@@ -286,6 +292,7 @@ ACTIONS = (
         _apply_import,
         read_only=False,
         destructive=True,
+        open_world=True,
     ),
     action(
         "stop_selling_missing_from_price_list",
@@ -299,5 +306,6 @@ ACTIONS = (
         runs("price-list", "out-of-sale"),
         read_only=False,
         destructive=True,
+        open_world=True,
     ),
 )

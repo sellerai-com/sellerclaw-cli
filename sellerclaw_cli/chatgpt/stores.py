@@ -165,6 +165,7 @@ ACTIONS = (
         _update_store_settings,
         read_only=False,
         destructive=True,
+        open_world=True,
     ),
     action(
         "propose_store_markup",
@@ -183,6 +184,8 @@ ACTIONS = (
         ),
         runs("channels", "set-markup"),
         read_only=False,
+        destructive=True,
+        open_world=True,
     ),
     action(
         "list_store_locations",
@@ -230,6 +233,7 @@ ACTIONS = (
         (_STORE, Param("limit", "integer", "Most shipments to return.", to="flag")),
         runs("amazon-fba", "list-inbound"),
         read_only=True,
+        open_world=True,
     ),
     action(
         "list_reviews",
@@ -245,6 +249,7 @@ ACTIONS = (
         ),
         _reviews,
         read_only=True,
+        open_world=True,
     ),
     action(
         "reply_to_review",
@@ -277,6 +282,7 @@ ACTIONS = (
             commands={"ebay": ("ebay-finances", "pnl"), "shopify": ("shopify-finances", "pnl")},
         ),
         read_only=True,
+        open_world=True,
     ),
     action(
         "get_store_cashflow",
@@ -289,5 +295,6 @@ ACTIONS = (
             commands={"ebay": ("ebay-finances", "cashflow"), "shopify": ("shopify-finances", "cashflow")},
         ),
         read_only=True,
+        open_world=True,
     ),
 )
