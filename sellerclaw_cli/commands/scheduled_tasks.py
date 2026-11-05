@@ -29,7 +29,8 @@ SPECS = (
             "draft with `missing` (what it still needs) and `ready` (true once Create can be "
             "pressed). One schedule form per call — daily: --daily-at 09:00; weekly: --weekly-on "
             "mon,thu --at 09:00; monthly: --monthly-on 1,15 --at 09:00; once: --once-at "
-            "2026-11-20T09:00; repeating: --every 2h."
+            "2026-11-20T09:00; repeating: --every 2h. For a ready-made report pass "
+            "--report-template ID (and --report-store) instead of writing the task yourself."
         ),
         body=(
             body_field(
@@ -109,6 +110,25 @@ SPECS = (
                 help=(
                     "Notify the owner in their messenger after every run; --no-messenger-push turns "
                     "it off."
+                ),
+            ),
+            body_field(
+                "report_template",
+                option="--report-template",
+                clearable=True,
+                help=(
+                    "Start from a ready-made report (the wizard's briefing lists them, e.g. "
+                    "weekly-finance): fills the name, the instruction, the schedule and the delivery, "
+                    "and the task lands in the owner's Reports. Pass \"\" to turn it back into an "
+                    "ordinary task."
+                ),
+            ),
+            body_field(
+                "report_store",
+                option="--report-store",
+                help=(
+                    "Which stores a report task covers: `all` (every active store) or one store id "
+                    "from `sellerclaw channels list`."
                 ),
             ),
         ),

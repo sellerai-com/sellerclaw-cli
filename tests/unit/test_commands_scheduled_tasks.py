@@ -88,6 +88,12 @@ def env_pointing_at_fake_api(
             {"email_report": False, "messenger_push": True},
             id="both-switches",
         ),
+        pytest.param(
+            ["--report-template", "weekly-finance", "--report-store", "all"],
+            {"report_template": "weekly-finance", "report_store": "all"},
+            id="ready-made-report",
+        ),
+        pytest.param(["--report-template", ""], {"report_template": ""}, id="report-template-dropped"),
     ],
 )
 def test_only_the_flags_given_reach_the_draft(

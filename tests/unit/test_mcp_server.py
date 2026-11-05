@@ -73,6 +73,7 @@ _HIDDEN_FROM_MCP = {
     "subagent-tasks",
     "models",
     "scheduled-tasks",
+    "reports",
 }
 
 

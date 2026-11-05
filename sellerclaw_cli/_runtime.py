@@ -187,12 +187,40 @@ def _waits(ctx: typer.Context) -> bool:
 _BULK_JOB_PATH_RE = re.compile(r"/agent/stores/([^/]+)/bulk-listing-jobs")
 
 
+_PLACEHOLDER_RE = re.compile(r"\{[^/{}]+\}")
+
+
 def _poll_command(job_poll_path: str) -> str:
     """The exact command that reads this job, so giving up costs the caller one call, not a search."""
     match = _BULK_JOB_PATH_RE.search(job_poll_path)
     if match is not None:
         return f"sellerclaw listings bulk-job {match.group(1)}"
+    reader = _registry_reader(job_poll_path)
+    if reader is not None:
+        return reader
     return "sellerclaw listings bulk-job <store_id>"
+
+
+def _registry_reader(job_poll_path: str) -> str | None:
+    """The GET command whose path reads ``job_poll_path``, with every positional but the job id filled.
+
+    Found in the registry rather than hard-coded, so a new job-starting command names its reader the
+    moment it declares ``job_poll_path`` — and a renamed reader cannot leave a stale pointer behind.
+    """
+    from sellerclaw_cli._command_group import REGISTRY
+
+    for group in REGISTRY:
+        for cmd in group.commands:
+            if cmd.method != "GET":
+                continue
+            static_parts = _PLACEHOLDER_RE.split(cmd.path)
+            pattern = "^" + "([^/]+)".join(re.escape(part) for part in static_parts) + "$"
+            found = re.match(pattern, job_poll_path)
+            if found is None or not found.groups():
+                continue
+            filled = " ".join(found.groups()[:-1])
+            return f"sellerclaw {group.name} {cmd.name}" + (f" {filled}" if filled else "")
+    return None
 
 
 def _decode_json(text: str, *, source: str) -> Any:

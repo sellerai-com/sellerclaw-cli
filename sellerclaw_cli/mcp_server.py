@@ -263,7 +263,8 @@ _GUIDE_TOOL_DESC = (
 # `support-requests` (passing a problem or wish to the SellerClaw team) is hidden for now by the
 # owner's decision: for the time being only our own agent files those. `scheduled-tasks` fills the
 # draft card in our agent's scheduled-task wizard chat, which only that agent works in; managing
-# scheduled tasks from a connector is not offered for now (owner's decision).
+# scheduled tasks from a connector is not offered for now (owner's decision). `reports` makes and
+# publishes the copies of the owner's report tasks — only our agent's scheduled runs do that.
 MCP_VISIBLE_GROUPS: frozenset[str] = frozenset(
     {
         # Stores, integrations, account
