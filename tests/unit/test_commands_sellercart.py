@@ -1445,3 +1445,46 @@ def test_removing_a_discount_names_it_in_the_path(
 
     assert result.exit_code == 0, result.stderr or result.stdout
     assert route.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        pytest.param("create", id="create"),
+        pytest.param("update", id="update"),
+    ],
+)
+def test_extra_display_languages_are_offered_on_both_paths(command: str) -> None:
+    """Without the field the strict body check refuses the language the agent was told to add."""
+    detail = _data(runner.invoke(app, ["describe", "sellercart", command]).stdout)
+
+    fields = {f["field"]: f for f in detail["body_fields"]}
+    assert fields["display_languages"]["repeatable"] is True
+
+
+def test_update_offers_adding_and_removing_one_language() -> None:
+    detail = _data(runner.invoke(app, ["describe", "sellercart", "update"]).stdout)
+
+    fields = {f["field"]: f for f in detail["body_fields"]}
+    assert fields["add_display_languages"]["repeatable"] is True
+    assert fields["remove_display_languages"]["repeatable"] is True
+    # "Translate my shop" is the trap: the help has to say the seller's texts stay put.
+    assert "NOT translated" in fields["display_languages"]["help"] or "Nothing the seller" in (
+        fields["display_languages"]["help"]
+    )
+
+
+@respx.mock
+def test_update_sends_language_additions_and_removals_as_given(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.patch(f"{fake_api_url}/agent/sellercart").mock(
+        return_value=httpx.Response(200, json={"display_languages": ["de"]})
+    )
+    body = {"add_display_languages": ["de"], "remove_display_languages": ["fr"]}
+
+    result = runner.invoke(app, ["sellercart", "update", "-b", json.dumps(body)])
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == body
