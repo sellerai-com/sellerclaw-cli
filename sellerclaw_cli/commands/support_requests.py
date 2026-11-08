@@ -37,22 +37,22 @@ SPECS = (
                 choices=("owner", "agent"),
                 example="owner",
             ),
-            body_field("title", required=True, help="One line the team reads first."),
+            body_field("title", required=True, help="One line the team reads first, in English."),
             body_field(
                 "details",
                 required=True,
                 help=(
-                    "What happened or what is wanted, in plain words: what was tried, what went "
+                    "What happened or what is wanted, in plain English: what was tried, what went "
                     "wrong, which store, order or product."
                 ),
             ),
             body_field(
                 "owner_quote",
-                help="The owner's own words, verbatim. Required when raised_by is owner.",
+                help="The owner's own words, verbatim and in their language. Required when raised_by is owner.",
             ),
             body_field(
                 "technical_details",
-                help="For the team only: the command that failed and the error text.",
+                help="For the team only, in English: the command that failed and the error text.",
             ),
         ),
     ),
