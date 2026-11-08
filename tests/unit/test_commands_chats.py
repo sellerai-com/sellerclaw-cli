@@ -143,6 +143,29 @@ def test_open_about_the_shop_sends_the_topic(env: str, argv: list[str]) -> None:
 
 
 @respx.mock
+@pytest.mark.parametrize(
+    ("argv", "expected_body"),
+    [
+        pytest.param(["--expects-reply"], {"expects_reply": True}, id="flag"),
+        pytest.param(["-b", json.dumps({"expects_reply": True})], {"expects_reply": True}, id="body"),
+        pytest.param(["--no-expects-reply"], {"expects_reply": False}, id="flag-off"),
+    ],
+)
+def test_open_to_ask_the_owner_sends_expects_reply(
+    env: str, argv: list[str], expected_body: dict[str, bool]
+) -> None:
+    """A chat opened to ask the owner something is marked unanswered for them until they write;
+    news is not. The mark has to reach the cloud, or every question reads as news."""
+    route = respx.post(f"{env}/agent/chat/chats").mock(return_value=_opened_chat_response())
+
+    result = runner.invoke(app, ["chats", "open", *argv])
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == expected_body
+    assert f"sellerclaw-ui:direct:{CHAT_ID}" in result.stdout
+
+
+@respx.mock
 def test_open_for_a_job_that_has_its_chat_fails_and_names_it(env: str) -> None:
     """The job's own chat is where its news goes: the refusal must reach the agent with that
     chat in it, not read as a chat it opened."""

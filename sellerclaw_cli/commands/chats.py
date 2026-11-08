@@ -79,6 +79,16 @@ SPECS = (
                     "lists it on the owner's SellerCart shop page as well as in the sidebar."
                 ),
             ),
+            body_field(
+                "expects_reply",
+                type=bool,
+                option="--expects-reply",
+                help=(
+                    "The first message asks the owner something only they can answer: the chat "
+                    "then shows as not replied in their sidebar until they write. Leave it off "
+                    "for news — a report, a finished job, a heads-up."
+                ),
+            ),
         ),
     ),
 )
