@@ -1468,10 +1468,9 @@ def test_update_offers_adding_and_removing_one_language() -> None:
     fields = {f["field"]: f for f in detail["body_fields"]}
     assert fields["add_display_languages"]["repeatable"] is True
     assert fields["remove_display_languages"]["repeatable"] is True
-    # "Translate my shop" is the trap: the help has to say the seller's texts stay put.
-    assert "NOT translated" in fields["display_languages"]["help"] or "Nothing the seller" in (
-        fields["display_languages"]["help"]
-    )
+    # "Translate my shop" is the trap: the help says which texts switch, and that products do not.
+    assert "sellercart-translations" in fields["display_languages"]["help"]
+    assert "Products and the blog are NOT translated" in fields["display_languages"]["help"]
 
 
 @respx.mock
@@ -1488,3 +1487,44 @@ def test_update_sends_language_additions_and_removals_as_given(
 
     assert result.exit_code == 0, result.stderr
     assert json.loads(route.calls.last.request.content) == body
+
+
+def test_translations_are_read_by_language_and_written_by_key() -> None:
+    reading = _data(runner.invoke(app, ["describe", "sellercart-translations", "get"]).stdout)
+    writing = _data(runner.invoke(app, ["describe", "sellercart-translations", "update"]).stdout)
+
+    flags = {f["flag"]: f for f in reading["flags"]}
+    assert flags["--language"]["required"] is True
+    assert flags["--status"]["repeatable"] is True
+    assert {f["field"] for f in writing["body_fields"]} == {"language", "texts", "note"}
+
+
+@respx.mock
+def test_translations_go_to_the_shop_as_given(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    listed = respx.get(f"{fake_api_url}/agent/sellercart/translations").mock(
+        return_value=httpx.Response(200, json={"language": "de", "texts": [], "more": 0})
+    )
+    saved = respx.put(f"{fake_api_url}/agent/sellercart/translations").mock(
+        return_value=httpx.Response(200, json={"language": "de", "results": []})
+    )
+    body = '{"language": "de", "texts": [{"key": "page:home#title", "source_hash": "abc", "text": "Startseite"}]}'
+
+    got = runner.invoke(
+        app, ["sellercart-translations", "get", "--language", "de", "--status", "missing", "--status", "outdated"]
+    )
+    put = runner.invoke(app, ["sellercart-translations", "update", "-b", body])
+
+    assert got.exit_code == 0, got.stdout
+    assert put.exit_code == 0, put.stdout
+    assert listed.calls.last.request.url.params.get_list("status") == ["missing", "outdated"]
+    assert json.loads(saved.calls.last.request.content)["texts"][0]["key"] == "page:home#title"
+
+
+def test_a_delivery_method_takes_its_names_in_other_languages() -> None:
+    detail = _data(runner.invoke(app, ["describe", "sellercart-delivery", "set-method"]).stdout)
+
+    fields = {f["field"]: f for f in detail["body_fields"]}
+    assert "names" in fields

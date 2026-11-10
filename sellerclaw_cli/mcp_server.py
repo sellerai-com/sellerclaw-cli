@@ -330,6 +330,7 @@ MCP_VISIBLE_GROUPS: frozenset[str] = frozenset(
         "sellercart-payouts",
         "sellercart-delivery",
         "sellercart-discounts",
+        "sellercart-translations",
         # Shopify storefront content (collections, pages, menus, theme files)
         "shopify-collections",
         "shopify-pages",

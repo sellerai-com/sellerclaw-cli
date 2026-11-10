@@ -152,10 +152,12 @@ SPECS = (
                 "display_languages",
                 repeatable=True,
                 help=(
-                    "Up to four extra languages buyers may switch the shop's OWN words into — the "
-                    "buttons, cart, checkout and emails — with a switcher in the header. Your "
-                    "products, pages, menus and blog are NOT translated: they stay in `language`. "
-                    "Optional — set it only when the owner asks for buyers abroad."
+                    "Up to four extra languages buyers may switch the shop into, with a switcher in "
+                    "the header: the shop's own buttons, cart, checkout and emails switch by "
+                    "themselves; pages, menus and category names switch to the translations you "
+                    "write with `sellercart-translations`. Products and the blog are NOT "
+                    "translated: they stay in `language`. Optional — set it only when the owner "
+                    "asks for buyers abroad."
                 ),
                 example=["de", "fr"],
             ),
@@ -276,14 +278,14 @@ SPECS = (
                 "display_languages",
                 repeatable=True,
                 help=(
-                    "The shop's FULL list of extra languages buyers may switch its OWN words into "
-                    "(buttons, cart, checkout, emails; up to four, not counting `language`). It "
-                    "REPLACES the current list — to add or drop one, send add_display_languages / "
-                    "remove_display_languages instead. [] removes the switcher. Nothing the seller "
-                    "wrote is translated: products, pages and menus stay in `language`. On a live "
-                    "shop it waits in the draft. A language the shop's fonts cannot draw (Russian "
-                    "in Space Grotesk, Libre Baskerville or DM Serif Display) swaps the font — "
-                    "compare `theme` in the reply and tell the owner."
+                    "The shop's FULL list of extra languages buyers may switch it into (up to four, "
+                    "not counting `language`). It REPLACES the current list — to add or drop one, "
+                    "send add_display_languages / remove_display_languages instead. [] removes the "
+                    "switcher. The shop's own words switch by themselves; pages, menus and category "
+                    "names only once you translate them (`sellercart-translations`). Products and "
+                    "the blog are NOT translated. On a live shop it waits in the draft. A language "
+                    "the shop's fonts cannot draw (Russian in Space Grotesk, Libre Baskerville or DM "
+                    "Serif Display) swaps the font — compare `theme` in the reply and tell the owner."
                 ),
                 example=["de", "fr"],
             ),
