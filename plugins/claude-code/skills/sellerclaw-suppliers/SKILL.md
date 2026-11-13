@@ -7,8 +7,9 @@ description: "Use when the user wants to find products at a supplier, check supp
 
 Finding supplier products, checking stock and shipping, and placing dropship orders via
 `sellerclaw_read` and `sellerclaw_write`. Run the examples directly; reach for `sellerclaw_describe` only for a command not
-shown here, or when a call errors on a field. Every command takes the **provider slug** (e.g. `cj`)
-as its first positional.
+shown here, or when a call errors on a field. Every command takes the **provider slug** (`cj`,
+`aliexpress`, …) as its first positional. With several suppliers connected, search each and pick by
+price with shipping to the buyer's country, then by delivery time.
 
 ## Find the product
 
@@ -102,6 +103,12 @@ sellerclaw_read(group="suppliers", command="get-tracking",  positionals={"provid
 
 `get-balance` tells you whether paying will go through; `get-order` re-reads one order's state.
 
+AliExpress (`aliexpress`) differs in four ways: a variant id is `<product_id>:<sku_id>` as
+`get-variants` returns it; `shipping_method` is the code its quote returned (`CAINIAO_FULFILLMENT_STD`);
+it has no wallet — an order is paid by AliExpress auto-pay (PayPal, switched on by the owner) or by the
+owner on aliexpress.com from the returned `pay_url`; and one purchase holds goods of one AliExpress
+store only. Its access lasts 60 days — after that the owner reconnects it on the Integrations page.
+
 Calling a purchase back — the owner cancelled, or shipped it themselves:
 
 ```text
@@ -114,7 +121,7 @@ sellerclaw_write(group="suppliers", command="cancel-order",
 
 A supplier with no integration (its rows in `list-accounts` have `"platform": "offline"`) leaves
 "where do the goods ship from?" to us, so it can have warehouses — each catalog product of it ships
-from one. CJ and Amazon have none: they choose the origin themselves.
+from one. CJ, AliExpress and Amazon have none: they choose the origin themselves.
 
 ```text
 sellerclaw_read(group="suppliers", command="list-warehouses", positionals={"supplier_id": SUPPLIER_ID})

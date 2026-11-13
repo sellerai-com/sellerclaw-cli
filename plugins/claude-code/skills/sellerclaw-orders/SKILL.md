@@ -56,7 +56,7 @@ status where it was.
 
 For an order the seller ships themselves (their own stock, an offline supplier's warehouse) and only
 when they connected Shippo: `orders get` → `shipping_label_offer.available` says whether a label can
-be bought, and `reason` why not. CJ and Amazon FBA orders are shipped by the supplier — no label.
+be bought, and `reason` why not. CJ, AliExpress and Amazon FBA orders are shipped by the supplier — no label.
 
 ```text
 # The rates, with the label drafted from the order — sender address, order address, weight, box.

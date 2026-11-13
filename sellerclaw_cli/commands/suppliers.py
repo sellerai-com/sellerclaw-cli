@@ -145,8 +145,8 @@ _BASE_SPECS = (
         summary=(
             "The places one of the owner's own suppliers ships from, each with how many catalog "
             "products ship from it and its shipping rates by country (`shipping_rates`). Only "
-            "suppliers with no integration have warehouses — CJ and Amazon decide where their "
-            "goods leave from."
+            "suppliers with no integration have warehouses — CJ, AliExpress and Amazon decide "
+            "where their goods leave from."
         ),
     ),
     Cmd(
