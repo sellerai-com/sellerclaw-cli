@@ -189,8 +189,9 @@ shop the same command changes the notice under approval: a field left out keeps 
 clears it. The date is shown only and never opens the shop automatically. `publish` reopens it without requiring a custom domain; Stripe must still
 be verified.
 
-A shop opens only on a domain the owner owns, once that domain is live: until then the first
-`publish` answers `domain_required`. Connect the domain early (below) — DNS takes time.
+A shop opens only with a product on sale: until one is published to it, `publish` answers
+`products_required`. And only on a domain the owner owns, once that domain is live: until then the
+first `publish` answers `domain_required`. Connect the domain early (below) — DNS takes time.
 
 ## Buyers' messages
 

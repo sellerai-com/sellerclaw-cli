@@ -137,14 +137,18 @@ SPECS = (
                 ),
                 example=[{"country": "CN", "price": 3, "days_min": 10, "days_max": 20}],
             ),
-            body_field("name", help="Rename the method.", example="Express"),
+            body_field(
+                "name",
+                help="Rename the method; its names in other languages go, and the server translates the new one.",
+                example="Express",
+            ),
             body_field(
                 "names",
                 type=dict,
                 help=(
-                    "The method's name in each of the shop's extra languages, by language code — "
-                    "what a buyer who switched the shop reads at checkout. Replaces the whole set; "
-                    "{} removes them."
+                    "Only when the owner wants particular words: the method's name in an extra "
+                    "language, by language code — otherwise the server translates the name itself. "
+                    "Replaces the whole set; {} removes them."
                 ),
                 example={"de": "Standardversand"},
             ),

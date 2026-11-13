@@ -154,10 +154,10 @@ SPECS = (
                 help=(
                     "Up to four extra languages buyers may switch the shop into, with a switcher in "
                     "the header: the shop's own buttons, cart, checkout and emails switch by "
-                    "themselves; pages, menus and category names switch to the translations you "
-                    "write with `sellercart-translations`. Products and the blog are NOT "
-                    "translated: they stay in `language`. Optional — set it only when the owner "
-                    "asks for buyers abroad."
+                    "themselves; everything the seller wrote — pages, menus, categories, delivery, "
+                    "products — is translated by the server on its own, on the owner's credits. The "
+                    "blog is NOT translated. Optional — set it only when the owner asks for buyers "
+                    "abroad."
                 ),
                 example=["de", "fr"],
             ),
@@ -182,9 +182,9 @@ SPECS = (
             body_field(
                 "source_store_id",
                 help=(
-                    "The owner's Amazon store the shop starts from (its id from `channels list`). "
-                    "The shop remembers it so its products step knows where they come from; the "
-                    "name, currency and language are still the values sent here."
+                    "The owner's Amazon or eBay store the shop starts from (its id from `channels "
+                    "list`). The shop remembers it so its products step knows where they come from; "
+                    "the name, currency and language are still the values sent here."
                 ),
                 example="3f1c2a9e-5b7d-4c8e-9a10-6d2b4e8f7c31",
             ),
@@ -281,9 +281,9 @@ SPECS = (
                     "The shop's FULL list of extra languages buyers may switch it into (up to four, "
                     "not counting `language`). It REPLACES the current list — to add or drop one, "
                     "send add_display_languages / remove_display_languages instead. [] removes the "
-                    "switcher. The shop's own words switch by themselves; pages, menus and category "
-                    "names only once you translate them (`sellercart-translations`). Products and "
-                    "the blog are NOT translated. On a live shop it waits in the draft. A language "
+                    "switcher. The shop's own words switch by themselves; everything the seller "
+                    "wrote is translated by the server on its own, within minutes, on the owner's "
+                    "credits (`sellercart-translations` shows it). The blog is NOT translated. On a live shop it waits in the draft. A language "
                     "the shop's fonts cannot draw (Russian in Space Grotesk, Libre Baskerville or DM "
                     "Serif Display) swaps the font — compare `theme` in the reply and tell the owner."
                 ),
@@ -340,6 +340,41 @@ SPECS = (
                     "asks to show them. On a live shop it waits in the draft."
                 ),
                 example=True,
+            ),
+            body_field(
+                "show_amazon_reviews",
+                type=bool,
+                help=(
+                    "True puts a 'Reviews on Amazon' button on each product page and a link to the "
+                    "seller's Amazon rating in the footer — links only, the reviews stay on Amazon. "
+                    "Only for a shop started from an Amazon store (409 amazon_store_required "
+                    "otherwise). Off by default and the owner's call: a buyer who follows the link "
+                    "may buy on Amazon instead. On a live shop it waits in the draft."
+                ),
+                example=True,
+            ),
+            body_field(
+                "show_ebay_feedback",
+                type=bool,
+                help=(
+                    "True puts a link to the seller's feedback on eBay in the footer — a link only, "
+                    "eBay keeps the rating. Only for a shop started from an eBay store (409 "
+                    "ebay_store_required otherwise). Off by default and the owner's call. On a live "
+                    "shop it waits in the draft."
+                ),
+                example=True,
+            ),
+            body_field(
+                "translation_rules",
+                help=(
+                    "How the shop is put into its other languages, in the owner's own words — formal "
+                    "or familiar address, words never translated, preferred terms (up to 1000 "
+                    "characters; empty string clears). The server follows it for every text it "
+                    "translates from then on. Applies at once and redoes nothing: use "
+                    "`sellercart-translations retranslate` for what is already translated."
+                ),
+                example="Address buyers with 'du'. Never translate 'Hoodie'.",
+                clearable=True,
             ),
             body_field(
                 "product_cta_label",
@@ -436,8 +471,9 @@ SPECS = (
             "approved_queued when the owner's Autopilot answers it). If the owner asked for this "
             "publish, their message is the answer: hand it to `action-requests confirm` instead of "
             "asking them again. Refused before asking: nothing_to_publish, home_page_required, "
-            "payments_required, domain_required (first opening requires the owner's live custom "
-            "domain; reopening a deliberately closed shop does not), publish_already_pending."
+            "payments_required, products_required (a shop opens only with a product on sale — "
+            "publish products first), domain_required (first opening requires the owner's live "
+            "custom domain; reopening a deliberately closed shop does not), publish_already_pending."
         ),
         body=(
             body_field(

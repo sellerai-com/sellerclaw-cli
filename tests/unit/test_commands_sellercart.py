@@ -312,6 +312,31 @@ def test_update_shows_sold_out_products(
     assert json.loads(route.calls.last.request.content) == body
 
 
+@pytest.mark.parametrize(
+    "body",
+    [
+        pytest.param({"show_amazon_reviews": True}, id="amazon-reviews"),
+        pytest.param({"show_ebay_feedback": True}, id="ebay-feedback"),
+        pytest.param({"show_ebay_feedback": False}, id="ebay-feedback-off"),
+    ],
+)
+@respx.mock
+def test_update_links_the_shop_to_its_marketplace_reviews(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+    body: dict[str, bool],
+) -> None:
+    """The shop's links to the source store's reviews reach the server as sent."""
+    route = respx.patch(f"{fake_api_url}/agent/sellercart").mock(
+        return_value=httpx.Response(200, json=body)
+    )
+
+    result = runner.invoke(app, ["sellercart", "update", "-b", json.dumps(body)])
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == body
+
+
 @respx.mock
 def test_the_product_button_can_be_cleared(
     env_pointing_at_fake_api: None,  # noqa: ARG001
@@ -1468,9 +1493,9 @@ def test_update_offers_adding_and_removing_one_language() -> None:
     fields = {f["field"]: f for f in detail["body_fields"]}
     assert fields["add_display_languages"]["repeatable"] is True
     assert fields["remove_display_languages"]["repeatable"] is True
-    # "Translate my shop" is the trap: the help says which texts switch, and that products do not.
-    assert "sellercart-translations" in fields["display_languages"]["help"]
-    assert "Products and the blog are NOT translated" in fields["display_languages"]["help"]
+    # "Translate my shop": the help says the server translates it all, and what it leaves out.
+    assert "translated by the server on its own" in fields["display_languages"]["help"]
+    assert "The blog is NOT translated" in fields["display_languages"]["help"]
 
 
 @respx.mock
@@ -1521,6 +1546,39 @@ def test_translations_go_to_the_shop_as_given(
     assert put.exit_code == 0, put.stdout
     assert listed.calls.last.request.url.params.get_list("status") == ["missing", "outdated"]
     assert json.loads(saved.calls.last.request.content)["texts"][0]["key"] == "page:home#title"
+
+
+@respx.mock
+def test_products_are_retranslated_on_request(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.post(f"{fake_api_url}/agent/sellercart/translations/retranslate").mock(
+        return_value=httpx.Response(
+            200,
+            json={"products": 1, "queued_texts": 2, "queued_terms": 0, "languages": ["de"], "unknown_ids": []},
+        )
+    )
+    body = {
+        "listing_ids": ["3b9c1e2a-5d7f-4a6b-9c8d-1e2f3a4b5c6d"],
+        "fields": ["description"],
+        "terms": True,
+        "shop_texts": True,
+    }
+
+    result = runner.invoke(app, ["sellercart-translations", "retranslate", "-b", json.dumps(body)])
+    described = _data(runner.invoke(app, ["describe", "sellercart-translations", "retranslate"]).stdout)
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == body
+    assert "shop_texts" in {f["field"] for f in described["body_fields"]}
+
+
+def test_translation_rules_are_a_setting_of_the_shop() -> None:
+    detail = _data(runner.invoke(app, ["describe", "sellercart", "update"]).stdout)
+
+    fields = {f["field"]: f for f in detail["body_fields"]}
+    assert "retranslate" in fields["translation_rules"]["help"]
 
 
 def test_a_delivery_method_takes_its_names_in_other_languages() -> None:
