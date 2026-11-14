@@ -377,6 +377,17 @@ SPECS = (
                 clearable=True,
             ),
             body_field(
+                "country",
+                help=(
+                    "Where the shop's business is based, as a two-letter ISO code — only from the "
+                    "owner's own words, never guessed from the currency, the language or where it "
+                    "delivers. The shop's ChatGPT product feed states it; `US` until the owner says "
+                    "otherwise. Where the shop delivers is its delivery zones, not this. Applies at "
+                    "once."
+                ),
+                example="DE",
+            ),
+            body_field(
                 "product_cta_label",
                 help=(
                     "The seller's own button where 'Add to cart' would be on a catalog shop, e.g. "

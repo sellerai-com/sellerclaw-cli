@@ -36,6 +36,7 @@ Many groups take an id as the **first positional** (e.g. a store id for `shopify
 | `sellercart-pages` / `sellercart-menus` / `sellercart-media` | Pages built from blocks, header/footer navigation, the shop's image library. |
 | `sellercart-translations` | The shop's pages, menus, category names and product button in its extra languages. |
 | `sellercart-products` | What is on the shelves, and each product's search title and description. |
+| `sellercart-feeds` | The shop's product feeds for ads in ChatGPT, Google Shopping, Facebook and Instagram: which platforms picked them up, which products are left out and why, keeping products out. |
 | `sellercart-messages` | Read buyers' conversations without clearing the owner's unread mark; propose approval-gated answers. |
 | `sellercart-payouts` | Stripe onboarding and tax — with delivery, what has to be true before checkout opens. |
 | `sellercart-delivery` | Where the shop delivers: zones of countries, and the fixed or at-cost methods priced in each. |

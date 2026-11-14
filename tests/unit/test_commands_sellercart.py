@@ -172,6 +172,22 @@ def test_update_switches_the_language_the_shop_speaks(
     assert json.loads(route.calls.last.request.content) == {"language": "ru"}
 
 
+@respx.mock
+def test_update_says_where_the_shop_is_based(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """What the shop's ChatGPT product feed states as its country."""
+    route = respx.patch(f"{fake_api_url}/agent/sellercart").mock(
+        return_value=httpx.Response(200, json={"country": "DE"})
+    )
+
+    result = runner.invoke(app, ["sellercart", "update", "-b", json.dumps({"country": "DE"})])
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {"country": "DE"}
+
+
 @pytest.mark.parametrize(
     "command",
     [

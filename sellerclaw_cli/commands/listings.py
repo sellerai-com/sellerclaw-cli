@@ -336,8 +336,9 @@ SPECS = (
         summary=(
             "Apply per-listing changes to many listings at once — published ones too, not only "
             "drafts — and get each one's fresh readiness back in the same call. Body: 'items' is a "
-            "list of {listing_id, patch:{title?, description?, sell_prices?, quantities?, images?, "
-            "variation_images?, videos?, attributes?, weight_grams?, box_id?, sync_package?}} — the "
+            "list of {listing_id, patch:{title?, description?, brand?, sell_prices?, quantities?, "
+            "images?, variation_images?, videos?, attributes?, weight_grams?, box_id?, "
+            "sync_package?}} — the "
             "listing_id is the listing's own id, and a "
             "variation's id is refused up front with the listing id to use instead (the whole "
             "batch, before anything is written); sell_prices / quantities are keyed by SKU. Nothing "
@@ -358,7 +359,8 @@ SPECS = (
                 type=list,
                 required=True,
                 help=(
-                    "List of {listing_id, patch}. patch keys: title, description, sell_prices "
+                    "List of {listing_id, patch}. patch keys: title, description, brand (the "
+                    "brand as the owner names it; \"\" clears it), sell_prices "
                     "(SKU->price), quantities (SKU->qty), images (the listing's whole gallery in "
                     "publish order — the first is the cover, and the list replaces what was "
                     "there), variation_images (variation listing id -> photo URL, null clears one), "

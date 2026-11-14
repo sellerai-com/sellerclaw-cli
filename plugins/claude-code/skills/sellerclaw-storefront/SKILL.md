@@ -220,6 +220,27 @@ sellerclaw_write(group="sellercart-domain", command="check")     # after they ad
 Read the returned `dns_records` out **verbatim** — name, type and value. DNS takes minutes to hours,
 so a domain still pending is waiting, not broken.
 
+## Product ads — feeds for ChatGPT, Google and Meta
+
+```text
+sellerclaw_read(group="sellercart-feeds", command="status")
+sellerclaw_write(group="listings", command="bulk-update",
+  body={"items": [{"listing_id": LISTING_ID, "patch": {"brand": "Northline"}}]})
+sellerclaw_write(group="sellercart-feeds", command="keep-out", body={"products": [PRODUCT_ID]})
+sellerclaw_write(group="sellercart-feeds", command="put-back", body={"products": [PRODUCT_ID]})
+```
+
+An open shop that sells online keeps three product feeds at links on its own domain — for ChatGPT
+Ads Manager, Google Merchant Center and Meta Commerce Manager. The owner pastes a link into the
+platform once; prices and stock follow by themselves. `status` says, per platform, the link, how many
+products are in, whether the platform has picked the feed up, and which products are left out and
+why. Read it there — opening a feed's address yourself counts as the platform picking it up.
+
+A product without a brand stays out of the ChatGPT and Google feeds. **The brand comes from the
+owner**: ask, never guess one, never put the shop's name. Write it on the SellerCart listing
+(`bulk-update` with `brand`) — it reaches the feeds on their next download. `keep-out` takes products
+out of every feed while they stay on sale; `put-back` undoes it.
+
 ## Afterwards
 
 `sellercart traffic` is the shop's own counter: visitors, what they looked at, where they came from
