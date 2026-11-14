@@ -678,9 +678,13 @@ To build the bundle yourself: `make mcpb` (produces `dist/sellerclaw.mcpb`); the
 > Where the directory isn't available, add `https://mcp.sellerclaw.ai/mcp` as a **custom connector**
 > (Customize → Connectors → Add). Claude registers itself, so there are no credentials to create.
 
-> **ChatGPT** connects to `https://mcp.sellerclaw.ai/chatgpt/mcp` — the same server and sign-in, with
-> one tool per action (`list_connections`, `publish_listings`, `ship_order`, …) instead of the
-> read/write runners, as OpenAI's plugin directory requires. The tools live in
+> **ChatGPT**: install SellerClaw from ChatGPT's plugin directory — open
+> [SellerClaw's listing](https://chatgpt.com/plugins/plugin_asdk_app_6ad14458cd00819190dab0fe107b5850),
+> press **Install plugin**, then **Connect**, and sign in. The plugin talks to
+> `https://mcp.sellerclaw.ai/chatgpt/mcp` — the same server and sign-in, with one tool per action
+> (`list_connections`, `publish_listings`, `ship_order`, …) instead of the read/write runners, as
+> OpenAI's plugin directory requires; where the directory isn't offered, that address can be added
+> as a custom plugin in Developer mode. The tools live in
 > [`sellerclaw_cli/chatgpt/`](sellerclaw_cli/chatgpt/); the plugin package is `make chatgpt-zip`.
 
 ### Teach Claude to use it (skill)
