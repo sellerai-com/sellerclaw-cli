@@ -1293,6 +1293,37 @@ def test_domain_connect_returns_the_dns_record_to_read_out(
 
 
 @respx.mock
+def test_domain_offers_asks_for_names_and_hands_back_the_buy_links(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.get(f"{fake_api_url}/agent/sellercart/domain/offers").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "query": "acmegear",
+                "offers": [
+                    {
+                        "name": "acmegear.com",
+                        "price_cents": 1199,
+                        "renewal_price_cents": 1199,
+                        "currency": "usd",
+                        "buy_link": "https://app.example.com/integrations/sellercart?open=domain&buy=acmegear.com",
+                    }
+                ],
+                "taken": [],
+            },
+        )
+    )
+
+    result = runner.invoke(app, ["sellercart-domain", "offers", "--q", "acmegear"])
+
+    assert result.exit_code == 0, result.stderr
+    assert route.calls.last.request.url.params["q"] == "acmegear"
+    assert "open=domain&buy=acmegear.com" in result.stdout
+
+
+@respx.mock
 def test_domain_check_forces_a_recheck(
     env_pointing_at_fake_api: None,  # noqa: ARG001
     fake_api_url: str,

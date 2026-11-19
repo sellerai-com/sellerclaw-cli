@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typer
 
-from sellerclaw_cli._command_group import Cmd, body_field, build_group
+from sellerclaw_cli._command_group import Cmd, body_field, build_group, flag
 
 NAME = "sellercart-domain"
 
@@ -15,6 +15,27 @@ SPECS = (
             "The shop's custom domain and how far it is from live, or that this deployment has none. "
             "'available': false means custom domains are switched off here — say so rather than "
             "walking the seller into a step that cannot finish."
+        ),
+    ),
+    Cmd(
+        "offers",
+        "GET",
+        "/agent/sellercart/domain/offers",
+        summary=(
+            "Names the seller can buy for the shop through SellerClaw, checked with the registry, at "
+            "our price (first year and each renewal). Suggest 3-5 and give each 'buy_link': it opens "
+            "the shop's domain window with that name chosen, and the seller pays there with their own "
+            "card — never buy a domain yourself. 'taken' lists exact names someone already owns. "
+            "'starter_required' means buying is not offered on their plan: do not mention buying, "
+            "help them connect a domain they already own instead."
+        ),
+        flags=(
+            flag(
+                "q",
+                required=True,
+                help="A word or two (the shop's name, its niche), or a whole name like acmegear.com.",
+                aliases=("--query",),
+            ),
         ),
     ),
     Cmd(
