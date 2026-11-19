@@ -773,6 +773,65 @@ def test_one_order_card_prints_the_address_but_not_the_phone_or_email() -> None:
             },
             id="connections-without-whose-account-it-is",
         ),
+        pytest.param(
+            "sellerclaw_media",
+            {
+                "library": {
+                    "files": [
+                        {
+                            "id": "u-1",
+                            "file_id": "f-1",
+                            "category": "video",
+                            "filename": "reel.mp4",
+                            "content_type": "video/mp4",
+                            "size_bytes": 7292132,
+                            "download_url": "https://api.test/agent/files/f-1/reel.mp4",
+                            "thumbnail_url": "https://api.test/agent/files/t-1/poster.jpg",
+                            "duration_seconds": 19.6,
+                        }
+                    ],
+                    "totals": {"video": 1},
+                }
+            },
+            {
+                "library": {
+                    "files": [
+                        {
+                            "id": "u-1",
+                            "category": "video",
+                            "filename": "reel.mp4",
+                            "download_url": "https://api.test/agent/files/f-1/reel.mp4",
+                            "thumbnail_url": "https://api.test/agent/files/t-1/poster.jpg",
+                        }
+                    ],
+                    "totals": {"video": 1},
+                }
+            },
+            id="library-tiles-keep-their-thumbnails",
+        ),
+        pytest.param(
+            "sellerclaw_media_studio",
+            {
+                "recent_images": [
+                    {
+                        "id": "u-2",
+                        "filename": "kettle.png",
+                        "download_url": "https://api.test/agent/files/f-2/kettle.png",
+                        "thumbnail_url": "https://api.test/agent/files/t-2/thumbnail.webp",
+                    }
+                ]
+            },
+            {
+                "recent_images": [
+                    {
+                        "filename": "kettle.png",
+                        "download_url": "https://api.test/agent/files/f-2/kettle.png",
+                        "thumbnail_url": "https://api.test/agent/files/t-2/thumbnail.webp",
+                    }
+                ]
+            },
+            id="studio-photo-strip-keeps-thumbnails",
+        ),
     ],
 )
 def test_cards_hand_chatgpt_what_they_draw(tool: str, payload: dict[str, Any], expected: dict[str, Any]) -> None:

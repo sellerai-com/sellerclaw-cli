@@ -200,7 +200,10 @@ _MEDIA = _fields(
     "filters",
     "asked",
     library=_fields(
-        "next", files=_fields("id", "category", "filename", "download_url"), totals=_fields("image", "video")
+        "next",
+        # A tile shows ``thumbnail_url`` (a few dozen KB) once the server has made it, else the file itself.
+        files=_fields("id", "category", "filename", "download_url", "thumbnail_url"),
+        totals=_fields("image", "video"),
     ),
     jobs=_fields("id", "kind", "status", "prompt", "model", "params", "photos", "result_url", "error", "created_at"),
 )
@@ -208,7 +211,7 @@ _MEDIA = _fields(
 _MEDIA_STUDIO = _fields(
     "draft",
     "can_upload",
-    recent_images=_fields("download_url", "filename"),
+    recent_images=_fields("download_url", "filename", "thumbnail_url"),
     models=_fields(
         tasks=_fields(
             "task",

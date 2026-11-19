@@ -2548,9 +2548,9 @@ def test_the_library_is_images_videos_and_sounds_merged_newest_first(
 
     asked = [dict(call.request.url.params) for call in files.calls]
     assert asked == [
-        {"category": "image", "q": "mug", "limit": "24"},
-        {"category": "video", "q": "mug", "limit": "24"},
-        {"category": "audio", "q": "mug", "limit": "24"},
+        {"category": "image", "q": "mug", "limit": "12"},
+        {"category": "video", "q": "mug", "limit": "12"},
+        {"category": "audio", "q": "mug", "limit": "12"},
     ]
     library = result.structured_content["library"]
     assert [item["filename"] for item in library["files"]] == ["mug.mp4", "mug.png", "mug-jingle.mp3"]
@@ -2571,7 +2571,7 @@ def test_a_library_asked_for_one_kind_reads_only_that_kind(
 
     result = _call("sellerclaw_media", {"category": "video"})
 
-    assert [dict(call.request.url.params) for call in files.calls] == [{"category": "video", "limit": "24"}]
+    assert [dict(call.request.url.params) for call in files.calls] == [{"category": "video", "limit": "12"}]
     assert result.structured_content["library"]["totals"] == {"video": 0}
     assert "next" not in result.structured_content["library"]
 
@@ -2581,14 +2581,14 @@ def test_a_library_asked_for_one_kind_reads_only_that_kind(
     [
         pytest.param(
             {"offset": 24},
-            {"category": "media", "limit": "24", "offset": "24"},
+            {"category": "media", "limit": "12", "offset": "24"},
             50,
             {"totals": {}, "offset": 24, "next": 26},
             id="both-kinds-as-one-list",
         ),
         pytest.param(
             {"offset": 24, "category": "video", "query": "mug"},
-            {"category": "video", "q": "mug", "limit": "24", "offset": "24"},
+            {"category": "video", "q": "mug", "limit": "12", "offset": "24"},
             26,
             {"totals": {"video": 26}, "offset": 24},
             id="one-kind-last-page",

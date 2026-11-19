@@ -146,8 +146,10 @@ _FILES_SECTION = "files"
 _LIBRARY_KINDS = ("image", "video", "audio")
 #: Files Claude can pick in advance for "From my files": as many as the card takes.
 _STUDIO_FILES = 10
-#: The library opens on this many of each kind: a screenful of tiles, newest first.
-_LIBRARY_LIMIT = 24
+#: The library opens on this many files, newest first: two rows of tiles, the rest behind "Show more". Each tile
+#: loads its file — a 2 MB picture, a video the browser starts to download whole — so 24 at once weighed some 30 MB
+#: and kept two dozen connections open (19.11.2026).
+_LIBRARY_LIMIT = 12
 #: The studio's picker of a picture to edit or animate: the latest images, not the whole library.
 _STUDIO_PICTURES = 12
 #: Photos Claude can carry into the studio: as many as one generation takes (an image from six).
