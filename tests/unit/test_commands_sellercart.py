@@ -1129,6 +1129,111 @@ def test_zones_and_methods_are_removed_by_name(
     assert route.call_count == 1
 
 
+@respx.mock
+def test_how_a_suppliers_options_read_is_sent_as_the_body_says(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.put(f"{fake_api_url}/agent/sellercart/delivery/supplier-options").mock(
+        return_value=httpx.Response(200, json={"zones": []})
+    )
+    body = {
+        "express": False,
+        "days": "own",
+        "standard_name": "Free tracked shipping",
+        "standard_names": {"de": "Kostenloser Versand"},
+        "standard_days_min": 7,
+        "standard_days_max": 20,
+    }
+
+    result = runner.invoke(
+        app, ["sellercart-delivery", "set-supplier-options", "-b", json.dumps(body)]
+    )
+
+    assert result.exit_code == 0, result.stderr or result.stdout
+    assert json.loads(route.calls.last.request.content) == body
+
+
+@pytest.mark.parametrize(
+    ("flags", "body"),
+    [
+        pytest.param(["--no-express"], {"express": False}, id="express-off"),
+        pytest.param(["--express"], {"express": True}, id="express-on"),
+        pytest.param(
+            ["--days", "padded", "--padding-days", "3"],
+            {"days": "padded", "padding_days": 3},
+            id="handling-days",
+        ),
+        pytest.param(
+            ["--standard-name", "Kim's tracked shipping"],
+            {"standard_name": "Kim's tracked shipping"},
+            id="a-name-with-an-apostrophe-needs-no-json",
+        ),
+        pytest.param(["--express-name", "null"], {"express_name": None}, id="back-to-the-built-in-name"),
+        pytest.param(
+            ["--days", "own", "--standard-days-min", "7", "--standard-days-max", "20"],
+            {"days": "own", "standard_days_min": 7, "standard_days_max": 20},
+            id="an-own-window",
+        ),
+    ],
+)
+@respx.mock
+def test_a_suppliers_options_are_set_with_flags_as_well(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+    flags: list[str],
+    body: dict[str, object],
+) -> None:
+    route = respx.put(f"{fake_api_url}/agent/sellercart/delivery/supplier-options").mock(
+        return_value=httpx.Response(200, json={"zones": []})
+    )
+
+    result = runner.invoke(app, ["sellercart-delivery", "set-supplier-options", *flags])
+
+    assert result.exit_code == 0, result.stderr or result.stdout
+    assert json.loads(route.calls.last.request.content) == body
+
+
+@pytest.mark.parametrize(
+    ("args", "named"),
+    [
+        pytest.param(["--days", "weekly"], "supplier, hidden, padded, own", id="a-days-mode-there-is-not"),
+        pytest.param(["-b", json.dumps({"amazon": False})], "amazon", id="amazons-speeds-are-not-this"),
+    ],
+)
+def test_a_suppliers_options_the_command_does_not_describe_are_refused_locally(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    args: list[str],
+    named: str,
+) -> None:
+    result = runner.invoke(app, ["sellercart-delivery", "set-supplier-options", *args])
+
+    assert result.exit_code != 0
+    assert named in (result.stderr or result.stdout)
+
+
+def test_the_supplier_options_command_describes_every_field_it_sends() -> None:
+    detail = _data(runner.invoke(app, ["describe", "sellercart-delivery", "set-supplier-options"]).stdout)
+    fields = {f["field"]: f for f in detail["body_fields"]}
+
+    assert set(fields) == {
+        "express",
+        "days",
+        "padding_days",
+        "standard_name",
+        "express_name",
+        "standard_names",
+        "express_names",
+        "standard_days_min",
+        "standard_days_max",
+        "express_days_min",
+        "express_days_max",
+    }
+    assert fields["padding_days"]["type"] == "int"
+    assert fields["express"]["type"] == "bool"
+    assert "own" in str(fields["days"])
+
+
 def test_the_one_price_delivery_command_is_gone() -> None:
     """Zones replaced it; an agent reaching for it is pointed at `sellercart-delivery` instead."""
     result = runner.invoke(app, ["sellercart-payouts", "delivery", "-b", "{}"])

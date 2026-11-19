@@ -23,13 +23,15 @@ SPECS = (
         "/agent/sellercart/delivery",
         summary=(
             "How the shop's checkout prices delivery, and where it delivers. Each parcel is priced "
-            "by whoever sends it: CJ's and Amazon's goods at the supplier's own price (CJ's cheapest "
-            "and fastest, Amazon's speeds), the goods the seller sends themselves through their "
-            "Shippo when the shop agreed to it ('shippo'), otherwise at the zone's methods — which "
-            "price only those. 'breakdown' counts the shelf that way, with the products Shippo "
-            "cannot price for want of a weight or a box. The margin — 'margin_percent' of the price, "
-            "then 'margin_amount' added to each parcel — rides on the suppliers' and Shippo's prices "
-            "only. Read it before changing anything, and repeat the 'warnings' to the owner."
+            "by whoever sends it: CJ's, AliExpress's and Amazon's goods at the supplier's own price "
+            "(CJ's and AliExpress's cheapest and fastest as Standard and Express — read as "
+            "'supplier_options' says — Amazon's speeds), the goods the seller sends themselves "
+            "through their Shippo when the shop agreed to it ('shippo'), otherwise at the zone's "
+            "methods — which price only those. 'breakdown' counts the shelf that way, with the "
+            "products Shippo cannot price for want of a weight or a box. The margin — "
+            "'margin_percent' of the price, then 'margin_amount' added to each parcel — rides on the "
+            "suppliers' and Shippo's prices only. Read it before changing anything, and repeat the "
+            "'warnings' to the owner."
         ),
     ),
     Cmd(
@@ -155,6 +157,123 @@ SPECS = (
         ),
     ),
     Cmd(
+        "set-supplier-options",
+        "PUT",
+        "/agent/sellercart/delivery/supplier-options",
+        summary=(
+            "How the checkout offers the goods CJ and AliExpress send themselves: their cheapest "
+            "service as \"Standard\", their fastest as \"Express\" when it really is faster. Turn "
+            "Express off, give either option the owner's own name, and choose the delivery time "
+            "buyers read: the supplier's estimate ('supplier', the default), none ('hidden'), the "
+            "estimate plus 'padding_days' on both ends ('padded'), or the owner's own window for "
+            "each option ('own' — Express's too while it is offered). Only what buyers read "
+            "changes: the supplier's prices and services stay, and Amazon's speeds and the seller's "
+            "own methods are never touched. Only on the owner's word; it reaches buyers at once, "
+            f"with no publish. {_KEEP} Read it back with `list` ('supplier_options')."
+        ),
+        body=(
+            body_field(
+                "express",
+                type=bool,
+                option="--express",
+                help="--no-express: CJ's and AliExpress's goods offer only their cheapest service.",
+            ),
+            body_field(
+                "days",
+                choices=("supplier", "hidden", "padded", "own"),
+                option="--days",
+                help=(
+                    "The delivery time buyers read: the supplier's estimate, none, the estimate "
+                    "plus 'padding_days', or the owner's own window per option. Another mode drops "
+                    "what the old one held."
+                ),
+                example="hidden",
+            ),
+            body_field(
+                "padding_days",
+                type=int,
+                option="--padding-days",
+                help=(
+                    "With days 'padded': days for handling added to both ends of the supplier's "
+                    "estimate, 1–30. An estimate the supplier did not give stays unstated."
+                ),
+                example=3,
+            ),
+            body_field(
+                "standard_name",
+                nullable=True,
+                option="--standard-name",
+                help=(
+                    "The owner's name for the cheaper option, up to 60 characters; the server "
+                    "translates it. null puts the built-in name back. A new name drops its names "
+                    "in other languages."
+                ),
+                example="Free tracked shipping",
+            ),
+            body_field(
+                "express_name",
+                nullable=True,
+                option="--express-name",
+                help="The same for the faster option.",
+                example="Priority",
+            ),
+            body_field(
+                "standard_names",
+                type=dict,
+                help=(
+                    "Only when the owner wants particular words: the cheaper option's name in an "
+                    "extra language, by language code — needs 'standard_name'. Replaces the whole "
+                    "set; {} removes them."
+                ),
+                example={"de": "Kostenloser Versand"},
+            ),
+            body_field(
+                "express_names",
+                type=dict,
+                help="The same for the faster option — needs 'express_name'.",
+                example={"de": "Schnellversand"},
+            ),
+            body_field(
+                "standard_days_min",
+                type=int,
+                nullable=True,
+                option="--standard-days-min",
+                help=(
+                    "With days 'own': the cheaper option's window in days, 1–120, with "
+                    "standard_days_max — required in that mode. null for both drops it."
+                ),
+                example=7,
+            ),
+            body_field(
+                "standard_days_max",
+                type=int,
+                nullable=True,
+                option="--standard-days-max",
+                help="See standard_days_min.",
+                example=20,
+            ),
+            body_field(
+                "express_days_min",
+                type=int,
+                nullable=True,
+                option="--express-days-min",
+                help=(
+                    "With days 'own': the faster option's window, required while Express is on; it "
+                    "must end sooner than Standard's. null for both drops it."
+                ),
+                example=4,
+            ),
+            body_field(
+                "express_days_max",
+                type=int,
+                nullable=True,
+                option="--express-days-max",
+                help="See express_days_min.",
+                example=8,
+            ),
+        ),
+    ),
+    Cmd(
         "delete-method",
         "DELETE",
         "/agent/sellercart/delivery/zones/{zone}/methods/{method}",
@@ -167,7 +286,8 @@ SPECS = (
 
 app = build_group(
     NAME,
-    "Where the shop delivers: zones of countries, and the seller's own methods priced in each.",
+    "Where the shop delivers: zones of countries, the seller's own methods priced in each, and how "
+    "CJ's and AliExpress's options read at checkout.",
     SPECS,
 )
 

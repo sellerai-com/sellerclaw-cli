@@ -143,12 +143,20 @@ sellerclaw_write(group="sellercart-delivery", command="set-method",
 sellerclaw_write(group="sellercart", command="update",
   body={"delivery_margin_percent": 10, "delivery_margin_amount": 1})
 sellerclaw_write(group="sellercart", command="update", body={"shippo_rates": True})   # owner's yes only
+sellerclaw_write(group="sellercart-delivery", command="set-supplier-options",
+  body={"express": False, "days": "hidden", "standard_name": "Free tracked shipping"})
 ```
 
 An order is split into parcels by who sends them, and the buyer picks an option for each:
 
-- **CJ and Amazon** goods go only with the supplier, at its price: CJ's cheapest ("Standard") and its
-  fastest ("Express", when really faster), Amazon's own speeds. Nothing to set for them.
+- **CJ, AliExpress and Amazon** goods go only with the supplier, at its price: CJ's and AliExpress's
+  cheapest ("Standard") and fastest ("Express", when really faster), Amazon's own speeds. How CJ's and
+  AliExpress's options read is the owner's to choose with `set-supplier-options`: Express off
+  (`express: false`), their own names (`standard_name` / `express_name`, translated by the server,
+  `null` back to the built-in one), and the delivery time buyers read — `days`: `supplier` (the
+  default), `hidden`, `padded` (plus `padding_days` on both ends; an estimate the supplier did not give
+  stays unstated) or `own` (`standard_days_min`/`max`, and Express's while it is offered). Only on the
+  owner's word; `list` reads it back as `supplier_options`.
 - **The seller's own goods** go at their Shippo account's live rates when the shop agreed to it
   (`shippo_rates: true`) and the product has a weight and a box — otherwise at the zone's methods.
   `list` shows the `shippo` state and a `breakdown` of the shelf, with the products Shippo can't
@@ -164,12 +172,12 @@ each option costs — never invent a delivery price.
 
 `free_over` makes a parcel's cheapest option free from that goods total, counted per parcel. The
 margin (`delivery_margin_percent`, `delivery_margin_amount` per parcel) rides only on CJ's, Amazon's
-and Shippo's prices, and only when the buyer pays for that delivery. `list` says whether product
-prices already include the supplier's delivery (`shipping_included_in_price`): then a supplier's
-parcel charges only the cost beyond that. Read its `warnings` out to the owner.
+and Shippo's prices, and only when the buyer pays for that delivery. Product prices never hold the
+supplier's delivery: the checkout charges it on top. Read `list`'s `warnings` out to the owner.
 
-Changes reach buyers at once, with no publish. Fields left out of `set-zone` / `set-method` keep
-their value; `null` clears one (`free_over`, the days); a list sent replaces the whole list.
+Changes reach buyers at once, with no publish. Fields left out of `set-zone` / `set-method` /
+`set-supplier-options` keep their value; `null` clears one (`free_over`, the days, a name); a list sent
+replaces the whole list.
 
 ## Going live
 
