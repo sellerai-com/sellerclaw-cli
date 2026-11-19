@@ -59,8 +59,8 @@ _SPECS = (
             ),
             flag(
                 "category",
-                choices=("image", "video", "file"),
-                help="Narrow to one kind: image, video, or everything else.",
+                choices=("image", "video", "audio", "file"),
+                help="Narrow to one kind: image, video, audio, or file (documents and everything else).",
             ),
         ),
     ),
@@ -132,7 +132,9 @@ def list_user_files(
     limit: int | None = typer.Option(None, "--limit", help="limit"),
     q: str | None = typer.Option(None, *SEARCH_FLAG_SPELLINGS, help="Match against the filename."),
     category: str | None = typer.Option(
-        None, "--category", help="Narrow to one kind: image, video, or everything else."
+        None,
+        "--category",
+        help="Narrow to one kind: image, video, audio, or file (documents and everything else).",
     ),
 ) -> None:
     path = "/agent/files/"
