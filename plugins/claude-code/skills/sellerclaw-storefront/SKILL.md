@@ -228,6 +228,17 @@ sellerclaw_write(group="sellercart-domain", command="check")     # after they ad
 Read the returned `dns_records` out **verbatim** — name, type and value. DNS takes minutes to hours,
 so a domain still pending is waiting, not broken.
 
+No domain yet? They can buy one inside SellerClaw:
+
+```text
+sellerclaw_read(group="sellercart-domain", command="offers", flags={"q": "acmegear"})
+```
+
+Suggest 3–5 names with their price and renewal price, and give each `buy_link` — it opens the
+shop's domain window on that name, where the owner pays with their own card and everything is set up
+for them (no DNS records). Never buy for them. `starter_required` means buying is not offered on
+their plan: don't mention it, help them connect a domain they own.
+
 ## Product ads — feeds for ChatGPT, Google and Meta
 
 ```text
