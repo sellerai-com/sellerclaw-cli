@@ -16,6 +16,7 @@ from sellerclaw_cli._command_group import LONG_TIMEOUT_SECONDS
 from sellerclaw_cli._errors import UserInputError
 from sellerclaw_cli.mcp_server import (
     _LIST_CACHE_TTL_MS,
+    AuthCheckUnavailable,
     SellerclawTokenVerifier,
     _client_for_tool,
     _http_transport_options,
@@ -366,12 +367,88 @@ def test_token_verifier_accepts_token_the_agent_api_accepts() -> None:
 
 
 @respx.mock
-@pytest.mark.parametrize("status", [401, 403, 500])
+@pytest.mark.parametrize("status", [401, 403, 404])
 def test_token_verifier_rejects_token_the_agent_api_rejects(status: int) -> None:
     respx.get(f"{API_URL}/agent/me").mock(return_value=httpx.Response(status, json={"detail": "x"}))
     verifier = SellerclawTokenVerifier(api_url=API_URL)
 
     assert asyncio.run(verifier.verify_token("sca_bad")) is None
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    ("answer", "reason"),
+    [
+        pytest.param(httpx.ConnectTimeout("slow"), "did not answer: ConnectTimeout", id="timed-out"),
+        pytest.param(httpx.ConnectError("refused"), "did not answer: ConnectError", id="unreachable"),
+        pytest.param(httpx.Response(500), "answered 500", id="failed"),
+        pytest.param(httpx.Response(502), "answered 502", id="bad-gateway"),
+        pytest.param(httpx.Response(503), "answered 503", id="unavailable"),
+        pytest.param(httpx.Response(429), "answered 429", id="busy"),
+        pytest.param(httpx.Response(520), "answered 520", id="any-server-error"),
+    ],
+)
+def test_token_verifier_does_not_judge_a_token_the_api_could_not_check(
+    answer: httpx.Response | Exception, reason: str
+) -> None:
+    """A stalled API is not a bad token: read as one, it signed claude.ai out (staging, 19.11.2026)."""
+    route = respx.get(f"{API_URL}/agent/me")
+    if isinstance(answer, Exception):
+        route.mock(side_effect=answer)
+    else:
+        route.mock(return_value=answer)
+    verifier = SellerclawTokenVerifier(api_url=API_URL)
+
+    with pytest.raises(AuthCheckUnavailable, match=reason):
+        asyncio.run(verifier.verify_token("sca_good"))
+
+
+@respx.mock
+@pytest.mark.parametrize("path", ["/mcp", "/chatgpt/mcp"])
+@pytest.mark.parametrize(
+    ("api_answer", "status", "retry_after", "error"),
+    [
+        pytest.param(httpx.ConnectTimeout("slow"), 503, "5", "temporarily_unavailable", id="api-stalled"),
+        pytest.param(httpx.Response(502), 503, "5", "temporarily_unavailable", id="api-failed"),
+        pytest.param(httpx.Response(401, json={"detail": "x"}), 401, None, None, id="token-refused"),
+    ],
+)
+def test_the_hosted_app_asks_to_retry_when_the_sign_in_could_not_be_checked(
+    monkeypatch: pytest.MonkeyPatch,
+    path: str,
+    api_answer: httpx.Response | Exception,
+    status: int,
+    retry_after: str | None,
+    error: str | None,
+) -> None:
+    """OAuth clients sign in again only on a 401; a 503 with Retry-After keeps the owner signed in."""
+    monkeypatch.setenv("SELLERCLAW_MCP_ISSUER_URL", ISSUER)
+    monkeypatch.setenv("SELLERCLAW_MCP_RESOURCE_URL", RESOURCE)
+    monkeypatch.setenv("SELLERCLAW_API_URL", API_URL)
+    monkeypatch.setenv("HOST", BIND_HOST)
+    route = respx.get(f"{API_URL}/agent/me")
+    if isinstance(api_answer, Exception):
+        route.mock(side_effect=api_answer)
+    else:
+        route.mock(return_value=api_answer)
+
+    async def _post() -> httpx.Response:
+        transport = httpx.ASGITransport(app=create_http_app())
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.post(
+                path,
+                json={"jsonrpc": "2.0", "method": "tools/list", "id": 1},
+                headers={"Authorization": "Bearer sca_owner", "Accept": "application/json, text/event-stream"},
+            )
+
+    resp = asyncio.run(_post())
+
+    assert resp.status_code == status
+    assert resp.headers.get("retry-after") == retry_after
+    if error is not None:
+        assert resp.json()["error"] == error
+    else:
+        assert "www-authenticate" in {k.lower() for k in resp.headers}
 
 
 def test_the_shipped_app_factory_serves_the_same_wiring(monkeypatch: pytest.MonkeyPatch) -> None:

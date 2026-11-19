@@ -1194,19 +1194,42 @@ def build_server() -> Any:
     return server
 
 
+class AuthCheckUnavailable(Exception):  # noqa: N818 — a state of the API, not a caller's mistake
+    """The Agent API could not say whether a token is valid: it timed out, failed or was busy.
+
+    Not a verdict on the token, so it must not be answered as one — see
+    :class:`_AuthCheckUnavailableMiddleware`.
+    """
+
+
+
+def _api_unavailable(status: int) -> bool:
+    """A status that says "the API is not answering properly", not "this token is bad"."""
+    return status >= 500 or status == 429
+
+
 class SellerclawTokenVerifier:
     """Resource-server token verifier for the hosted HTTP MCP server.
 
     We don't decode the ``sca_`` access token ourselves — a token is valid iff the SellerClaw
-    Agent API accepts it (``GET /agent/me`` returns 200). Anything else is rejected, which makes
-    the SDK answer the MCP request with ``401`` + ``WWW-Authenticate`` and the client starts OAuth.
+    Agent API accepts it (``GET /agent/me`` returns 200). A token the API refuses is rejected,
+    which makes the SDK answer the MCP request with ``401`` + ``WWW-Authenticate`` and the client
+    starts OAuth again.
+
+    An API that does not answer is another matter: a timeout or a 5xx raises
+    :class:`AuthCheckUnavailable`, answered ``503``. Read as a ``401``, two minutes of a stalled API
+    (staging, 19.11.2026) made claude.ai throw the owner's sign-in away, and every later request
+    came without a token until they pressed "Reconnect" and approved access again.
     """
 
     def __init__(self, *, api_url: str) -> None:
         self._api_url = api_url
 
     async def verify_token(self, token: str) -> Any:
-        """Return an ``AccessToken`` if the Agent API accepts the bearer, else ``None``."""
+        """Return an ``AccessToken`` if the Agent API accepts the bearer, ``None`` if it refuses it.
+
+        Raises :class:`AuthCheckUnavailable` when the API could not answer.
+        """
         import httpx
         from mcp.server.auth.provider import AccessToken
 
@@ -1217,8 +1240,10 @@ class SellerclawTokenVerifier:
                 response = await client.get(
                     "/agent/me", headers={"Authorization": f"Bearer {token}"}
                 )
-        except httpx.HTTPError:
-            return None
+        except httpx.HTTPError as err:
+            raise AuthCheckUnavailable(f"the Agent API did not answer: {type(err).__name__}") from err
+        if _api_unavailable(response.status_code):
+            raise AuthCheckUnavailable(f"the Agent API answered {response.status_code}")
         if response.status_code != 200:
             return None
         subject: str | None = None
@@ -1230,6 +1255,41 @@ class SellerclawTokenVerifier:
         return AccessToken(
             token=token, client_id="sellerclaw-mcp", scopes=[], expires_at=None, subject=subject
         )
+
+
+#: How long a client is asked to wait before trying again when the token could not be checked.
+_AUTH_RETRY_AFTER_SECONDS = 5
+
+
+class _AuthCheckUnavailableMiddleware:
+    """Answer ``503`` + ``Retry-After`` when the token could not be checked, so the client retries.
+
+    The SDK's sign-in middleware lets the verifier's exception through; left alone it becomes a 500.
+    This sits outside it and turns :class:`AuthCheckUnavailable` into the answer OAuth clients read
+    as "try again later" — they start signing in again only on a ``401``.
+    """
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        try:
+            await self.app(scope, receive, send)
+        except AuthCheckUnavailable:
+            from starlette.responses import JSONResponse
+
+            response = JSONResponse(
+                {
+                    "error": "temporarily_unavailable",
+                    "error_description": "SellerClaw could not check the sign-in just now. Try again shortly.",
+                },
+                status_code=503,
+                headers={"Retry-After": str(_AUTH_RETRY_AFTER_SECONDS)},
+            )
+            await response(scope, receive, send)
 
 
 def build_http_server(
@@ -1420,6 +1480,8 @@ def create_http_app() -> Any:
             yield
 
     app.router.lifespan_context = lifespan
+    # Outermost of the app's own middleware, so it wraps the SDK's sign-in check on both routes.
+    app.add_middleware(_AuthCheckUnavailableMiddleware)
     return app
 
 
