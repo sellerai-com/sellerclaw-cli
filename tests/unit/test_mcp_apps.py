@@ -2531,13 +2531,15 @@ def test_the_media_card_reads_the_jobs_it_was_handed_in_one_call(
 
 
 @respx.mock
-def test_the_library_is_images_and_videos_merged_newest_first(
+def test_the_library_is_images_videos_and_sounds_merged_newest_first(
     env_pointing_at_fake_api: None, fake_api_url: str
 ) -> None:
-    """The file library also holds documents; the card reads the two kinds it draws, and only them."""
+    """The file library also holds documents; the card reads the three kinds it draws, and only them."""
     def _page(request: httpx.Request) -> httpx.Response:
         if request.url.params["category"] == "image":
             return httpx.Response(200, json={"files": [_file("mug.png", "2026-09-27T10:00:00Z")], "total": 7})
+        if request.url.params["category"] == "audio":
+            return httpx.Response(200, json={"files": [_file("mug-jingle.mp3", "2026-09-26T10:00:00Z")], "total": 1})
         return httpx.Response(200, json={"files": [_file("mug.mp4", "2026-09-28T10:00:00Z")], "total": 2})
 
     files = respx.get(f"{fake_api_url}/agent/files/").mock(side_effect=_page)
@@ -2548,13 +2550,14 @@ def test_the_library_is_images_and_videos_merged_newest_first(
     assert asked == [
         {"category": "image", "q": "mug", "limit": "24"},
         {"category": "video", "q": "mug", "limit": "24"},
+        {"category": "audio", "q": "mug", "limit": "24"},
     ]
     library = result.structured_content["library"]
-    assert [item["filename"] for item in library["files"]] == ["mug.mp4", "mug.png"]
-    assert [item["category"] for item in library["files"]] == ["video", "image"]
-    assert library["totals"] == {"image": 7, "video": 2}
-    # Nine match and two are shown: the next page starts after them.
-    assert library["next"] == 2
+    assert [item["filename"] for item in library["files"]] == ["mug.mp4", "mug.png", "mug-jingle.mp3"]
+    assert [item["category"] for item in library["files"]] == ["video", "image", "audio"]
+    assert library["totals"] == {"image": 7, "video": 2, "audio": 1}
+    # Ten match and three are shown: the next page starts after them.
+    assert library["next"] == 3
     assert result.structured_content["filters"] == {"query": "mug"}
 
 
@@ -2620,7 +2623,7 @@ def test_show_more_reads_the_library_from_where_the_card_stopped(
 @pytest.mark.parametrize(
     ("arguments", "message"),
     [
-        pytest.param({"category": "document"}, "category is image or video", id="unknown-category"),
+        pytest.param({"category": "document"}, "category is image, video or audio", id="unknown-category"),
         pytest.param({"job": [f"job-{n}" for n in range(11)]}, "at most 10 jobs", id="too-many-jobs"),
         pytest.param({"offset": -1}, "0 or more", id="negative-offset"),
     ],
@@ -2839,7 +2842,7 @@ def test_finished_media_is_told_with_its_links_and_what_is_left_with_how_to_wait
 
     assert "Ready: image https://api.test/a.png." in summary
     assert "The video failed: Provider refused the prompt." in summary
-    assert "1 job still generating" in summary
+    assert "1 job still working (a video one to three minutes)" in summary
     assert "end your turn" in summary
     assert "wait_seconds 25" in summary
 
@@ -2940,6 +2943,19 @@ def test_a_later_library_page_is_told_as_older_files_and_where_the_next_starts()
             "/agent/media/video-jobs",
             {"prompt": "waves", "model": "veo-3.1-lite", "count": 2},
             id="two-versions-of-a-video",
+        ),
+        pytest.param(
+            {"task": "music", "prompt": " calm guitar ", "model": "elevenlabs-music",
+             "params": {"duration_seconds": 45, "instrumental": False}},
+            "/agent/media/music-jobs",
+            {"prompt": "calm guitar", "model": "elevenlabs-music", "seconds": 45, "instrumental": False},
+            id="music-with-its-length-and-vocals",
+        ),
+        pytest.param(
+            {"task": "music", "prompt": "calm guitar", "model": "lyria-2", "params": {"duration_seconds": 30}},
+            "/agent/media/music-jobs",
+            {"prompt": "calm guitar", "model": "lyria-2", "seconds": 30},
+            id="music-from-a-model-that-does-not-sing",
         ),
     ],
 )
@@ -3105,3 +3121,134 @@ def test_a_studio_press_that_started_a_job_is_not_reported_as_failed_when_the_re
         "asked": [JOB_A],
     }
 
+
+
+@respx.mock
+def test_a_voice_from_the_studio_is_made_in_the_call_and_handed_back_as_its_job(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    voiced = respx.post(f"{fake_api_url}/agent/media/speech").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "audio_url": "https://api.test/voice.mp3", "file_id": "f", "filename": "voice.mp3",
+                "content_type": "audio/mpeg", "size_bytes": 9, "model": "elevenlabs-multilingual-v2",
+                "voice": "Maya", "characters": 6, "job_id": JOB_A,
+            },
+        )
+    )  # fmt: skip
+    job = {"id": JOB_A, "kind": "speech", "status": "succeeded", "prompt": "Hello.", "result_url": "https://api.test/voice.mp3"}
+    respx.get(f"{fake_api_url}/agent/media/jobs").mock(return_value=httpx.Response(200, json={"jobs": [job]}))
+
+    result = _call(
+        "sellerclaw_media_generate",
+        {"task": "speech", "prompt": " Hello. ", "model": "elevenlabs-multilingual-v2", "params": {"voice": "Maya"}},
+    )
+
+    assert json.loads(voiced.calls[0].request.content) == {
+        "text": "Hello.",
+        "model": "elevenlabs-multilingual-v2",
+        "voice": "Maya",
+    }
+    assert result.structured_content == {"jobs": [job], "asked": [JOB_A]}
+    assert "Ready: speech https://api.test/voice.mp3." in result.content[0].text
+
+
+@pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        pytest.param({"task": "speech", "prompt": "  ", "model": "m"}, "Write what to say first", id="no-words"),
+        pytest.param(
+            {"task": "speech", "prompt": "Hi", "model": "m", "photos": ["https://api.test/a.png"]},
+            "takes no photos",
+            id="a-voice-from-a-photo",
+        ),
+        pytest.param(
+            {"task": "music", "prompt": "guitar", "model": "lyria-2", "photos": ["https://api.test/a.png"]},
+            "takes no photos",
+            id="music-from-a-photo",
+        ),
+    ],
+)
+def test_a_sound_the_studio_cannot_make_is_refused_before_anything_is_sent(
+    env_pointing_at_fake_api: None, arguments: dict[str, Any], message: str
+) -> None:
+    with pytest.raises(ToolError, match=message):
+        _call("sellerclaw_media_generate", arguments)
+
+
+@respx.mock
+def test_the_studio_opens_on_the_owners_files_with_the_named_ones_picked(
+    env_pointing_at_fake_api: None, fake_api_url: str
+) -> None:
+    respx.get(f"{fake_api_url}/agent/media/models").mock(return_value=httpx.Response(200, json={"tasks": []}))
+    respx.get(f"{fake_api_url}/agent/files/").mock(return_value=httpx.Response(200, json={"files": [], "total": 0}))
+
+    result = _call(
+        "sellerclaw_media_studio",
+        {"task": "files", "reference": ["https://api.test/a.jpg", "https://api.test/b.mp4", "https://api.test/a.jpg"]},
+    )
+
+    assert result.structured_content["draft"] == {
+        "section": "files",
+        "files": ["https://api.test/a.jpg", "https://api.test/b.mp4"],
+    }
+    assert "open on the owner's own files, 2 files picked" in result.content[0].text
+    assert "make the finished picture or video from them yourself" in result.content[0].text
+
+
+def test_the_studio_summary_says_generate_starts_on_the_card() -> None:
+    summary = mcp_apps._summarize_media_studio({"models": {"tasks": []}, "draft": {"task": "music"}})
+
+    assert summary.startswith("The media studio is open on music.")
+    assert "Generate starts it from the card" in summary
+    assert "From my files" in summary
+    assert "naming the model, the settings and the photos" not in summary
+
+
+def test_a_finished_edit_dub_and_draft_are_told_with_what_came_with_them() -> None:
+    summary = mcp_apps._summarize_media(
+        {
+            "jobs": [
+                {
+                    "id": "e", "kind": "video_edit", "status": "succeeded", "result_url": "https://api.test/e.mp4",
+                    "storyboard_url": "https://api.test/e.jpg", "checks": ["Scene 2 stops at 0:08.4."],
+                },
+                {
+                    "id": "d", "kind": "dub", "status": "succeeded", "result_url": "https://api.test/d.mp4",
+                    "subtitles_url": "https://api.test/d.srt",
+                },
+                {
+                    "id": "p", "kind": "dub_prepare", "status": "succeeded", "result_url": "https://api.test/p.mp3",
+                    "draft": {
+                        "draft_id": "dr-1", "target_language": "de",
+                        "speakers": [{"id": "A", "voice": "Maya", "voice_name": "Maya"}],
+                        "phrases": [{"index": 0, "overflow_seconds": 0}, {"index": 1, "overflow_seconds": 1.2}],
+                    },
+                },
+                {"id": "m", "kind": "music", "status": "running"},
+            ],
+            "asked": ["e", "d", "p", "m"],
+        }
+    )  # fmt: skip
+
+    assert (
+        "video_edit https://api.test/e.mp4 (frames https://api.test/e.jpg) — adjusted while editing: "
+        "Scene 2 stops at 0:08.4." in summary
+    )
+    assert "dub https://api.test/d.mp4 (subtitles https://api.test/d.srt)" in summary
+    assert "dub draft dr-1 into de: 2 phrases, voices A: Maya; phrases 1 run past their place." in summary
+    assert "1 job still working (music about a minute)" in summary
+
+
+def test_the_library_counts_its_sounds() -> None:
+    summary = mcp_apps._summarize_media(
+        {
+            "library": {
+                "files": [{"filename": "jingle.mp3", "download_url": "https://api.test/j.mp3"}],
+                "totals": {"image": 2, "audio": 1},
+            }
+        }
+    )
+
+    assert "The library: 2 images and 1 sound, newest first." in summary

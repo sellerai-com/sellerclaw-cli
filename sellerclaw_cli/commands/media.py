@@ -371,6 +371,61 @@ SPECS = (
         timeout=_IMAGE_TIMEOUT_SECONDS,
     ),
     Cmd(
+        "render-image",
+        "POST",
+        "/agent/media/html-image-jobs",
+        summary=(
+            "Make a picture from a page you write — a collage with captions, a price card, a banner — taken as one "
+            "PNG at its own size, in the background. Free. The page's root element carries "
+            'data-composition-id="main", data-width and data-height (the picture in pixels, up to 2400 a side); '
+            "nothing needs to move. Write it to a file and pass --html @picture.html; files it shows go in --assets "
+            'as [{"name": "photo.jpg", "url": "..."}] and the page uses them as assets/photo.jpg, loading nothing '
+            "else but public CDNs (jsDelivr, unpkg, cdnjs, Google Fonts). " + _DELIVERY_NOTE
+        ),
+        body=(
+            body_field(
+                "html",
+                required=True,
+                option="--html",
+                from_file=True,
+                help="The whole page (up to 512 KB).",
+            ),
+            body_field(
+                "assets",
+                type=list,
+                option="--assets",
+                help='Files the page shows: [{"name": "photo.jpg", "url": a Library file or direct link}], up to 30.',
+            ),
+            body_field("chat_id", option="--chat-id", help=_CHAT_ID_HELP),
+        ),
+    ),
+    Cmd(
+        "generate-music",
+        "POST",
+        "/agent/media/music-jobs",
+        summary=(
+            "Compose a piece of music from a description, in the background; it lands in the Library, ready for "
+            "edit-video's music. lyria-2 (Standard) makes instrumental pieces of exactly 30 s; elevenlabs-music "
+            "(Best) any length from 5 to 180 s, with vocals when instrumental is false. Paid: prices per piece or "
+            'per started minute in `media models --task music`. Body: {"prompt": "...", "seconds"?: 30, '
+            '"model"?, "instrumental"?: true, "chat_id"?}. ' + _DELIVERY_NOTE
+        ),
+        body=(
+            body_field(
+                "prompt",
+                required=True,
+                help="The genre, the instruments, the tempo and the mood; any lyrics too when it sings.",
+            ),
+            body_field("seconds", type=int, help="Length in seconds, 5-180 (30 by default; lyria-2 makes 30 only)."),
+            body_field(
+                "model",
+                help="lyria-2 or elevenlabs-music. Omit for the cheapest that makes this length and vocals.",
+            ),
+            body_field("instrumental", type=bool, help="false lets it sing (elevenlabs-music only)."),
+            body_field("chat_id", help=_CHAT_ID_HELP),
+        ),
+    ),
+    Cmd(
         "job-status",
         "GET",
         "/agent/media/jobs/{job_id}",

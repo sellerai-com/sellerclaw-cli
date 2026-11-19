@@ -139,7 +139,13 @@ _ELSEWHERE_LIMIT = 50
 _PRODUCTS_LIMIT = 25
 
 #: What the studio makes, in the Agent API's words.
-_MEDIA_TASKS = ("image", "image_edit", "video", "video_from_image")
+_MEDIA_TASKS = ("image", "image_edit", "video", "video_from_image", "speech", "music")
+#: What `task` may also name to open the studio on the owner's own files instead of a generation.
+_FILES_SECTION = "files"
+#: The library's kinds, read apart so each has its total: pictures, clips, sounds.
+_LIBRARY_KINDS = ("image", "video", "audio")
+#: Files Claude can pick in advance for "From my files": as many as the card takes.
+_STUDIO_FILES = 10
 #: The library opens on this many of each kind: a screenful of tiles, newest first.
 _LIBRARY_LIMIT = 24
 #: The studio's picker of a picture to edit or animate: the latest images, not the whole library.
@@ -148,10 +154,12 @@ _STUDIO_PICTURES = 12
 _STUDIO_REFERENCES = 6
 #: How many results one studio press makes of its request, to choose from: four images, three videos
 #: (the Agent API's own cap on a video's ``count``).
-_MAX_VERSIONS = {"image": 4, "video": 3}
+_MAX_VERSIONS = {"image": 4, "video": 3, "speech": 1, "music": 1}
 #: The largest photo the studio's "Upload" takes. The card shrinks a photo to about 2000 pixels
 #: before sending, which lands far below this; the cap bounds what a tool call has to carry.
 _UPLOAD_MAX_BYTES = 15 * 1024 * 1024
+#: A voice is made while the studio's Generate waits — as long as `media generate-speech` gives it.
+_SPEECH_TIMEOUT_SECONDS = 120.0
 #: Upload scans the file for viruses before it answers.
 _UPLOAD_TIMEOUT_SECONDS = 60.0
 #: The Agent API reads at most this many jobs in one call.
@@ -1192,6 +1200,22 @@ _TASK_WORDS = {
     "image_edit": "an image from photos",
     "video": "a video",
     "video_from_image": "a video from a photo",
+    "speech": "a voice",
+    "music": "music",
+}
+
+#: How long each kind of job usually takes, said when the card is still waiting on it.
+_JOB_WAITS = {
+    "image": "an image under a minute",
+    "video": "a video one to three minutes",
+    "speech": "a voice a few seconds",
+    "music": "music about a minute",
+    "voice_over": "a voice-over a minute or two",
+    "dub_prepare": "a dub draft one to three minutes",
+    "dub": "a dub a few minutes",
+    "video_edit": "an edit a minute or two",
+    "html_video": "a video from a page a minute or two",
+    "html_image": "a picture from a page under a minute",
 }
 
 
@@ -1202,18 +1226,19 @@ def _summarize_media_jobs(payload: dict[str, Any], wording: CardWording = RUNNER
     failed = [job for job in jobs if job.get("status") == "failed"]
     working = [job for job in jobs if job.get("status") in ("queued", "running")]
     if ready:
-        links = "; ".join(f"{job.get('kind')} {job['result_url']}" for job in ready)
+        links = "; ".join(_ready_words(job) for job in ready)
         lines.append(f"Ready: {links}.")
     for job in failed:
         reason = job.get("error") or "no reason given"
         lines.append(f"The {job.get('kind')} failed: {reason}.")
     if working:
         # The card polls on its own. Checking again from here only spends the owner's turn.
+        kinds = list(dict.fromkeys(str(job.get("kind")) for job in working))
+        waits = ", ".join(_JOB_WAITS.get(kind, f"a {kind} a few minutes") for kind in kinds)
         lines.append(
-            f"{_plural(len(working), 'job')} still generating (an image takes under a minute, a "
-            "video one to three). On a SellerClaw card each one fills in as it finishes, so end "
-            "your turn instead of checking again; a client without cards reads it with "
-            f"{wording.read_media_job}."
+            f"{_plural(len(working), 'job')} still working ({waits}). On a SellerClaw card each one "
+            "fills in as it finishes, so end your turn instead of checking again; a client without cards "
+            f"reads it with {wording.read_media_job}."
         )
     missing = len(payload.get("asked") or []) - len(jobs)
     if missing > 0:
@@ -1224,6 +1249,37 @@ def _summarize_media_jobs(payload: dict[str, Any], wording: CardWording = RUNNER
     return " ".join(lines)
 
 
+def _ready_words(job: dict[str, Any]) -> str:
+    """A finished job for you: its kind and link, with what came with it — a dub's subtitles, an edit's frames
+    and what it adjusted, a draft's phrases and voices and what does not fit."""
+    words = f"{job.get('kind')} {job['result_url']}"
+    if job.get("subtitles_url"):
+        words += f" (subtitles {job['subtitles_url']})"
+    if job.get("storyboard_url"):
+        words += f" (frames {job['storyboard_url']})"
+    checks = [str(item) for item in job.get("checks") or []]
+    if checks:
+        words += f" — adjusted while editing: {' '.join(checks)}"
+    draft = job.get("draft")
+    if isinstance(draft, dict):
+        phrases = [item for item in draft.get("phrases") or [] if isinstance(item, dict)]
+        speakers = ", ".join(
+            f"{item.get('id')}: {item.get('voice_name') or item.get('voice')}"
+            for item in draft.get("speakers") or []
+            if isinstance(item, dict)
+        )
+        long = [str(item.get("index")) for item in phrases if float(item.get("overflow_seconds") or 0) > 0.05]
+        into = f"into {draft.get('target_language')}: {_plural(len(phrases), 'phrase')}"
+        words += (
+            f" — dub draft {draft.get('draft_id')} {into}"
+            + (f", voices {speakers}" if speakers else "")
+            + (f"; phrases {', '.join(long)} run past their place" if long else "")
+            + ". The card shows it to the owner to read and listen to; changes and the dub go through you, at the "
+            "price the card shows."
+        )
+    return words
+
+
 def _summarize_media_library(payload: dict[str, Any]) -> str:
     library = payload.get("library") or {}
     files = [item for item in library.get("files") or [] if isinstance(item, dict)]
@@ -1232,14 +1288,16 @@ def _summarize_media_library(payload: dict[str, Any]) -> str:
     query = (payload.get("filters") or {}).get("query")
     matching = f" matching “{query}”" if query else ""
     counts = [
-        _plural(int(totals[kind]), kind) for kind in ("image", "video") if totals.get(kind)
+        _plural(int(totals[kind]), "sound" if kind == "audio" else kind)
+        for kind in _LIBRARY_KINDS
+        if totals.get(kind)
     ]
     links = "; ".join(
         f"{item.get('filename')} {item.get('download_url')}" for item in files[:_LINKS_TOLD]
     )
     if not files:
         what = "No older" if offset else "No"
-        lines = [f"{what} images or videos in the library{matching}."]
+        lines = [f"{what} images, videos or sounds in the library{matching}."]
     elif offset:
         lines = [f"Older files in the library{matching}, from number {offset + 1}, newest first: {links}."]
     else:
@@ -1251,8 +1309,11 @@ def _summarize_media_library(payload: dict[str, Any]) -> str:
 
 
 def _media_kind(item: dict[str, Any]) -> str:
-    """A file read from the combined list, by its type: the card draws a video as a player."""
-    return "video" if str(item.get("content_type") or "").startswith("video/") else "image"
+    """A file read from the combined list, by its type: the card draws a video or a sound as a player."""
+    content_type = str(item.get("content_type") or "")
+    if content_type.startswith("video/"):
+        return "video"
+    return "audio" if content_type.startswith("audio/") else "image"
 
 
 def _summarize_media(payload: dict[str, Any], wording: CardWording = RUNNER_WORDING) -> str:
@@ -1263,20 +1324,31 @@ def _summarize_media(payload: dict[str, Any], wording: CardWording = RUNNER_WORD
 
 def _summarize_media_studio(payload: dict[str, Any]) -> str:
     draft = payload.get("draft") or {}
-    task = draft.get("task") or "image"
     defaults: list[str] = []
     for group in (payload.get("models") or {}).get("tasks") or []:
         first = next((m for m in group.get("models") or [] if m.get("is_default")), None)
-        if first is not None:
+        if first is not None and group.get("task") != "lipsync":
             defaults.append(f"{group.get('task')}: {first.get('name')}")
-    lines = [f"The media studio is open on {_TASK_WORDS.get(task, task)}."]
-    if defaults:
-        lines.append(f"Default models — {'; '.join(defaults)}.")
-    lines.append(
-        "The owner describes what they want, may pick or upload photos to work from, chooses the "
-        "shape, size and a price-and-quality tier, and presses Generate; that reaches you as a "
-        "message from them naming the model, the settings and the photos. Generate nothing until it does."
-    )
+    if draft.get("section") == _FILES_SECTION:
+        picked = len(draft.get("files") or [])
+        lines = [
+            "The media studio is open on the owner's own files"
+            + (f", {_plural(picked, 'file')} picked" if picked else "")
+            + ". They tick the photos, videos and sounds to work from, in order, and press Ask in chat: that "
+            "reaches you as their message naming the files, with each file's link beside it. Then make the "
+            "finished picture or video from them yourself."
+        ]
+    else:
+        task = draft.get("task") or "image"
+        lines = [f"The media studio is open on {_TASK_WORDS.get(task, task)}."]
+        if defaults:
+            lines.append(f"Default models — {'; '.join(defaults)}.")
+        lines.append(
+            "The owner makes an image, a video, a voice or music there. Generate starts it from the card with "
+            "their words as written — you are told what started, and its link once it is ready. Ask in chat "
+            "reaches you as a message from them: improve the request and run it. Their own files are on the "
+            "card's From my files tab, to pick for you to put together. Generate nothing until they ask."
+        )
     lines.append(_SHOWN_TO_THE_OWNER)
     return " ".join(lines)
 
@@ -1544,13 +1616,17 @@ Record the owner's press on the approval card and hand the card back.\
 """
 
 _MEDIA_DESC = """\
-Generated images and videos as an interactive card — the ones just asked for, each filling itself
-in as it finishes (a picture, or a player for a video) — or the owner's library of them.
+The owner's media as an interactive card — the results just asked for, each filling itself in as it
+finishes, or their library of pictures, videos and sounds. Every kind of job shows here: a generated
+image or video, a voice, music, an edited video (with its frames and what was adjusted), a video or
+a picture made from a page, a voice-over, a dubbed video (with its subtitles) and a dubbing draft —
+the new soundtrack, each speaker's voice with a sample, the translation phrase by phrase with what
+runs long, and the lip-sync price at each quality, for the owner to read and listen to.
 
-After starting a generation in the background, pass its job ids as `job` and end your turn: the
-card shows each result as soon as it is ready and hands you its link with the owner's next
-message, so do not check the jobs again yourself. A finished image or edit can be shown the same
-way by its job id. With no `job`, the library: `category` is image or video (omit it for both),
+After starting any of them, pass its job ids as `job` and end your turn: the card shows each result
+as soon as it is ready and hands you its link with the owner's next message, so do not check the
+jobs again yourself. Changing a draft and dubbing it go through you, in the owner's words. With no
+`job`, the library: `category` is image, video or audio (omit it for all),
 `query` narrows by words in the file name, each anywhere in it (a generated file is named after its
 prompt's first words), and `offset` skips that many of the newest — the answer's `library.next` is
 where the next page starts, present while older files remain. From a finished result the owner
@@ -1559,22 +1635,21 @@ with changes — and what they start there is reported to you.\
 """
 
 _MEDIA_STUDIO_DESC = """\
-The media studio as an interactive card: the owner describes an image or a video, may pick photos
-from their files or upload new ones to work from (up to 6 for an image, 1 to start a video),
-chooses the shape, the size and a price-and-quality tier — each with its price in credits — and
-presses one of two buttons. Generate starts it from the card with their description as written —
-you are told what started, and its link when it finishes. Ask in chat reaches you as an ordinary
-message from them with the idea, the model and the settings: write the full prompt and run it. The
-full view lists every model, their
-rarer settings, and lets the owner make a model their default.
+The media studio as an interactive card, in two halves. Generate: the owner makes an image, a video,
+a voice (a text in a voice they listen to first) or a piece of music, choosing the settings and a
+price-and-quality tier, each priced in credits; the Generate button starts it from the card with
+their words as written — you are told what started, and its link when it is ready — and Ask in chat
+reaches you as their message, for you to improve and run. From my files: the owner ticks their own
+photos, videos and sounds in order (or uploads new ones) and asks you in the chat to put them
+together — you get the files' links beside their message and make the finished file yourself.
 
-Open it when the owner wants to choose the quality, the price or the settings themselves, or asks
-for the studio; otherwise generate straight away with the default model. Carry over what the
-conversation already says: `task` (image, image_edit, video, video_from_image), `prompt`, `model`,
-`params` (that model's settings, e.g. {"aspect_ratio": "9:16"}), and `reference`, the URL of a
-photo to work from — or a list of them. To change a finished result, open it with the result's own
-link as the reference (an image is then made from it) — or, for a video, with the request it was
-made from.\
+Open it when the owner wants to choose the quality, the price, the voice or the settings themselves,
+or to pick their own files; otherwise make it straight away with the default model. Carry over what
+the conversation already says: `task` (image, image_edit, video, video_from_image, speech, music),
+`prompt`, `model`, `params` (that model's settings, e.g. {"aspect_ratio": "9:16"}; a voice's
+{"voice": id}; music's {"duration_seconds": 30}), and `reference`, the URL of a photo to work from —
+or a list of them. `task` "files" opens From my files with the links in `reference` already picked.
+To change a finished image, open it with its own link as the reference.\
 """
 
 _MEDIA_SET_DEFAULT_DESC = """\
@@ -1586,9 +1661,9 @@ Store the photo the owner chose on the studio card in their files and hand back 
 """
 
 _MEDIA_GENERATE_DESC = """\
-Start what the owner set up on the studio card, on their own press of Generate — `count` of it to
-choose from, up to 4 images or 3 videos, each its own job and charge — and hand back the jobs for the
-card to follow.\
+Start what the owner set up on the studio card, on their own press of Generate — an image or a video
+(`count` of it to choose from, up to 4 images or 3 videos, each its own job and charge), a voice
+(ready in this call) or a piece of music — and hand back the jobs for the card to follow.\
 """
 
 
@@ -2348,13 +2423,13 @@ def build_extension(client_for_tool: ClientFactory, wording: CardWording = RUNNE
     def _read_media_library(
         client: Client, category: str | None, query: str | None, offset: int = 0
     ) -> dict[str, Any]:
-        """The owner's images and videos, newest first — both kinds unless one was asked for.
+        """The owner's images, videos and sounds, newest first — every kind unless one was asked for.
 
-        The file library also holds documents and spreadsheets; this card is about pictures. The
-        first page reads each kind on its own, which is where each kind's total comes from, and
-        merges them by date. A later page ("Show more") reads from where the card stopped — both
-        kinds as the one list the API calls ``media``. ``next`` is where the page after this one
-        starts, present only while there is one.
+        The file library also holds documents and spreadsheets; this card is about media. The first
+        page reads each kind on its own, which is where each kind's total comes from, and merges them
+        by date. A later page ("Show more") reads from where the card stopped — every kind as the one
+        list the API calls ``media``. ``next`` is where the page after this one starts, present only
+        while there is one.
         """
         files: list[dict[str, Any]] = []
         totals: dict[str, int] = {}
@@ -2365,7 +2440,7 @@ def build_extension(client_for_tool: ClientFactory, wording: CardWording = RUNNE
             if category:
                 totals[category] = total
         else:
-            for kind in (category,) if category else ("image", "video"):
+            for kind in (category,) if category else _LIBRARY_KINDS:
                 page = _library_page(client, kind, query, _LIBRARY_LIMIT)
                 totals[kind] = int(page.get("total") or 0)
                 files.extend({**item, "category": kind} for item in page.get("files") or [])
@@ -2392,6 +2467,30 @@ def build_extension(client_for_tool: ClientFactory, wording: CardWording = RUNNE
         if task is None or task in _MEDIA_TASKS:
             return task
         raise ToolError(f"task is one of {', '.join(_MEDIA_TASKS)}; got {task!r}.")
+
+    def _studio_draft(
+        task: str | None,
+        prompt: str | None,
+        model: str | None,
+        reference: str | list[str] | None,
+        params: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        """What the conversation carries into the studio. ``task="files"`` opens it on the owner's own files,
+        the links in ``reference`` already picked, in order."""
+        if task == _FILES_SECTION:
+            given = [reference] if isinstance(reference, str) else list(reference or [])
+            links = list(dict.fromkeys(url for url in (_words(value) for value in given) if url))
+            if len(links) > _STUDIO_FILES:
+                raise ToolError(f"The studio picks at most {_STUDIO_FILES} files; got {len(links)}.")
+            return _query(section=_FILES_SECTION, files=links or None)
+        return _query(
+            task=_media_task(task),
+            prompt=_words(prompt),
+            model=_words(model),
+            references=_studio_references(reference),
+            # The card keeps only the settings the model it opens on takes; the rest fall to defaults.
+            params={name: value for name, value in (params or {}).items() if value is not None} or None,
+        )
 
     def _studio_references(reference: str | list[str] | None) -> list[str] | None:
         given = [reference] if isinstance(reference, str) else list(reference or [])
@@ -2453,8 +2552,8 @@ def build_extension(client_for_tool: ClientFactory, wording: CardWording = RUNNE
         offset: int | None = None,
     ) -> Any:
         ids = _media_jobs(job) if job else []
-        if category not in (None, "image", "video"):
-            raise ToolError(f"category is image or video; got {category!r}.")
+        if category not in (None, *_LIBRARY_KINDS):
+            raise ToolError(f"category is image, video or audio; got {category!r}.")
         if offset is not None and offset < 0:
             raise ToolError(f"offset counts files from the newest, so it is 0 or more; got {offset}.")
         with _refusals_in_their_own_words(), client_for_tool(DEFAULT_TIMEOUT_SECONDS) as client:
@@ -2480,14 +2579,7 @@ def build_extension(client_for_tool: ClientFactory, wording: CardWording = RUNNE
         reference: str | list[str] | None = None,
         params: dict[str, Any] | None = None,
     ) -> Any:
-        draft = _query(
-            task=_media_task(task),
-            prompt=_words(prompt),
-            model=_words(model),
-            references=_studio_references(reference),
-            # The card keeps only the settings the model it opens on takes; the rest fall to defaults.
-            params={name: value for name, value in (params or {}).items() if value is not None} or None,
-        )
+        draft = _studio_draft(task, prompt, model, reference, params)
         with _refusals_in_their_own_words(), client_for_tool(DEFAULT_TIMEOUT_SECONDS) as client:
             payload = _read_media_studio(client, draft)
         return _result(payload, _summarize_media_studio(payload))
@@ -2548,7 +2640,7 @@ def build_extension(client_for_tool: ClientFactory, wording: CardWording = RUNNE
 
     def _just_queued(job_id: str, task: str, prompt: str, model: str) -> dict[str, Any]:
         """A job the server accepted, as far as this press knows it without reading it back."""
-        kind = "video" if task in ("video", "video_from_image") else "image"
+        kind = "video" if task in ("video", "video_from_image") else task if task in ("speech", "music") else "image"
         return {"id": job_id, "kind": kind, "status": "queued", "prompt": prompt.strip(), "model": model}
 
     def _studio_request(
@@ -2567,7 +2659,23 @@ def build_extension(client_for_tool: ClientFactory, wording: CardWording = RUNNE
         chosen = _media_task(task)
         words = _words(prompt)
         if words is None:
-            raise ToolError("Describe what to make first.")
+            raise ToolError("Write what to say first." if chosen == "speech" else "Describe what to make first.")
+        given = params or {}
+        if chosen == "speech":
+            if photos:
+                raise ToolError("A voice is made from words alone; it takes no photos.")
+            return "/agent/media/speech", _query(text=words, model=model, voice=_words(str(given.get("voice") or "")))
+        if chosen == "music":
+            if photos:
+                raise ToolError("Music is made from a description alone; it takes no photos.")
+            seconds = given.get("duration_seconds")
+            instrumental = given.get("instrumental")
+            return "/agent/media/music-jobs", _query(
+                prompt=words,
+                model=model,
+                seconds=int(seconds) if seconds is not None else None,
+                instrumental=bool(instrumental) if instrumental is not None else None,
+            )
         kind = "video" if chosen in ("video", "video_from_image") else "image"
         if not 1 <= count <= _MAX_VERSIONS[kind]:
             raise ToolError(f"Make 1 to {_MAX_VERSIONS[kind]} {kind}s at once; got {count}.")
@@ -2617,9 +2725,14 @@ def build_extension(client_for_tool: ClientFactory, wording: CardWording = RUNNE
         count: int = 1,
     ) -> Any:
         path, body = _studio_request(task, prompt, model, params, photos, count)
-        with _refusals_in_their_own_words(), client_for_tool(DEFAULT_TIMEOUT_SECONDS) as client:
+        # A voice is made inside the call: a long text through ElevenLabs takes most of a minute.
+        timeout = _SPEECH_TIMEOUT_SECONDS if task == "speech" else DEFAULT_TIMEOUT_SECONDS
+        with _refusals_in_their_own_words(), client_for_tool(timeout) as client:
             queued = client.request("POST", path, json=body)
+            # A voice is made inside the call and answers its one job; the rest answer the jobs queued.
             ids = [str(job_id) for job_id in (queued or {}).get("job_ids") or []]
+            if not ids and (queued or {}).get("job_id"):
+                ids = [str(queued["job_id"])]
             # Answered in the results card's own shape, so the studio follows the job the same way.
             try:
                 found = client.request("GET", "/agent/media/jobs", params={"id": ids}, read_only=True) if ids else {}

@@ -1,9 +1,17 @@
 # SellerClaw — images, video and voice
 
-Product photos, banners, ad creatives, short clips, voiceovers, a seller's own video dubbed into
-another language, clips and photos edited into one video, and videos rendered from a page you write, made with
-the `media` command group. Everything
-below is `sellerclaw_read`, `sellerclaw_write` or a card tool; run the examples directly.
+Product photos, banners, ad creatives, short clips, voiceovers, music, a seller's own video dubbed into
+another language, clips and photos edited into one video, and videos and pictures made from a page you write,
+with the `media` command group. Everything below is `sellerclaw_read`, `sellerclaw_write` or a card tool; run
+the examples directly.
+
+Two kinds of work:
+
+- One raw file from a description — an image, a video, a voice, a piece of music. The owner can make these
+  themselves on the studio card.
+- A finished file put together from raw ones — a collage with captions, a video of the owner's photos and
+  clips with a voice and music under it. That is yours: the editing commands below, plus a generation for
+  whatever is missing.
 
 ## Pick the path
 
@@ -19,6 +27,27 @@ below is `sellerclaw_read`, `sellerclaw_write` or a card tool; run the examples 
   up to 6: the product from one, the scene from another; `generate-video` takes one as
   `reference_image_url`). A generation from text alone draws a different product. A photo the owner
   attached to this chat does not reach SellerClaw — ask for a link, or open the studio to upload it.
+- The owner wants something made from their own files → see "Put the owner's files together".
+
+## Put the owner's files together
+
+The owner's files are in their Library (`files list`, `query` for part of a name). To let them pick in order
+on a card, open the studio on them: `sellerclaw_media_studio(task="files")` — their "Ask in chat" comes back
+as a message naming the files, with each file's link beside it.
+
+A video or a sound on the owner's device does not reach SellerClaw through this chat. Give them the
+`upload_page_url` that `media models` answers — the Library page with its upload window — and find the file
+with `files list` once they say it is there.
+
+Then make the finished file:
+
+- a video → `edit-video`: the owner's photos and clips as shots, the narrator's words as each scene's `say`,
+  music as `music` (one of theirs, or one you make with `generate-music`);
+- a picture → `render-image`: a page that lays out their photos with the text;
+- an animated layout no edit field draws → `render-html`.
+
+Generate what is missing — a voice, music, a shot — and say what each paid step costs before running it.
+Show the result with `sellerclaw_media(job=[JOB_ID])`.
 
 ## Generate
 
@@ -101,9 +130,10 @@ sellerclaw_write(group="media", command="generate-image",
   body={"prompt": "...", "model": MODEL_ID, "params": {"aspect_ratio": "16:9", "resolution": "2K"}})
 ```
 
-- `models` lists, for each task (`image`, `image_edit`, `video`, `video_from_image`), the models the
-  owner can use: the price in credits, which one is the default, and the settings each one takes with
-  their allowed values.
+- `models` lists, for each task (`image`, `image_edit`, `video`, `video_from_image`, `speech`, `music`), the
+  models the owner can use: the price in credits, which one is the default, and the settings each one takes
+  with their allowed values. It also answers `upload_page_url`, where the owner uploads a file too big for
+  the chat.
 - `model` runs that one model, with no fallback. `params` takes only that model's settings; a refusal
   names the ones it does take. `aspect_ratio` and `duration_seconds` given beside `model` count as
   its settings; `size` is refused with a model.
@@ -120,8 +150,8 @@ sellerclaw_write(group="media", command="voice-over",
   body={"video_url": VIDEO_URL, "text": "Our ceramic mug keeps your coffee hot for hours."})
 ```
 
-- `generate-speech` (up to 2000 characters) answers in the same call with `audio_url`, kept in the
-  owner's files. Give the owner the link.
+- `generate-speech` (up to 2000 characters) answers in the same call with `audio_url` and `job_id`, kept
+  in the owner's files. Show it with `sellerclaw_media(job=[JOB_ID])` — the card plays it.
 - `voice-over` lays a voice over a video of up to a minute: the clip's own sound dips under it, and a
   voice longer than the clip holds its last frame. Pass `text`, or `audio_url` for a voice already made.
   It answers with a job id; read the job for `result_url`.
@@ -171,8 +201,9 @@ sellerclaw_read(group="media", command="job-status",
 - The lips follow best when one face is in the frame at a time; with two faces on screen the wrong one
   may move. Say so when the video shows several people at once.
 - A draft's files are kept for a week after its last change; an older draft must be prepared again.
-- No card shows voice or dubbing yet: give the owner links and text, and do not open `sellerclaw_media`
-  for these jobs.
+- Show a draft with `sellerclaw_media(job=[DRAFT_ID])`: the card plays the soundtrack and each voice's
+  sample and lists every phrase, what runs long, the warnings and the lip-sync prices — the owner reads it
+  there. Their changes and their yes come to you in words; a revised draft and the dub show the same way.
 
 ## Edit a video: cut clips and photos into one
 
@@ -230,6 +261,51 @@ sellerclaw_read(group="media", command="storyboard", flags={"url": CLIP_1, "fram
   adjusted (a trim pulled back, a clip that ran out, a phrase heard back unlike its script). To change
   the video, send the same body with the change; phrases already voiced are not paid again.
 - Up to 20 scenes and a minute in all; 2 edits at once.
+
+## Make music
+
+```text
+sellerclaw_write(group="media", command="generate-music",
+  body={"prompt": "Calm acoustic guitar, warm and unhurried", "seconds": 30})
+sellerclaw_write(group="media", command="generate-music",
+  body={"prompt": "Upbeat pop with a short sung hook: 'light up your night'", "seconds": 45,
+        "model": "elevenlabs-music", "instrumental": false})
+```
+
+- `lyria-2` (Standard, the default) makes instrumental pieces of exactly 30 seconds; `elevenlabs-music`
+  (Best) any length from 5 to 180 seconds, with vocals when `instrumental` is false. Without `model`, the
+  cheaper one that makes the length and vocals asked for.
+- It answers with a job id at once; the piece lands in the owner's Library in about a minute. Show it with
+  `sellerclaw_media(job=[JOB_ID])`; under a video it goes as `edit-video`'s `music` by its `result_url`.
+- Prices: `models` with the flag `task: music` — per piece, or per started minute.
+
+## Make a picture from a page: a collage, a price card
+
+`render-image` takes a page you write as one PNG at its own size, in the background. Free.
+
+```html
+<!doctype html>
+<html><head><style>
+  #root { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 32px; background: #fff; }
+  figure { margin: 0; } img { width: 100%; } figcaption { font: 600 36px sans-serif; }
+</style></head><body>
+<div id="root" data-composition-id="main" data-width="2000" data-height="2000">
+  <figure><img src="assets/one.jpg"><figcaption>Sunset walk</figcaption></figure>
+  <figure><img src="assets/two.jpg"><figcaption>City day</figcaption></figure>
+</div>
+</body></html>
+```
+
+```text
+sellerclaw media render-image --html @collage.html \
+  --assets '[{"name": "one.jpg", "url": PHOTO_1}, {"name": "two.jpg", "url": PHOTO_2}]'
+```
+
+- The root element carries `data-composition-id`, `data-width` and `data-height` — the picture's size in
+  pixels, up to 2400 a side. Nothing needs to move.
+- Assets and the allowed CDNs are as for `render-html` below. A page breaking a rule is refused at once with
+  every problem and its place.
+- The finished job's `result_url` is the PNG, in the owner's Library.
 
 ## Make a video from a page: HTML animated in time
 
@@ -294,8 +370,11 @@ sellerclaw_write(group="media", command="render-html", body={"html": PAGE, "asse
 - Every generation spends the owner's credits, and a video costs far more than an image; the prices
   are in `models`. A voice is priced per 1000 characters; a dub is mostly the lip-sync, priced per
   minute of the video and shown in the draft before the owner says yes.
-- At most 15 images and 4 videos generate at once, 10 voice-overs, 2 dubbing drafts and dubs together,
-  2 video edits and 2 HTML videos; a call that would pass that is refused whole, until some finish.
+- Music is priced per piece (Lyria 2) or per started minute (ElevenLabs Music); pictures and videos from a
+  page and video edits are free.
+- At most 15 images and 4 videos generate at once, 10 voice-overs, 4 pieces of music, 2 dubbing drafts and
+  dubs together, 2 video edits, 2 HTML videos and 4 pictures from a page; a call that would pass that is
+  refused whole, until some finish.
 - A request that answered with a job id is already running. Sending it again starts, and bills, a
   second one.
 
@@ -316,5 +395,7 @@ sellerclaw_write(group="media", command="render-html", body={"html": PAGE, "asse
   `result_url` in `videos` (see the `listings` guide).
 - The owner's SellerCart storefront: `sellercart-media add` copies it in by URL (see the `storefront`
   guide).
+- A voice or a piece of music into a video: `edit-video` (`say` voices words itself; `music` and
+  `voice_track` take a finished file's `result_url`).
 - Every generated file also stays in the owner's file library (`files list`, or the `sellerclaw_media`
   card with no `job`).
