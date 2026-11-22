@@ -108,6 +108,54 @@ SPECS = (
             "`channels set-default-policies` (the owner's call — ask first)."
         ),
     ),
+    Cmd(
+        "create-policy",
+        "POST",
+        "/agent/stores/{store_id}/policies",
+        summary=(
+            "Create a business policy on the store's eBay account — a shipping (fulfillment), "
+            "return or payment policy — and get it back under SellerClaw's id, ready for drafts and "
+            "`channels set-default-policies`. 'policy' is eBay's own Account API shape: e.g. for "
+            "shipping {name, handlingTime:{value,unit:\"DAY\"}, shippingOptions:[{optionType:"
+            "\"DOMESTIC\", costType:\"FLAT_RATE\", shippingServices:[{shippingServiceCode, "
+            "shippingCost:{value,currency}, freeShipping}]}]}. Leave marketplaceId and categoryTypes "
+            "out — SellerClaw fills them from the store. shippingServiceCode is eBay's code, not the "
+            "service's name: copy it from 'shipping[].service' of a policy in `list-policies` (USPS "
+            "Ground Advantage is USPSParcel). eBay's refusal comes back in its words."
+        ),
+        body=(
+            body_field("type", required=True, choices=("fulfillment", "payment", "return"), help="Policy kind."),
+            body_field(
+                "policy",
+                type=dict,
+                required=True,
+                help="The policy in eBay's Account API shape (createFulfillmentPolicy / Return / Payment).",
+                example={"name": "Free 2-day", "handlingTime": {"value": 1, "unit": "DAY"}},
+            ),
+        ),
+    ),
+    Cmd(
+        "update-policy",
+        "PATCH",
+        "/agent/stores/{store_id}/policies/{policy_id}",
+        summary=(
+            "Change a business policy by only what changes — SellerClaw reads the policy from eBay "
+            "first and sends it whole, since eBay replaces a policy entirely on every edit (a raw "
+            "PUT with one field wipes the rest). policy_id is SellerClaw's id from `list-policies`. "
+            "The change reaches every listing using the policy at once — 'used_by_products' in the "
+            "answer says how many — so it is the owner's call: ask first. 'changes' merges key by "
+            "key; a list (shippingOptions) replaces the old one whole; null removes a key."
+        ),
+        body=(
+            body_field(
+                "changes",
+                type=dict,
+                required=True,
+                help="Only the fields to change, in eBay's Account API shape.",
+                example={"handlingTime": {"value": 2, "unit": "DAY"}},
+            ),
+        ),
+    ),
 )
 
 app = build_group(NAME, "eBay store admin: account, business policies, inventory locations.", SPECS)
