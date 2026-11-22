@@ -77,7 +77,9 @@ SPECS = (
         "POST",
         "/agent/stores/{store_id}/listings/sync-stock",
         summary=(
-            "Update price and/or merchant quantity on existing Amazon offers "
+            "Change the price and/or merchant quantity of existing Amazon offers on the marketplace right now — it "
+            "lands in this call, no publish needed (`listings set-price-stock` does the same by "
+            "SellerClaw listing id, across stores) "
             '(body: {"items": [{"sku": "...", "quantity": 5, "price": 19.99}]}). '
             "Amazon manages FBA quantity itself."
         ),

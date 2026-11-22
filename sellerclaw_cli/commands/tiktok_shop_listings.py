@@ -86,7 +86,9 @@ SPECS = (
         "POST",
         "/agent/stores/{store_id}/listings/sync-stock",
         summary=(
-            "Update price and/or stock on existing TikTok products/SKUs "
+            "Change the price and/or stock of existing TikTok products/SKUs on the marketplace right now — it "
+            "lands in this call, no publish needed (`listings set-price-stock` does the same by "
+            "SellerClaw listing id, across stores) "
             '(body: {"items": [{"sku": "...", "quantity": 5, "price": 19.99}]}). '
             "Identify each item by sku or remote_id."
         ),

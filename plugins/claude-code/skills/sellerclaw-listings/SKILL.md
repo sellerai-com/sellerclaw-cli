@@ -31,6 +31,21 @@ list, a publish brings one withdrawn size back by naming it there (WooCommerce, 
 Amazon offer alone is `amazon-listings update` with its `variation_id`, or `withdraw` with it in
 `variation_ids`.
 
+## Change a price or stock now
+
+```text
+# Any store, by listing id (+ variation_id when the listing has several); only what you send changes.
+sellerclaw_write(group="listings", command="set-price-stock",
+  body={"items": [{"listing_id": LISTING_ID, "price": 24.99},
+                  {"listing_id": OTHER_ID, "variation_id": VARIATION_ID, "quantity": 0}]})
+```
+
+The marketplace takes it in this call, and each item answers for itself. A price set here stays the
+owner's: on a listing that followed supplier cost × markup the answer says
+`follows_catalog_price: false` — tell the owner that price no longer tracks the supplier. Drafts and
+the seller's SellerCart shop go through `listings bulk-update` instead. The per-store `sync-stock`
+commands below do the same push by SKU or the marketplace's own id.
+
 ## Shopify
 
 ```text
@@ -42,8 +57,8 @@ sellerclaw_write(group="shopify-listings", command="create",
                    "images": ["https://cdn.example.com/mouse.jpg"],
                    "variants": [{"sku": "WM-01", "price": "19.99"}]}]})
 
-# Update stock (and optionally price). Each item: sku (required), quantity (required), remote_id?,
-# price?, compare_at_price?.
+# Change price and/or stock now, by sku or remote_id; only what you send changes. Each item: sku or
+# remote_id, quantity?, price?, compare_at_price?.
 sellerclaw_write(group="shopify-listings", command="sync-stock",
   positionals={"store_id": STORE_ID},
   body={"items": [{"sku": "WM-01", "quantity": 42}]})
@@ -70,6 +85,16 @@ Those ids are SellerClaw's own, and they are what every field here expects; the 
 To stop being asked on every draft, pin the store's defaults once with `channels set-default-policies`
 / `channels set-default-warehouse` — the owner's call, so ask first. Drafts live under
 `create-drafts` / `update-draft` / `publish` in the same group.
+
+A policy the store lacks can be made with `ebay-store create-policy`, and one changed with
+`ebay-store update-policy` — send only what changes; it reaches every listing using the policy, so
+that is the owner's call too.
+
+```text
+sellerclaw_write(group="ebay-store", command="update-policy",
+  positionals={"store_id": STORE_ID, "policy_id": POLICY_ID},
+  body={"changes": {"handlingTime": {"value": 2, "unit": "DAY"}}})
+```
 
 ## Amazon
 
@@ -169,8 +194,8 @@ backgrounds, lifestyle scenes and banners, and ask before it stands in for the p
 
 ## Watch for
 
-- **Stock sync ≠ publish.** `create` / `publish` create the listing; `sync-stock` only updates
-  quantities (and optional price).
+- **A price or stock push ≠ publish.** `create` / `publish` create the listing; `listings
+  set-price-stock` and `sync-stock` change price and stock on a listing already on sale, at once.
 - **`withdraw` is not `delete`.** `withdraw` takes a listing off the storefront and can be undone;
   `delete` destroys it — on Etsy the listing, its address and the reviews and favourites on it go
   with it, and re-listing costs a new listing fee. An unqualified "take this off my shop" means

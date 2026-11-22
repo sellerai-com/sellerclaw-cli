@@ -42,10 +42,15 @@ is worth it only when:
 - **Find by name, don't dump.** Most groups offer `search` and/or `summary` — prefer them to listing
   everything and filtering by hand.
 - **An empty result is not an error.** No rows means none matched, not a failure.
+- **Price or stock now → `listings set-price-stock`.** It changes the marketplace in the same call,
+  for listings in any store, addressed by listing id. `listings bulk-update` is for words, photos and
+  item specifics: it edits locally and the next publish delivers.
 - **Raw fallbacks exist.** The `shopify` / `ebay` / `amazon` / `etsy` / `walmart` / `wix` /
   `woocommerce` / `bigcommerce` groups pass raw marketplace API calls through when no curated command
-  fits, always with `sellerclaw_write`, even for a call that only reads. Check the curated groups first — they resolve our ids, apply the owner's pricing and check a
-  listing before it goes out, and none of that happens on a raw call.
+  fits, always with `sellerclaw_write`, even for a call that only reads. Check the curated groups
+  first — they resolve our ids, apply the owner's pricing and check a listing before it goes out, and
+  none of that happens on a raw call. When a raw answer carries `sellerclaw_hint`, a curated command
+  does that job: use the one it names next time.
 
 ## Cards: show the owner the thing
 

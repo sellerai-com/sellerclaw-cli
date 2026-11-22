@@ -226,6 +226,7 @@ _LISTINGS_COMMANDS = {
     "drafts",
     "readiness",
     "check",
+    "set-price-stock",
     "bulk-update",
     "delete-drafts",
     "create-drafts",

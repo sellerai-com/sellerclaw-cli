@@ -91,3 +91,32 @@ def test_search_filters_by_the_variation_group(
 
     assert result.exit_code == 0, result.stderr
     assert route.calls.last.request.url.params["group_id"] == group_id
+
+
+@respx.mock
+def test_set_price_stock_posts_the_changes_by_listing_id(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    """The immediate price/stock push, across stores, addressed by SellerClaw's listing id."""
+    variation_id = "33333333-3333-4333-8333-333333333333"
+    answer = {"items": [{"listing_id": LISTING_ID, "ok": True, "follows_catalog_price": False}]}
+    route = respx.post(f"{fake_api_url}/agent/listings/price-stock").mock(
+        return_value=httpx.Response(200, json=answer)
+    )
+    items = [
+        {"listing_id": LISTING_ID, "price": 24.99},
+        {"listing_id": LISTING_ID, "variation_id": variation_id, "quantity": 0},
+    ]
+
+    result = runner.invoke(app, ["listings", "set-price-stock", "-b", json.dumps({"items": items})])
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(route.calls.last.request.content) == {"items": items}
+    assert json.loads(result.stdout)["data"] == answer
+
+
+def test_set_price_stock_refuses_a_body_without_items(env_pointing_at_fake_api: None) -> None:  # noqa: ARG001
+    result = runner.invoke(app, ["listings", "set-price-stock", "-b", json.dumps({"changes": []})])
+
+    assert result.exit_code != 0

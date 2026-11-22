@@ -330,6 +330,42 @@ SPECS = (
         read_only=True,
     ),
     Cmd(
+        "set-price-stock",
+        "POST",
+        "/agent/listings/price-stock",
+        summary=(
+            "Change price and/or stock on the marketplace NOW, for listings in any of the owner's "
+            "stores (eBay, Shopify, Amazon, Walmart, WooCommerce, Wix, Etsy, BigCommerce, TikTok "
+            "Shop) — the call to use for 'reprice these', 'set stock to 0', 'raise prices 10%'. "
+            "Each item is a listing_id (the listing's own id from `listings search`) plus "
+            "variation_id when the listing has several variations, and a price and/or quantity: "
+            "only what you send changes. Each item comes back with its own ok/error — one store's "
+            "refusal never sinks the others. A price set here is the owner's decision and stays: "
+            "on a listing that followed supplier cost x markup the answer says "
+            "follows_catalog_price=false, so tell the owner its price no longer tracks the "
+            "supplier. Only listings on sale take a push — a draft goes through `listings "
+            "bulk-update` and its publish; the seller's SellerCart shop is changed with `listings "
+            "bulk-update`, live at once."
+        ),
+        body=(
+            body_field(
+                "items",
+                type=dict,
+                repeatable=True,
+                required=True,
+                help=(
+                    "Up to 100 changes, each {listing_id, variation_id?, price?, quantity?, "
+                    "compare_at_price?}; price and/or quantity required (compare_at_price, the "
+                    "'was' price, shows on Shopify only)."
+                ),
+                example=[
+                    {"listing_id": "<uuid>", "price": 24.99},
+                    {"listing_id": "<uuid>", "variation_id": "<uuid>", "quantity": 0},
+                ],
+            ),
+        ),
+    ),
+    Cmd(
         "bulk-update",
         "POST",
         "/agent/listings/bulk-update",
@@ -351,7 +387,8 @@ SPECS = (
             "only (its copy and photos belong to the ASIN card). The seller's own "
             "SellerCart shop is the exception to the debt: that row *is* the shop, so the edit is "
             "on the page as soon as this returns and there is no publish to wait for — never tell "
-            "the owner a shop change is queued. One failing item does not sink the rest."
+            "the owner a shop change is queued. One failing item does not sink the rest. To change "
+            "a price or stock on the marketplace right now instead, use `listings set-price-stock`."
         ),
         body=(
             body_field(
