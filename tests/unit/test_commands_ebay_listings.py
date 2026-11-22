@@ -252,3 +252,46 @@ def test_the_old_package_fields_are_refused_before_the_request(
     assert result.exit_code != 0
     assert "'package_weight_grams' (did you mean 'weight_grams'?)" in result.stderr
     assert route.call_count == 0
+
+
+@respx.mock
+def test_traffic_asks_the_breakdown_metrics_and_listings_given(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.get(f"{fake_api_url}/agent/ebay/stores/{STORE_ID}/traffic").mock(
+        return_value=httpx.Response(200, json={"dimension": "LISTING", "rows": []})
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "ebay-listings", "traffic", STORE_ID,
+            "--dimension", "LISTING",
+            "--metrics", "LISTING_VIEWS_TOTAL", "--metrics", "CLICK_THROUGH_RATE",
+            "--listing-ids", LISTING_ID,
+            "--sort", "-LISTING_VIEWS_TOTAL",
+        ],
+    )  # fmt: skip
+
+    assert result.exit_code == 0, result.stderr
+    params = route.calls.last.request.url.params
+    assert params["dimension"] == "LISTING"
+    assert params.get_list("metrics") == ["LISTING_VIEWS_TOTAL", "CLICK_THROUGH_RATE"]
+    assert params.get_list("listing_ids") == [LISTING_ID]
+    assert params["sort"] == "-LISTING_VIEWS_TOTAL"
+
+
+@respx.mock
+def test_traffic_refuses_a_metric_ebay_does_not_have_before_asking(
+    env_pointing_at_fake_api: None,  # noqa: ARG001
+    fake_api_url: str,
+) -> None:
+    route = respx.get(f"{fake_api_url}/agent/ebay/stores/{STORE_ID}/traffic").mock(
+        return_value=httpx.Response(200, json={})
+    )
+
+    result = runner.invoke(app, ["ebay-listings", "traffic", STORE_ID, "--metrics", "PAGE_VIEWS"])
+
+    assert result.exit_code != 0
+    assert route.call_count == 0

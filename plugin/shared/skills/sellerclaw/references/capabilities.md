@@ -16,6 +16,7 @@ Many groups take an id as the **first positional** (e.g. a store id for `shopify
 | `ebay-store` / `ebay-listings` / `ebay-orders` | eBay admin (policies, locations), listings & drafts, orders & fulfillment. |
 | `ebay-finances` / `ebay-promoted` | eBay fees/payouts (read-only); Promoted Listings campaigns, which listings advertise where, reports & campaign changes. |
 | `amazon-store` / `amazon-listings` / `amazon-orders` | Amazon account, offers + price/stock sync, orders & merchant-fulfilled shipments. |
+| `amazon-finances` | Amazon money (read-only): posted transactions summed by Amazon's own types, payouts, one order's charges and fees. |
 | `etsy-store` / `etsy-listings` / `etsy-orders` | Etsy shop admin (shipping profiles, return policies), listings & drafts, receipts & shipment confirmation. |
 | `etsy-finances` | Etsy ledger summary — fees, credits, debits, net over a period (read-only). |
 | `woocommerce-store` / `woocommerce-listings` / `woocommerce-orders` | WooCommerce store admin, listings & drafts, orders & tracking. |

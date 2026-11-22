@@ -206,11 +206,58 @@ SPECS = (
         ),
     ),
     Cmd(
+        "traffic",
+        "GET",
+        "/agent/ebay/stores/{store_id}/traffic",
+        summary=(
+            "eBay's Traffic Report the way you ask for it: one row per DAY or per LISTING, over any "
+            "window, with the metrics you name — impressions (total / in search / in the store), "
+            "views by source, click-through rate, sales conversion, transactions. For 'views per "
+            "day this month', 'search vs store impressions', 'this listing's funnel'; "
+            "`ebay-listings performance` is the ready audit of the top cards. Rows by listing carry "
+            "SellerClaw's listing_id beside eBay's item_id; rates are percentages. The window ends "
+            "three days back unless `end` says otherwise — eBay is still counting the latest days "
+            "(last_updated says up to when they are complete). A bad metric or sort is refused "
+            "by name before eBay is asked."
+        ),
+        read_only=True,
+        flags=(
+            flag("dimension", choices=("DAY", "LISTING"), default="DAY", help="One row per day or per listing."),
+            flag(
+                "metrics",
+                repeatable=True,
+                choices=(
+                    "LISTING_IMPRESSION_TOTAL",
+                    "LISTING_IMPRESSION_SEARCH_RESULTS_PAGE",
+                    "LISTING_IMPRESSION_STORE",
+                    "TOTAL_IMPRESSION_TOTAL",
+                    "CLICK_THROUGH_RATE",
+                    "LISTING_VIEWS_TOTAL",
+                    "LISTING_VIEWS_SOURCE_DIRECT",
+                    "LISTING_VIEWS_SOURCE_OFF_EBAY",
+                    "LISTING_VIEWS_SOURCE_OTHER_EBAY",
+                    "LISTING_VIEWS_SOURCE_SEARCH_RESULTS_PAGE",
+                    "LISTING_VIEWS_SOURCE_STORE",
+                    "SALES_CONVERSION_RATE",
+                    "TRANSACTION",
+                ),
+                help="eBay metric keys; the main five (impressions, CTR, views, conversion, sales) when omitted.",
+            ),
+            flag("days", type=int, minimum=1, maximum=365, default=30, help="Window length when start is not given."),
+            flag("start", help="First day, YYYY-MM-DD."),
+            flag("end", help="Last day, YYYY-MM-DD (default: three days ago)."),
+            flag("listing_ids", repeatable=True, help="SellerClaw listing ids to narrow the report to (up to 200)."),
+            flag("sort", help="A requested metric, '-' first for highest first (e.g. -LISTING_VIEWS_TOTAL)."),
+        ),
+    ),
+    Cmd(
         "sync-stock",
         "POST",
         "/agent/stores/{store_id}/listings/sync-stock",
         summary=(
-            "Update price and/or stock on existing eBay offers "
+            "Change the price and/or stock of existing eBay offers on the marketplace right now — it "
+            "lands in this call, no publish needed (`listings set-price-stock` does the same by "
+            "SellerClaw listing id, across stores) "
             '(body: {"items": [{"sku": "...", "quantity": 5, "price": 19.99}]}). '
             "Identify each item by sku or remote_id (the eBay listing id)."
         ),

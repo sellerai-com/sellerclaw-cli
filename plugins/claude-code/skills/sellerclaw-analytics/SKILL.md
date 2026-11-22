@@ -83,6 +83,23 @@ sellerclaw_read(group="analytics", command="operations-digest", positionals={"st
   on the owner — drawn as a card where the client supports one and summed up in text everywhere.
   Come here for the detail of one store.
 
+## Marketplace traffic and money
+
+```text
+# eBay views, impressions, CTR, conversion — by DAY or LISTING, any window, the metrics you name
+sellerclaw_read(group="ebay-listings", command="traffic", positionals={"store_id": STORE_ID},
+  flags={"dimension": "DAY", "metrics": ["LISTING_VIEWS_TOTAL", "LISTING_IMPRESSION_SEARCH_RESULTS_PAGE"]})
+# Amazon money: posted transactions by Amazon's own type, payouts, one order's charges and fees
+sellerclaw_read(group="amazon-finances", command="summary", positionals={"store_id": STORE_ID}, flags={"days": 30})
+sellerclaw_read(group="amazon-finances", command="payouts", positionals={"store_id": STORE_ID})
+sellerclaw_read(group="amazon-finances", command="order", positionals={"store_id": STORE_ID, "order_id": ORDER_ID})
+```
+
+eBay counts the last days late, so a traffic window ends three days back unless `end` says otherwise
+(`last_updated` says how far it is complete). `ebay-listings performance` is the ready audit of the
+top cards and what to fix on them. Amazon's figures carry Amazon's names; a `truncated` summary
+covers only part of a busy window — narrow it. eBay, Etsy and Shopify have their own `*-finances`.
+
 ## Watch for
 
 - **Say when the data is incomplete.** Every answer carries `coverage`. `window_complete: false`

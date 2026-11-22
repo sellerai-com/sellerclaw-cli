@@ -288,6 +288,7 @@ MCP_VISIBLE_GROUPS: frozenset[str] = frozenset(
         "amazon-store",
         "amazon-listings",
         "amazon-orders",
+        "amazon-finances",
         "amazon",
         # Etsy
         "etsy-store",
