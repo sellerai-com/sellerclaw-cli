@@ -138,11 +138,12 @@ SPECS = (
                 type=bool,
                 help=(
                     "Also read what the marketplace charged (eBay/Shopify/Etsy) and add a `net` "
-                    "block: marketplace_fees, net_profit, net_margin_pct, sources. SLOW — a live "
-                    "call per store, one after another. The block is absent when any selected "
-                    "store's fees cannot be read (e.g. Amazon). Fees are dated when the platform "
-                    "charged them and revenue when the order was placed, so over a short window "
-                    "net_profit is close rather than exact."
+                    "block: marketplace_fees, net_profit, net_margin_pct, sources — from the fee "
+                    "history SellerClaw copies daily, which covers completed days: ask for a finished "
+                    "week, month or range, since a window running up to today usually comes back "
+                    "without it. Also absent when any selected store's fees cannot be read (e.g. "
+                    "Amazon). Fees are dated when the platform charged them and revenue when the "
+                    "order was placed, so over a short window net_profit is close rather than exact."
                 ),
             ),
             flag(
@@ -306,9 +307,9 @@ SPECS = (
         "/agent/analytics/stores/{store_id}/report",
         summary=(
             "DELIVERY, not data: queues a narrated sales report for one store and returns "
-            "immediately — the figures arrive back to you later as a separate message, to relay to "
-            "the owner. Use when the owner asked for a report. When YOU need numbers to finish a "
-            "task, use `metrics` instead, which returns them in the response."
+            "immediately — the report goes straight to the owner's notifications and messengers, "
+            "and nothing comes back to you. Use when the owner asked for that report. When YOU "
+            "need numbers to finish a task, use `metrics` instead, which returns them in the response."
         ),
         flags=(
             flag(

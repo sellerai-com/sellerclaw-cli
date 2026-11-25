@@ -18,9 +18,10 @@ SPECS = (
         "GET",
         "/agent/orders",
         summary=(
-            "List one page of orders stored in SellerClaw (newest first). Only unshipped/"
-            "unresolved orders are stored locally — this is not full sales history; use the "
-            "'analytics' group for revenue and historical metrics. Response includes 'total'."
+            "List one page of orders stored in SellerClaw (newest first): every order seen since "
+            "the store was connected, fulfilled and cancelled included; orders shipped before that "
+            "were never imported. Not full sales history — use the 'analytics' group for revenue "
+            "and historical metrics. Response includes 'total'."
         ),
         flags=(
             flag(
@@ -95,8 +96,9 @@ SPECS = (
         "/agent/orders",
         summary=(
             "Find locally-stored orders by order number, marketplace id, customer name/email, or "
-            "the SKU/title of any item in the order (case-insensitive substring). Only unshipped/"
-            "unresolved orders are stored locally. Each result carries its id for a 'get' follow-up."
+            "the SKU/title of any item in the order (case-insensitive substring). Orders shipped "
+            "before the store was connected were never imported. Each result carries its id for a "
+            "'get' follow-up."
         ),
         flags=(
             flag("q", required=True, help="Search text (order number, customer, or a line-item SKU/title)."),
