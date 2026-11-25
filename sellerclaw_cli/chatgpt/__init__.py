@@ -110,6 +110,14 @@ _CARD_DESCRIPTION_EDITS: dict[str, tuple[str, str, str]] = {
         "for live figures, or to change\na campaign, use the ads commands.",
         "for live figures use get_ad_metrics,\nand to change a campaign pause_ad_campaign and the other ad tools.",
     ),
+    # The studio's Upload button, kept from the model by ChatGPT; the commands it names elsewhere for
+    # a file are not on this surface, and a file on the computer has no way here but that button.
+    "sellerclaw_media_upload_image": (
+        "_MEDIA_UPLOAD_DESC",
+        "A file\non the owner's computer goes up through a one-time link (`files upload-link`), a file on the web by\n"
+        "its address (`files from-url`).",
+        "A file\non the web goes into their files by its address, with save_file_from_url.",
+    ),
 }
 
 

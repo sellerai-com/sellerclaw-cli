@@ -271,6 +271,64 @@ def test_an_authenticated_client_can_list_the_tools_over_http(
         assert "cacheScope" not in result
 
 
+_CARD_BUTTONS = {
+    "sellerclaw_approval_decide",
+    "sellerclaw_media_set_default",
+    "sellerclaw_media_upload_image",
+    "sellerclaw_media_generate",
+}
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    ("user_agent", "revision", "client_name", "buttons_listed"),
+    [
+        pytest.param("Cursor/1.0.0", "2025-11-25", None, False, id="cursor-terminal-agent"),
+        pytest.param("Cursor/2.1.50 (darwin arm64)", "2025-11-25", None, False, id="cursor-editor-with-its-platform"),
+        pytest.param("python-httpx/0.28.1", "2026-07-28", "Cursor", False, id="cursor-named-in-the-envelope"),
+        pytest.param("python-httpx/0.28.1", "2025-11-25", None, True, id="a-client-that-gives-no-name"),
+        pytest.param("openai-mcp/1.0.0", "2026-07-28", "openai-mcp", True, id="a-client-that-keeps-them-for-the-card"),
+    ],
+)
+def test_the_hosted_server_keeps_the_cards_buttons_from_cursor(
+    user_agent: str, revision: str, client_name: str | None, buttons_listed: bool
+) -> None:
+    """Every request reaches a fresh connection, so the handshake's name is gone by the list:
+    Cursor is known by the ``User-Agent`` it sends on each request, or by the name in the envelope
+    the current revision carries."""
+    respx.get(f"{API_URL}/agent/me").mock(return_value=httpx.Response(200, json={"id": "user-1"}))
+    params: dict[str, Any] = {}
+    if revision == "2026-07-28":
+        params["_meta"] = {
+            "io.modelcontextprotocol/protocolVersion": revision,
+            "io.modelcontextprotocol/clientCapabilities": {},
+            "io.modelcontextprotocol/clientInfo": {"name": client_name, "version": "1.0"},
+        }
+
+    resp = asyncio.run(
+        _live_request(
+            "POST",
+            "/mcp",
+            json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": params},
+            headers={
+                "Authorization": "Bearer sca_good",
+                "Accept": "application/json, text/event-stream",
+                "Content-Type": "application/json",
+                "MCP-Protocol-Version": revision,
+                "Mcp-Method": "tools/list",
+                "User-Agent": user_agent,
+            },
+        )
+    )
+
+    assert resp.status_code == 200, resp.text
+    listed = {tool["name"] for tool in _rpc_result(resp)["tools"]}
+    assert (listed & _CARD_BUTTONS == _CARD_BUTTONS) is buttons_listed
+    if not buttons_listed:
+        assert listed.isdisjoint(_CARD_BUTTONS)
+    assert {"sellerclaw_guide", "sellerclaw_read", "sellerclaw_write", "sellerclaw_approval"} <= listed
+
+
 @respx.mock
 def test_the_published_plugin_path_still_works_end_to_end() -> None:
     """What the shipped plugin and the desktop extension actually do, against this server.

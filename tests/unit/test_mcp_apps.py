@@ -144,6 +144,26 @@ def test_the_model_cannot_answer_an_approval_for_the_owner() -> None:
     }
 
 
+@pytest.mark.parametrize(
+    ("button", "also_says"),
+    [
+        pytest.param("sellerclaw_approval_decide", "says yes in the conversation", id="approve-or-decline"),
+        pytest.param("sellerclaw_media_set_default", None, id="make-default"),
+        pytest.param("sellerclaw_media_upload_image", "`files upload-link`", id="upload"),
+        pytest.param("sellerclaw_media_generate", None, id="generate"),
+    ],
+)
+def test_a_button_tells_a_model_that_sees_it_anyway_not_to_press_it(button: str, also_says: str | None) -> None:
+    """Visibility is the client's promise. Cursor broke it — its model sent a photo from the computer
+    as base64 to the studio's Upload button (25.11.2026) — so each button also says so itself, and the
+    upload says where a file from the computer goes instead."""
+    description = {tool.name: tool for tool in asyncio.run(build_server().list_tools())}[button].description
+
+    assert "never call it yourself" in description
+    if also_says is not None:
+        assert also_says in description
+
+
 def test_the_cards_that_only_show_things_are_read_only() -> None:
     """Three tools a card calls change anything — the approval card's answer, the studio's "Make
     default" and its "Upload" — and each is its card's alone.

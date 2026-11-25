@@ -1623,7 +1623,9 @@ instead.\
 """
 
 _APPROVAL_DECIDE_DESC = """\
-Record the owner's press on the approval card and hand the card back.\
+Record the owner's press on the approval card and hand the card back. Only the card's own buttons
+call this: never call it yourself, not even when the owner says yes in the conversation — an answer
+given in words is closed the way the approval card's description says.\
 """
 
 _MEDIA_DESC = """\
@@ -1667,17 +1669,22 @@ To change a finished image, open it with its own link as the reference.\
 """
 
 _MEDIA_SET_DEFAULT_DESC = """\
-Record the owner's press of "Make default" on the studio card and hand back the models.\
+Record the owner's press of "Make default" on the studio card and hand back the models. Only the
+card's button calls this: never call it yourself.\
 """
 
 _MEDIA_UPLOAD_DESC = """\
-Store the photo the owner chose on the studio card in their files and hand back its link.\
+Store the photo the owner chose on the studio card in their files and hand back its link. Only the
+card's Upload button calls this: never call it yourself, and never send a file as base64 text. A file
+on the owner's computer goes up through a one-time link (`files upload-link`), a file on the web by
+its address (`files from-url`).\
 """
 
 _MEDIA_GENERATE_DESC = """\
 Start what the owner set up on the studio card, on their own press of Generate — an image or a video
 (`count` of it to choose from, up to 4 images or 3 videos, each its own job and charge), a voice
-(ready in this call) or a piece of music — and hand back the jobs for the card to follow.\
+(ready in this call) or a piece of music — and hand back the jobs for the card to follow. Only the
+card's Generate button calls this: never call it yourself.\
 """
 
 

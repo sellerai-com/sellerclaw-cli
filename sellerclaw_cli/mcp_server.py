@@ -70,7 +70,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from sellerclaw_cli import guides, mcp_apps, mcp_usage, shortcuts
+from sellerclaw_cli import guides, mcp_apps, mcp_buttons, mcp_usage, shortcuts
 from sellerclaw_cli._client import DEFAULT_TIMEOUT_SECONDS, Client
 from sellerclaw_cli._command_group import (
     REGISTRY,
@@ -1039,6 +1039,15 @@ def _apps_extension() -> Any:
     return mcp_apps.build_extension(_client_for_tool)
 
 
+def _middleware(api_url: str | None = None) -> list[Any]:
+    """What every server wraps each request in: the usage report, and the buttons kept from a model.
+
+    One list for both builders, as with the apps extension: a layer added to one and not the other is
+    a server that behaves differently by how it was started.
+    """
+    return [_usage_reporter(api_url), mcp_buttons.ButtonsOutOfTheModelsReach()]
+
+
 def _usage_reporter(api_url: str | None = None) -> mcp_usage.UsageReporter:
     """Report every served call to the account it was made for (see :mod:`sellerclaw_cli.mcp_usage`).
 
@@ -1210,7 +1219,7 @@ def build_server() -> Any:
         version=__version__,
         cache_hints=_cache_hints(),
         extensions=[_apps_extension()],
-        middleware=[_usage_reporter()],
+        middleware=_middleware(),
         **_server_branding(),
     )
     _register_tools(server)
@@ -1402,7 +1411,7 @@ def _hosted_server(
         auth=auth,
         cache_hints=_cache_hints(),
         extensions=[extension],
-        middleware=[_usage_reporter(api_url)],
+        middleware=_middleware(api_url),
         **_server_branding(),
     )
 

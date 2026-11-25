@@ -181,6 +181,16 @@ def test_cards_name_this_surface_s_tools_instead_of_commands() -> None:
     assert "answer_action_request" in mcp_apps._summarize_approval({"request": {"title": "x"}}, wording)
 
 
+def test_the_upload_button_names_only_what_this_surface_has() -> None:
+    """The runners' wording sends a file from the computer to a one-time link; ChatGPT has neither
+    that command nor a terminal to send it from."""
+    upload = chatgpt.card_wording().descriptions["sellerclaw_media_upload_image"]
+
+    assert "never call it yourself" in upload
+    assert "save_file_from_url" in upload
+    assert "`files" not in upload
+
+
 @respx.mock
 @pytest.mark.usefixtures("env_pointing_at_fake_api")
 @pytest.mark.parametrize(
