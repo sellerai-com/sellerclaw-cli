@@ -19,6 +19,16 @@ class UserInputError(CliError):
     code = "user_error"
 
 
+class LocalFileUnreachableError(UserInputError):
+    """A file named by a path on the caller's own device, sent to a server that cannot see that device.
+
+    Its own code so a refusal of this kind reads as what it is wherever calls are counted, instead of
+    joining every other mistyped argument under ``user_error``.
+    """
+
+    code = "local_file_unreachable"
+
+
 class ApiError(CliError):
     exit_code = 1
     code = "api_error"

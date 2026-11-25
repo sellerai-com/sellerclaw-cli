@@ -40,7 +40,9 @@ The owner's files are in their Library (`files list`, `query` for part of a name
 on a card, open the studio on them: `sellerclaw_media_studio(task="files")` — their "Ask in chat" comes back
 as a message naming the files, with each file's link beside it.
 
-A video or a sound on the owner's device does not reach SellerClaw through this chat. Give them the
+A video or a sound on the owner's device does not reach SellerClaw through this chat. Where you can run
+commands on that device, send it yourself: `files upload-link` hands out a one-time address and
+`curl -F "file=@<local path>" "<upload_url>"` answers the stored file. Otherwise give them the
 `upload_page_url` that `media models` answers — the Library page with its upload window — and find the file
 with `files list` once they say it is there.
 

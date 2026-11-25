@@ -1,11 +1,12 @@
 """Hand-written CLI module for the ``agent-files`` tag.
 
-Covers four operations the standard JSON-only generator can't model cleanly:
+Covers five operations the standard JSON-only generator can't model cleanly:
 
 - ``list`` — GET /agent/files/ (list user files for the agent's user).
 - ``get`` — GET /agent/files/{file_id} (one file by the id an attachment arrives with).
 - ``from-url`` — POST /agent/files/from-url (download a remote URL into S3 + DB).
 - ``upload`` — POST /agent/files/upload-for-user (multipart binary upload from a local path).
+- ``upload-link`` — POST /agent/files/upload-links (one-time addresses a terminal sends a file to).
 
 Hand-written (multipart upload can't be modelled declaratively); registered manually in ``cli.py``.
 """
@@ -109,10 +110,32 @@ _SPECS = (
         upload_file=True,
         summary=(
             "Upload a local file (multipart). Pass the local path as the positional "
-            "argument; --filename overrides the name sent to the server. Needs a path the server "
-            "can read — from a remote connector use `from-url` instead."
+            "argument; --filename overrides the name sent to the server. Runs only where the file is: "
+            "the CLI or a local MCP server on the owner's computer. The hosted connector cannot see "
+            "the owner's device — there use `upload-link` and send the file from a terminal, `from-url` "
+            "for a file online, or have the owner upload it on their SellerClaw Library page."
         ),
         flags=(flag("filename", help="Override the filename sent to the server."),),
+    ),
+    Cmd(
+        "upload-link",
+        "POST",
+        "/agent/files/upload-links",
+        summary=(
+            "One-time addresses that each take one file into the owner's files, with no sign-in: from a "
+            "terminal on the computer that has the file, `curl -F \"file=@<local path>\" \"<upload_url>\"` "
+            "answers the stored file and its download_url. The way to send a file the hosted connector "
+            "cannot see. Each link works once, within 15 minutes."
+        ),
+        body=(
+            body_field(
+                "count",
+                type=int,
+                option="--count",
+                help="How many links, 1–10 (one per file). Default 1.",
+                example=1,
+            ),
+        ),
     ),
 )
 REGISTRY[:] = [g for g in REGISTRY if g.name != NAME]
@@ -228,6 +251,22 @@ def upload_user_file(
         _emit_error(err)
         return
     print_ok(result, fmt=_format_from_ctx(ctx))
+
+
+@app.command(
+    "upload-link",
+    help=(
+        "Create Upload Links | POST /agent/files/upload-links | "
+        "One-time addresses that each take one file, sent with "
+        '`curl -F "file=@<local path>" "<upload_url>"`; each works once, within 15 minutes.'
+    ),
+)
+def create_upload_links(
+    ctx: typer.Context,
+    count: int | None = typer.Option(None, "--count", help="How many links, 1–10 (one per file). Default 1."),
+) -> None:
+    body: dict[str, int] = {} if count is None else {"count": count}
+    run_operation(ctx, "POST", "/agent/files/upload-links", params=None, json_body=body)
 
 
 def _emit_error(err: CliError) -> None:

@@ -61,10 +61,11 @@ sellerclaw_read(group="catalog-file", command="preview", body={"file_id": FILE_I
 sellerclaw_write(group="catalog-file", command="apply",   body={"file_id": FILE_ID})
 ```
 
-Every step takes a `file_id`, so the file has to reach SellerClaw first: either the owner uploads it
-in the web app, or it is somewhere with a URL and `files from-url` fetches it. A spreadsheet attached
-to this conversation is not reachable from here — ask for a link, or ask them to add it to their file
-library.
+Every step takes a `file_id`, so the file has to reach SellerClaw first: the owner uploads it in the
+web app, it is somewhere with a URL and `files from-url` fetches it, or — where you can run commands on
+the computer that has it — `files upload-link` hands out a one-time address that
+`curl -F "file=@<local path>" "<upload_url>"` sends it to. A spreadsheet attached to this conversation is
+not reachable from here — ask for a link, or ask them to add it to their file library.
 
 Always `check` then `preview` before `apply`, and show the owner the preview: it says what would be
 created, what would change and which rows could not be read, with row numbers. A refusal quotes the

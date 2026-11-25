@@ -187,6 +187,13 @@ stores — work it top-down (errors first), and `hide` only what is genuinely de
 
 ## Missing photos
 
+The owner's own photos come first. A listing's `images` take links, so a photo on the owner's
+computer has to reach their files: where you can run commands on that computer, `files upload-link`
+(`count` = one per photo) hands out one-time addresses, and `curl -F "file=@<local path>" "<upload_url>"`
+answers each file's `download_url`. JPEG, PNG, WEBP and GIF are taken — convert a HEIC photo first (on a
+Mac: `sips -s format jpeg photo.heic --out photo.jpg`). Without a terminal, ask the owner to upload them
+to their Library in the web app and find them with `files list`.
+
 A listing with no image sells nothing and several marketplaces refuse it outright. `media
 generate-image` returns a URL in the same turn, which can go straight into an `images` field. Product
 photography invented by a model is a picture of something the owner does not sell — use it for

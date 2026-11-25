@@ -81,7 +81,7 @@ from sellerclaw_cli._command_group import (
     positionals_of,
     upload_payload,
 )
-from sellerclaw_cli._errors import CliError, UserInputError
+from sellerclaw_cli._errors import CliError, LocalFileUnreachableError, UserInputError
 from sellerclaw_cli._job_wait import is_finished, looks_like_job, queued_note_for_call
 from sellerclaw_cli._output import error_json
 from sellerclaw_cli.commands._discover import _body_example
@@ -794,6 +794,10 @@ def run_command(
                 f"{group} {command} uploads a file: pass its local path as positionals: "
                 '{"file": "/path/to/image.jpg"}.'
             )
+        if _request_token() is not None:
+            # The hosted connector: the path is on the owner's device, which this server cannot see —
+            # and reading it here would read this server's own disk, never the owner's file.
+            raise LocalFileUnreachableError(_hosted_upload_refusal(group, command, local_path))
         files = upload_payload(Path(local_path), filename=params.get("filename"))
 
     with _client_for_tool(_budget(cmd)) as client:
@@ -818,6 +822,25 @@ def run_command(
     if poll_call is None:
         return result
     return {**result, "note": queued_note_for_call(poll_call)}
+
+
+def _hosted_upload_refusal(group: str, command: str, local_path: str) -> str:
+    """Why the hosted connector cannot send a file named by a local path, and the ways that do get it in.
+
+    The bare "failed to read file …: No such file or directory" this used to end in was true of the
+    server and false of the owner's computer, where the file plainly is — so an assistant tried the
+    same upload again and again, then reached for raw marketplace calls that could not help either.
+    """
+    return (
+        f"{group} {command} sends a file from the computer it runs on, and this SellerClaw connector "
+        f"runs on SellerClaw's servers: it cannot open {local_path}, which is on the owner's device. "
+        "To get the file in: where you can run commands on that computer, `files upload-link` hands "
+        'out a one-time address — send the file to it with `curl -F "file=@<local path>" "<upload_url>"`; '
+        "if it is online, `files from-url` with its link saves it; otherwise ask the owner to upload it "
+        f"on their SellerClaw Library page ({mcp_apps.apps_base()}/artifacts?upload=1), then "
+        "`files list` finds it. Each answers a download_url, which a listing's images or any other "
+        "command that takes a link to the file accepts."
+    )
 
 
 def read_command(
