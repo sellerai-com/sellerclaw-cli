@@ -142,6 +142,7 @@ def card_wording() -> mcp_apps.CardWording:
     return mcp_apps.CardWording(
         close_in_words="answer_action_request quoting what they said",
         read_media_job="list_media_jobs",
+        run_studio_request="improve the request and run it",
         descriptions=_card_descriptions(),
         shown_to_the_owner=_CARD_SHOWN,
         shape_payload=shape_payload,

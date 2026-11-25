@@ -153,4 +153,5 @@ Areas with no guide of their own, reachable the usual way with `sellerclaw_group
 `spreadsheet` / `pdf` / `sheets` (produce and store
 documents, read and write the owner's Google Sheets), `reviews` and `ebay-feedback` (what buyers
 wrote back), `store-audit` (SEO, and how AI assistants answer about the shop), `amazon-fba` (Amazon's
-own warehouse), `kb` (what the owner has told SellerClaw before).
+own warehouse), `kb` (a shared, read-only base of sourced facts about selling platforms — ad policies,
+cross-border taxes — to cite instead of answering from memory; nothing is saved to it).

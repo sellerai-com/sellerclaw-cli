@@ -312,6 +312,15 @@ class CardWording:
     close_in_words: str = "`action-requests confirm` quoting what they said"
     #: How a client without cards reads a media job that is still generating.
     read_media_job: str = "`media job-status` passing wait_seconds 25"
+    #: What to do with the studio's "Ask in chat" message. The Claude app's safety check refuses an
+    #: assistant that starts a new image, video or piece of music itself, but never the owner's own
+    #: Generate press — so there the improved request goes back onto the card (checked live on
+    #: claude.ai, 25.11.2026). ChatGPT runs the request itself.
+    run_studio_request: str = (
+        "improve the request and run it — in the Claude app, by opening the studio again with your "
+        "prompt and their settings for their Generate press, since that app refuses an assistant that "
+        "starts a new image, video or piece of music itself"
+    )
     #: Card tool name -> its description, where it differs from the default one.
     descriptions: Mapping[str, str] = field(default_factory=dict)
     #: The sentence every summary ends with: what the owner already sees and what is left to say.
@@ -1324,7 +1333,7 @@ def _summarize_media(payload: dict[str, Any], wording: CardWording = RUNNER_WORD
     return _summarize_media_library(payload)
 
 
-def _summarize_media_studio(payload: dict[str, Any]) -> str:
+def _summarize_media_studio(payload: dict[str, Any], wording: CardWording = RUNNER_WORDING) -> str:
     draft = payload.get("draft") or {}
     defaults: list[str] = []
     for group in (payload.get("models") or {}).get("tasks") or []:
@@ -1348,7 +1357,7 @@ def _summarize_media_studio(payload: dict[str, Any]) -> str:
         lines.append(
             "The owner makes an image, a video, a voice or music there. Generate starts it from the card with "
             "their words as written — you are told what started, and its link once it is ready. Ask in chat "
-            "reaches you as a message from them: improve the request and run it. Their own files are on the "
+            f"reaches you as a message from them: {wording.run_studio_request}. Their own files are on the "
             "card's From my files tab, to pick for you to put together. Generate nothing until they ask."
         )
     lines.append(_SHOWN_TO_THE_OWNER)
@@ -1646,8 +1655,11 @@ photos, videos and sounds in order (or uploads new ones) and asks you in the cha
 together — you get the files' links beside their message and make the finished file yourself.
 
 Open it when the owner wants to choose the quality, the price, the voice or the settings themselves,
-or to pick their own files; otherwise make it straight away with the default model. Carry over what
-the conversation already says: `task` (image, image_edit, video, video_from_image, speech, music),
+or to pick their own files — and, in the Claude app (claude.ai, desktop, mobile), for every new image,
+video or piece of music: there the app's safety check refuses an assistant that starts one itself, and
+the owner's own Generate press is what makes it, so fill in your prompt and their settings and let them
+press it. Elsewhere, make it straight away with the default model. Carry over what the conversation
+already says: `task` (image, image_edit, video, video_from_image, speech, music),
 `prompt`, `model`, `params` (that model's settings, e.g. {"aspect_ratio": "9:16"}; a voice's
 {"voice": id}; music's {"duration_seconds": 30}), and `reference`, the URL of a photo to work from —
 or a list of them. `task` "files" opens From my files with the links in `reference` already picked.
@@ -2584,7 +2596,7 @@ def build_extension(client_for_tool: ClientFactory, wording: CardWording = RUNNE
         draft = _studio_draft(task, prompt, model, reference, params)
         with _refusals_in_their_own_words(), client_for_tool(DEFAULT_TIMEOUT_SECONDS) as client:
             payload = _read_media_studio(client, draft)
-        return _result(payload, _summarize_media_studio(payload))
+        return _result(payload, _summarize_media_studio(payload, wording))
 
     @card_tool(
         resource_uri=resource_uri("media-studio"),
@@ -2604,7 +2616,7 @@ def build_extension(client_for_tool: ClientFactory, wording: CardWording = RUNNE
                 "PUT", f"/agent/media/models/{chosen}/default", json={"model": model}
             )
         payload = {"models": models, "draft": {"task": chosen, "model": model}}
-        return _result(payload, _summarize_media_studio(payload))
+        return _result(payload, _summarize_media_studio(payload, wording))
 
     @card_tool(
         resource_uri=resource_uri("media-studio"),

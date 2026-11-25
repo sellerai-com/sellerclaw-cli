@@ -3206,6 +3206,24 @@ def test_the_studio_summary_says_generate_starts_on_the_card() -> None:
     assert "naming the model, the settings and the photos" not in summary
 
 
+def test_ask_in_chat_goes_back_onto_the_card_in_the_claude_app_and_runs_in_chatgpt() -> None:
+    """The Claude app refuses an assistant that starts a new image itself, never the owner's press."""
+    from sellerclaw_cli import chatgpt
+
+    payload = {"models": {"tasks": []}, "draft": {"task": "image"}}
+
+    runners = mcp_apps._summarize_media_studio(payload)
+    in_chatgpt = mcp_apps._summarize_media_studio(payload, chatgpt.card_wording())
+
+    assert (
+        "Ask in chat reaches you as a message from them: improve the request and run it — in the Claude "
+        "app, by opening the studio again with your prompt and their settings for their Generate press, "
+        "since that app refuses an assistant that starts a new image, video or piece of music itself."
+    ) in runners
+    assert "Ask in chat reaches you as a message from them: improve the request and run it." in in_chatgpt
+    assert "Claude" not in in_chatgpt
+
+
 def test_a_finished_edit_dub_and_draft_are_told_with_what_came_with_them() -> None:
     summary = mcp_apps._summarize_media(
         {

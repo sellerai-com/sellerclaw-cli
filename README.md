@@ -539,7 +539,7 @@ SellerClaw (in claude.ai, the **+** menu) — and the Claude plugin ships the sa
 | `restock` | What is running out and what to reorder |
 | `research` | Demand, competition and prices for a product or niche, with a verdict |
 | `inbox` | Buyer emails and messages, with draft replies |
-| `generate` | An image or a video, made right away with the default model |
+| `generate` | An image or a video with the default model (in the Claude app, the studio card filled in for the owner's Generate press) |
 
 They live in [`sellerclaw_cli/shortcuts/`](sellerclaw_cli/shortcuts/): one short Markdown body per
 command, read by the server as a prompt and compiled by `make plugin` into a skill only the owner

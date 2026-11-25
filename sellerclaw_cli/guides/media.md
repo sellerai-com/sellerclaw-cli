@@ -8,25 +8,45 @@ the examples directly.
 Two kinds of work:
 
 - One raw file from a description — an image, a video, a voice, a piece of music. The owner can make these
-  themselves on the studio card.
+  themselves on the studio card, and in the Claude app that card is where a new image, video or piece of
+  music starts (see below).
 - A finished file put together from raw ones — a collage with captions, a video of the owner's photos and
   clips with a voice and music under it. That is yours: the editing commands below, plus a generation for
   whatever is missing.
 
 ## Pick the path
 
-- The owner asks for a picture or a clip → generate it straight away with the default model.
+Where a generation starts depends on the app you run in:
+
+- **The Claude app (claude.ai, desktop, mobile), which draws SellerClaw's cards:** a new image, a video
+  (from words or from a photo) or a piece of music → open the studio card `sellerclaw_media_studio`
+  filled in: `task`, your prompt in `prompt` (written as in "Write the prompt"), `model` and `params`
+  when the owner named them, `reference` for their photos. The owner presses Generate on it; you are told
+  what started and, when it finishes, its link. The app's safety check refuses an assistant that starts
+  one of these itself — the call comes back "denied by the … auto mode classifier" and nothing is made —
+  while the owner's own press goes through. Say in one line that the studio is ready with your prompt
+  and the price on it.
+  A voice (`generate-speech`, `voice-over`) and a change to the owner's own photo (`edit-image`) you make
+  yourself. If the app refuses `generate-speech` or `edit-image` too, open the studio on that task
+  ("speech", "image_edit") with the same request instead of trying again.
+- **A client without cards (a coding agent, a terminal):** generate it straight away with the default
+  model, as below.
+
+Then, whichever the app:
+
 - The owner wants to choose the quality, the price or the settings, or asks for the studio → open the
   card tool `sellerclaw_media_studio`, carrying over what they already said (`task`, `prompt`,
   `model`, `reference` — one photo link or a list). There they can also pick photos from their files
   or upload new ones. Their Generate press starts the generation from the card itself — you are told
   what started and, when it finishes, its link. Their "Ask in chat" press comes back as a message from
   them with the idea, the model id, the settings, the photo links and how many to make: write the
-  prompt as below and run it with exactly those.
+  prompt as below and run it with exactly those — in the Claude app, by opening the studio again with
+  that prompt and those settings for their Generate press.
 - The picture has to show the owner's own product → start from real photos of it (`edit-image` takes
   up to 6: the product from one, the scene from another; `generate-video` takes one as
-  `reference_image_url`). A generation from text alone draws a different product. A photo the owner
-  attached to this chat does not reach SellerClaw — ask for a link, or open the studio to upload it.
+  `reference_image_url`, and the studio as `reference` with `task` "video_from_image"). A generation
+  from text alone draws a different product. A photo the owner attached to this chat does not reach
+  SellerClaw — ask for a link, or open the studio to upload it.
 - The owner wants something made from their own files → see "Put the owner's files together".
 
 ## Put the owner's files together
@@ -49,7 +69,8 @@ Then make the finished file:
 - an animated layout no edit field draws → `render-html`.
 
 Generate what is missing — a voice, music, a shot — and say what each paid step costs before running it.
-Show the result with `sellerclaw_media(job=[JOB_ID])`.
+In the Claude app music and a new shot start on the studio card, as in "Pick the path"; its link comes back
+to you once it is made. Show the result with `sellerclaw_media(job=[JOB_ID])`.
 
 ## Generate
 
@@ -86,6 +107,7 @@ sellerclaw_write(group="media", command="generate-video", body={"prompt": PROMPT
 - The same prompt gives versions that differ as the model varies them. To compare one thing — the
   background, the angle — change only that between the prompts.
 - Say the total price before starting more than one video.
+- In the Claude app, open the studio with the prompt: the owner sets how many on the card.
 
 ## Write the prompt
 
@@ -279,6 +301,9 @@ sellerclaw_write(group="media", command="generate-music",
   cheaper one that makes the length and vocals asked for.
 - It answers with a job id at once; the piece lands in the owner's Library in about a minute. Show it with
   `sellerclaw_media(job=[JOB_ID])`; under a video it goes as `edit-video`'s `music` by its `result_url`.
+- In the Claude app, open the studio with `task` "music", the prompt, `model` if they named one and the
+  length asked for in `params` (e.g. {"duration_seconds": 45}) for the owner's Generate press, as in
+  "Pick the path".
 - Prices: `models` with the flag `task: music` — per piece, or per started minute.
 
 ## Make a picture from a page: a collage, a price card
@@ -387,8 +412,9 @@ sellerclaw_write(group="media", command="render-html", body={"html": PAGE, "asse
   that link as `reference`.
 - A video: no model edits a finished clip. Make it again with the same photo, model and settings and
   a changed prompt — the job's `photos`, `model` and `params` (from `media job-status`) are the
-  request it was made from.
-- A video from a finished image: `generate-video` with the image's link as `reference_image_url`.
+  request it was made from. In the Claude app, open the studio with them for the owner's Generate press.
+- A video from a finished image: `generate-video` with the image's link as `reference_image_url` — in the
+  Claude app, the studio with `task` "video_from_image" and the link as `reference`.
 
 ## Where a result goes next
 

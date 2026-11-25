@@ -180,7 +180,7 @@
   {
     "name": "generate",
     "title": "Make an image or video",
-    "description": "Make an image or a video right away with your default model.",
+    "description": "Make an image or a video with your default model.",
     "file": "generate.md",
     "words": {
       "name": "idea",

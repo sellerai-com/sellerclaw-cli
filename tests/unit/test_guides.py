@@ -103,6 +103,22 @@ def test_start_guide_covers_the_rules_a_bare_mcp_client_has_nowhere_else_to_lear
         assert expected in body, expected
 
 
+def test_media_guide_starts_a_new_image_video_or_music_on_the_studio_card_in_the_claude_app() -> None:
+    # claude.ai's Auto mode refuses an assistant that starts one itself ("denied by the … auto mode
+    # classifier"), never the owner's Generate press; a client without cards still generates directly.
+    body = guides.read("media")
+    path = " ".join(body.split("## Pick the path", 1)[1].split("\n## ", 1)[0].split())
+
+    assert "**The Claude app (claude.ai, desktop, mobile), which draws SellerClaw's cards:**" in path
+    assert "open the studio card `sellerclaw_media_studio` filled in" in path
+    assert "The owner presses Generate on it" in path
+    assert "**A client without cards (a coding agent, a terminal):** generate it straight away" in path
+    assert (
+        'If the app refuses `generate-speech` or `edit-image` too, open the studio on that task ("speech", '
+        '"image_edit") with the same request'
+    ) in path
+
+
 def test_unknown_topic_names_the_ones_that_exist() -> None:
     with pytest.raises(UserInputError, match="unknown guide topic 'pricing'"):
         guides.read("pricing")
